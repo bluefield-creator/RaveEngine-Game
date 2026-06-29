@@ -1,3 +1,5 @@
+![RaveEngine](repo/rave.png)
+
 # RaveEngine-Game
 
 Welcome to the RaveEngine project, a full rewrite of the previous client built in Godot to transition to Rust. RaveEngine is an engine built with Bevy, a graphics engine that allows us to skip the boring low-level part and get straight to what's important: the studio, the client and the server.
