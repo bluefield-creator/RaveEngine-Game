@@ -17,3 +17,11 @@ https://rust-lang.org/tools/install/
 Clone our repo, run `cargo build` (`cargo build` builds as debug, which is faster but may run worse and leave a bigger footprint in the disk; compile with the flag `--release` for a smaller file but longer compilation time), and copy the `assets` folder you'll find the root of the project and paste it in `/target/[...]/`.
 
 You can now launch the executable!
+
+As of right now, only the studio can be built, as work on client & server has not yet begun. I wanna first stabilize the studio and get it to a "proper" point before starting out with the client. 
+
+## Designer Program
+
+At some point, the client will work closely with the "RaveEngine-Creative" program. This allows our staff to easily develop UI without having to code it manually (this will be done only for the studio and bits of the client).
+
+You may need to learn how .VUIS files are handled. The repo is [here](https://github.com/VertexiaGame/RaveEngine-Creative)
