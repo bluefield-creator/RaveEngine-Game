@@ -26,4 +26,4 @@ At some point, the client will work closely with the "RaveEngine-Creative" progr
 
 You may need to learn how .VUIS files are handled. The repo is [here](https://github.com/VertexiaGame/RaveEngine-Creative)
 
-![RaveEngine](repo/studio.png)
+![RaveEngine](repo/Studio.png)
