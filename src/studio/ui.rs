@@ -2,65 +2,103 @@ pub mod assets;
 pub mod indicator;
 pub mod panels;
 pub mod visuals;
+pub mod resources;
 
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts, EguiTextureHandle};
 use crate::studio::tools::{ToolState, Selection};
 use crate::common::components::Brick;
+use bevy::ecs::system::SystemParam;
+use bevy::pbr::ExtendedMaterial;
 
 pub use assets::{StudioUiAssets, StudioUiTextureIds, setup_ui_assets};
-pub use indicator::{CameraSpeedIndicator, updatecameraspeedindicator};
+pub use indicator::{CameraSpeedIndicator, updatecameraspeedindicator, FovIndicator, update_camera_fov};
 pub use visuals::configure_visuals;
+pub use resources::{CopiedEntityBuffer, HierarchyDraggedEntity};
 
-#[derive(Resource, Default)]
-pub struct CopiedEntityBuffer {
-    pub transform: Option<Transform>,
-    pub mesh: Option<Mesh3d>,
-    pub material: Option<MeshMaterial3d<StandardMaterial>>,
-    pub name: Option<String>,
-    pub is_brick: bool,
+#[derive(SystemParam)]
+pub struct UiResources<'w, 's> {
+    pub commands: Commands<'w, 's>,
+    pub meshes: ResMut<'w, Assets<Mesh>>,
+    pub materials: ResMut<'w, Assets<StandardMaterial>>,
+    pub studs_materials: ResMut<'w, Assets<ExtendedMaterial<StandardMaterial, crate::studio::studs::StudsExtension>>>,
+    pub studs_assets: Res<'w, crate::studio::studs::StudsAssets>,
+    pub count: ResMut<'w, crate::studio::bricks::BrickSpawnerCount>,
+    pub snap_config: ResMut<'w, crate::studio::tools::SnapConfig>,
+}
+
+#[derive(SystemParam)]
+pub struct UiStateResources<'w> {
+    pub next_tool: ResMut<'w, NextState<ToolState>>,
+    pub current_tool: Res<'w, State<ToolState>>,
+    pub ui_assets: Option<Res<'w, StudioUiAssets>>,
+    pub texture_ids: ResMut<'w, StudioUiTextureIds>,
+    pub cameraindicator: ResMut<'w, CameraSpeedIndicator>,
+    pub fovindicator: ResMut<'w, FovIndicator>,
+    pub diagnostics: Res<'w, bevy::diagnostic::DiagnosticsStore>,
+    pub selection: ResMut<'w, Selection>,
+    pub copiedbuffer: ResMut<'w, CopiedEntityBuffer>,
+    pub dragged_entity: ResMut<'w, HierarchyDraggedEntity>,
+    pub context_menu: ResMut<'w, crate::studio::tools::CanvasContextMenu>,
+}
+
+#[derive(SystemParam)]
+pub struct UiQueries<'w, 's> {
+    pub cameraquery: Query<
+        'w,
+        's,
+        (
+            &'static bevy::camera_controller::free_camera::FreeCamera,
+            &'static mut bevy::camera_controller::free_camera::FreeCameraState,
+        ),
+    >,
+    pub camera_projection_query: Query<'w, 's, &'static mut Projection, With<Camera3d>>,
+    pub camera_transform_query: Query<'w, 's, &'static Transform, With<Camera3d>>,
+    pub entitiesquery: Query<
+        'w,
+        's,
+        (
+            Entity,
+            &'static Name,
+            Option<&'static ChildOf>,
+            Option<&'static Children>,
+            Option<&'static Brick>,
+            &'static GlobalTransform,
+        ),
+    >,
+    pub fullentityquery: Query<
+        'w,
+        's,
+        (
+            &'static Transform,
+            &'static Mesh3d,
+            Option<&'static MeshMaterial3d<StandardMaterial>>,
+            Option<&'static MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::studio::studs::StudsExtension>>>,
+            &'static Name,
+            Option<&'static Brick>,
+        ),
+    >,
 }
 
 #[allow(deprecated)]
 pub fn studio_ui(
     mut contexts: EguiContexts,
-    mut next_tool: ResMut<NextState<ToolState>>,
-    current_tool: Res<State<ToolState>>,
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut count: ResMut<crate::studio::camera::BrickSpawnerCount>,
-    ui_assets: Option<Res<StudioUiAssets>>,
-    mut texture_ids: ResMut<StudioUiTextureIds>,
-    mut cameraindicator: ResMut<CameraSpeedIndicator>,
-    mut cameraquery: Query<(
-        &bevy::camera_controller::free_camera::FreeCamera,
-        &mut bevy::camera_controller::free_camera::FreeCameraState,
-    )>,
-    diagnostics: Res<bevy::diagnostic::DiagnosticsStore>,
-    mut selection: ResMut<Selection>,
-    entitiesquery: Query<(Entity, &Name, Option<&Brick>)>,
-    mut copiedbuffer: ResMut<CopiedEntityBuffer>,
-    fullentityquery: Query<(
-        &Transform,
-        &Mesh3d,
-        &MeshMaterial3d<StandardMaterial>,
-        &Name,
-        Option<&Brick>,
-    )>,
+    mut ui_res: UiResources,
+    mut ui_state: UiStateResources<'_>,
+    mut queries: UiQueries<'_, '_>,
 ) {
-    let Some(assets) = ui_assets else { return; };
+    let Some(assets) = &ui_state.ui_assets else { return; };
 
-    let move_tex = *texture_ids.move_tex.get_or_insert_with(|| {
+    let move_tex = *ui_state.texture_ids.move_tex.get_or_insert_with(|| {
         contexts.add_image(EguiTextureHandle::Strong(assets.move_icon.clone()))
     });
-    let rotate_tex = *texture_ids.rotate_tex.get_or_insert_with(|| {
+    let rotate_tex = *ui_state.texture_ids.rotate_tex.get_or_insert_with(|| {
         contexts.add_image(EguiTextureHandle::Strong(assets.rotate_icon.clone()))
     });
-    let scale_tex = *texture_ids.scale_tex.get_or_insert_with(|| {
+    let scale_tex = *ui_state.texture_ids.scale_tex.get_or_insert_with(|| {
         contexts.add_image(EguiTextureHandle::Strong(assets.scale_icon.clone()))
     });
-    let add_tex = *texture_ids.add_tex.get_or_insert_with(|| {
+    let add_tex = *ui_state.texture_ids.add_tex.get_or_insert_with(|| {
         contexts.add_image(EguiTextureHandle::Strong(assets.add_icon.clone()))
     });
 
@@ -71,26 +109,31 @@ pub fn studio_ui(
         .fill(egui::Color32::from_rgb(245, 246, 247))
         .inner_margin(egui::Margin::same(0));
 
+    let camera_transform = queries.camera_transform_query.iter().next();
+
     egui::Panel::top("topbar")
         .frame(frame)
         .show(ctx, |ui| {
             panels::draw_top_bar(
                 ui,
-                &mut next_tool,
-                &current_tool,
-                &mut commands,
-                &mut meshes,
-                &mut materials,
-                &mut count,
+                &mut ui_state.next_tool,
+                &ui_state.current_tool,
+                &mut ui_res.commands,
+                &mut ui_res.meshes,
+                &mut ui_res.studs_materials,
+                &ui_res.studs_assets,
+                &mut ui_res.count,
+                &mut ui_res.snap_config,
                 move_tex,
                 rotate_tex,
                 scale_tex,
                 add_tex,
-                &diagnostics,
+                &ui_state.diagnostics,
+                camera_transform,
             );
         });
 
-    egui::SidePanel::left("explorer")
+    let panel_res = egui::SidePanel::left("explorer")
         .frame(egui::Frame::none()
             .fill(egui::Color32::from_rgb(245, 246, 247))
             .inner_margin(egui::Margin::symmetric(12, 12))
@@ -99,13 +142,70 @@ pub fn studio_ui(
         .show(ctx, |ui| {
             panels::draw_explorer(
                 ui,
-                &mut commands,
-                &mut selection,
-                &entitiesquery,
-                &mut copiedbuffer,
-                &fullentityquery,
+                &mut ui_res.commands,
+                &mut ui_state.selection,
+                &queries.entitiesquery,
+                &mut ui_state.copiedbuffer,
+                &queries.fullentityquery,
+                &mut ui_state.dragged_entity,
             );
         });
 
-    indicator::draw_indicator(ctx, &mut cameraindicator, &mut cameraquery);
+    if let Some(dragged) = ui_state.dragged_entity.entity {
+        if panel_res.response.hovered() && ctx.input(|i| i.pointer.any_released()) {
+            if let Ok((_, _, _, _, _, child_global)) = queries.entitiesquery.get(dragged) {
+                ui_res.commands.entity(dragged).insert(Transform {
+                    translation: child_global.translation(),
+                    rotation: child_global.rotation(),
+                    scale: child_global.scale(),
+                });
+            }
+            ui_res.commands.entity(dragged).remove::<ChildOf>();
+            ui_state.dragged_entity.entity = None;
+        }
+    }
+
+    indicator::draw_indicator(ctx, &mut ui_state.cameraindicator, &mut queries.cameraquery);
+    indicator::draw_fov_indicator(ctx, &mut ui_state.fovindicator, &mut queries.camera_projection_query);
+
+    if let (Some(entity), Some(pos)) = (ui_state.context_menu.entity, ui_state.context_menu.position) {
+        let mut close_menu = false;
+        
+        let inner_res = egui::Area::new(egui::Id::new("hahasosigma"))
+            .fixed_pos(egui::pos2(pos.x, pos.y))
+            .show(ctx, |ui| {
+                let frame = egui::Frame::menu(ui.style());
+                frame.show(ui, |ui| {
+                    ui.set_min_width(120.0);
+                    panels::draw_entity_context_menu(
+                        ui,
+                        entity,
+                        &mut ui_res.commands,
+                        &mut ui_state.selection,
+                        &mut ui_state.copiedbuffer,
+                        &queries.fullentityquery,
+                    )
+                })
+            });
+
+        let clicked_button = inner_res.inner.inner;
+        if clicked_button {
+            close_menu = true;
+        }
+
+        if !ui_state.context_menu.just_opened && ctx.input(|i| i.pointer.any_pressed()) {
+            if let Some(mouse_pos) = ctx.pointer_interact_pos() {
+                if !inner_res.response.rect.contains(mouse_pos) {
+                    close_menu = true;
+                }
+            }
+        }
+
+        ui_state.context_menu.just_opened = false;
+
+        if close_menu {
+            ui_state.context_menu.entity = None;
+            ui_state.context_menu.position = None;
+        }
+    }
 }

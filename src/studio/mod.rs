@@ -2,10 +2,13 @@ pub mod camera;
 pub mod gizmos;
 pub mod tools;
 pub mod ui;
+pub mod studs;
+pub mod bricks;
 
 use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
 use bevy::camera_controller::free_camera::FreeCameraPlugin;
+use bevy::pbr::{ExtendedMaterial, MaterialPlugin};
 
 pub struct StudioPlugin;
 
@@ -15,16 +18,27 @@ impl Plugin for StudioPlugin {
             .init_resource::<tools::Selection>()
             .init_resource::<tools::DragState>()
             .init_resource::<tools::HoverState>()
-            .init_resource::<camera::BrickSpawnerCount>()
+            .init_resource::<tools::CanvasContextMenu>()
+            .init_resource::<bricks::BrickSpawnerCount>()
             .init_resource::<ui::StudioUiTextureIds>()
             .init_resource::<ui::CameraSpeedIndicator>()
+            .init_resource::<ui::FovIndicator>()
             .init_resource::<ui::CopiedEntityBuffer>()
+            .init_resource::<ui::HierarchyDraggedEntity>()
+            .init_resource::<tools::SnapConfig>()
             .add_plugins(MeshPickingPlugin)
             .add_plugins(FreeCameraPlugin)
-            .add_systems(Startup, (camera::setup_studio, ui::setup_ui_assets, ui::configure_visuals))
+            .add_plugins(MaterialPlugin::<ExtendedMaterial<StandardMaterial, studs::StudsExtension>>::default())
+            .add_systems(Startup, (
+                studs::setup_studs,
+                camera::setup_studio.after(studs::setup_studs),
+                ui::setup_ui_assets,
+                ui::configure_visuals,
+            ))
             .add_systems(
                 Update,
                 (
+                    studs::configure_studs_samplers,
                     gizmos::update_gizmos,
                     gizmos::sync_gizmos,
                     gizmos::draw_selection_outline,
@@ -35,6 +49,10 @@ impl Plugin for StudioPlugin {
                     tools::handle_hover,
                     tools::update_cursor,
                     ui::updatecameraspeedindicator,
+                    ui::update_camera_fov
+                        .before(bevy::camera_controller::free_camera::run_freecamera_controller),
+                    camera::disable_camera_on_ui_interaction
+                        .before(bevy::camera_controller::free_camera::run_freecamera_controller),
                 ),
             )
             .add_systems(EguiPrimaryContextPass, ui::studio_ui);

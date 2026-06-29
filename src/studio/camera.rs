@@ -4,24 +4,22 @@ use bevy::anti_alias::fxaa::Fxaa;
 use bevy::camera_controller::free_camera::FreeCamera;
 use bevy::camera::Hdr;
 use bevy::post_process::bloom::Bloom;
-use bevy::pbr::ScreenSpaceAmbientOcclusion;
-use crate::common::components::Brick;
-
-#[derive(Resource, Default)]
-pub struct BrickSpawnerCount {
-    pub count: u32,
-}
+use bevy::pbr::{ScreenSpaceAmbientOcclusion, ContactShadows, ExtendedMaterial};
+use crate::studio::bricks::spawn_brick;
 
 pub fn setup_studio(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut count: ResMut<BrickSpawnerCount>,
+    mut studs_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, crate::studio::studs::StudsExtension>>>,
+    studs_assets: Res<crate::studio::studs::StudsAssets>,
+    mut count: ResMut<crate::studio::bricks::BrickSpawnerCount>,
 ) {
     commands.spawn((
         PointLight {
             intensity: 1500.0,
             shadow_maps_enabled: true,
+            contact_shadows_enabled: true,
             ..default()
         },
         Transform::from_xyz(4.0, 8.0, 4.0),
@@ -44,6 +42,7 @@ pub fn setup_studio(
         Fxaa::default(),
         Bloom::default(),
         ScreenSpaceAmbientOcclusion::default(),
+        ContactShadows::default(),
         DistanceFog {
             color: Color::srgb(0.70, 0.90, 1.00),
             falloff: FogFalloff::Linear {
@@ -67,31 +66,17 @@ pub fn setup_studio(
         Name::new("Baseplate"),
     ));
 
-    spawn_brick(&mut commands, &mut meshes, &mut materials, &mut count);
+    spawn_brick(&mut commands, &mut meshes, &mut studs_materials, &studs_assets, &mut count, Vec3::new(0.0, 0.5, 0.0));
 }
 
-pub fn spawn_brick(
-    commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
-    count: &mut BrickSpawnerCount,
+pub fn disable_camera_on_ui_interaction(
+    mut camera_query: Query<&mut bevy::camera_controller::free_camera::FreeCameraState>,
+    mut contexts: bevy_egui::EguiContexts,
 ) {
-    let offset = (count.count as f32) * 5.0;
-    let current_index = count.count;
-    count.count += 1;
-
-    commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(4.0, 1.0, 4.0))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgb(0.84, 0.24, 0.16),
-            perceptual_roughness: 0.95,
-            reflectance: 0.08,
-            metallic: 0.0,
-            ..default()
-        })),
-        Transform::from_xyz(offset, 0.5, 0.0),
-        Brick,
-        Pickable::default(),
-        Name::new(format!("Part{}", current_index)),
-    ));
+    if let Ok(ctx) = contexts.ctx_mut() {
+        let wants_input = ctx.egui_wants_pointer_input() || ctx.egui_wants_keyboard_input();
+        for mut state in &mut camera_query {
+            state.enabled = !wants_input;
+        }
+    }
 }

@@ -87,24 +87,28 @@ pub fn update_gizmos(
 
 pub fn sync_gizmos(
     mut gizmos: Query<(Entity, &mut Transform, &ToolGizmo)>,
-    bricks: Query<&Transform, (With<Brick>, Without<ToolGizmo>)>,
+    bricks: Query<&GlobalTransform, (With<Brick>, Without<ToolGizmo>)>,
     hover_state: Res<HoverState>,
     drag_state: Res<DragState>,
 ) {
     for (entity, mut transform, gizmo) in &mut gizmos {
-        if let Ok(brick_transform) = bricks.get(gizmo.target) {
-            let base_extents = Vec3::new(2.0, 0.5, 2.0);
-            let scaled_extents = base_extents * brick_transform.scale;
+        if let Ok(brick_global) = bricks.get(gizmo.target) {
+            let base_extents = Vec3::new(2.0, 0.5, 1.0);
+            let global_scale = brick_global.scale();
+            let scaled_extents = base_extents * global_scale;
             let face_offset = gizmo.axis.abs().dot(scaled_extents);
 
+            let global_translation = brick_global.translation();
+            let global_rotation = brick_global.rotation();
+
             if gizmo.tool == ToolState::Rotate {
-                transform.translation = brick_transform.translation;
+                transform.translation = global_translation;
             } else {
                 let offset = face_offset + 0.6;
-                transform.translation = brick_transform.translation + brick_transform.rotation.mul_vec3(gizmo.axis * offset);
+                transform.translation = global_translation + global_rotation.mul_vec3(gizmo.axis * offset);
             }
 
-            transform.rotation = brick_transform.rotation * Quat::from_rotation_arc(Vec3::Y, gizmo.axis);
+            transform.rotation = global_rotation * Quat::from_rotation_arc(Vec3::Y, gizmo.axis);
 
             let is_hovered = hover_state.hovered_gizmo == Some(entity);
             let is_dragged = drag_state.active && drag_state.gizmo_entity == Some(entity);
@@ -122,19 +126,34 @@ pub fn sync_gizmos(
     }
 }
 
-pub fn draw_selection_outline(
-    selection: Res<Selection>,
-    bricks: Query<&Transform, With<Brick>>,
-    mut gizmos: Gizmos,
+fn draw_outline_recursive(
+    entity: Entity,
+    bricks: &Query<(&GlobalTransform, Option<&Children>), With<Brick>>,
+    gizmos: &mut Gizmos,
 ) {
-    let Some(selected_entity) = selection.entity else { return };
-    if let Ok(transform) = bricks.get(selected_entity) {
-        let outline_scale = transform.scale * Vec3::new(4.0, 1.0, 4.0);
+    if let Ok((global_transform, children_opt)) = bricks.get(entity) {
+        let (scale, rotation, translation) = global_transform.to_scale_rotation_translation();
+        let outline_scale = scale * Vec3::new(4.0, 1.0, 2.0);
         let outline_transform = Transform {
-            translation: transform.translation,
-            rotation: transform.rotation,
+            translation,
+            rotation,
             scale: outline_scale,
         };
         gizmos.cube(outline_transform, Color::srgb(1.0, 1.0, 1.0));
+
+        if let Some(children) = children_opt {
+            for child in children.iter() {
+                draw_outline_recursive(child, bricks, gizmos);
+            }
+        }
     }
+}
+
+pub fn draw_selection_outline(
+    selection: Res<Selection>,
+    bricks: Query<(&GlobalTransform, Option<&Children>), With<Brick>>,
+    mut gizmos: Gizmos,
+) {
+    let Some(selected_entity) = selection.entity else { return };
+    draw_outline_recursive(selected_entity, &bricks, &mut gizmos);
 }

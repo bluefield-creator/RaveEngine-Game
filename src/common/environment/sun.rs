@@ -13,6 +13,7 @@ pub fn setup_sun(
             color: Color::srgb(1.0, 0.96, 0.85),
             illuminance: 16000.0,
             shadow_maps_enabled: true,
+            contact_shadows_enabled: true,
             ..default()
         },
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.32, 0.95, 0.0)),
