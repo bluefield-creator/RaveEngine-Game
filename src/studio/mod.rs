@@ -61,6 +61,7 @@ impl Plugin for StudioPlugin {
                         .before(bevy::camera_controller::free_camera::run_freecamera_controller),
                     camera::sync_gizmo_camera,
                     camera::apply_graphics_settings,
+                    camera::manage_winit_performance,
                 ),
             )
             .add_systems(
