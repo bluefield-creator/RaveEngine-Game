@@ -12,6 +12,7 @@ pub struct StudioPlugin;
 impl Plugin for StudioPlugin {
     fn build(&self, app: &mut App) {
         app.init_state::<tools::ToolState>()
+            .init_state::<tools::OnboardingState>()
             .init_resource::<tools::Selection>()
             .init_resource::<tools::DragState>()
             .init_resource::<tools::PartDragState>()

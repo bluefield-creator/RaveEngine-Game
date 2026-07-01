@@ -14,6 +14,13 @@ pub enum ToolState {
     Rotate,
 }
 
+#[derive(Default, States, Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub enum OnboardingState {
+    #[default]
+    Active,
+    Inactive,
+}
+
 #[derive(Resource, Default)]
 pub struct Selection {
     pub entity: Option<Entity>,

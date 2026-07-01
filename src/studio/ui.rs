@@ -51,6 +51,8 @@ pub struct UiStateResources<'w> {
     pub context_menu: ResMut<'w, crate::studio::tools::CanvasContextMenu>,
     pub hover_state: ResMut<'w, crate::studio::tools::HoverState>,
     pub settings_window: ResMut<'w, SettingsWindow>,
+    pub onboarding_state: Res<'w, State<crate::studio::tools::OnboardingState>>,
+    pub next_onboarding_state: ResMut<'w, NextState<crate::studio::tools::OnboardingState>>,
 }
 
 #[derive(SystemParam)]
@@ -93,6 +95,12 @@ pub fn studio_ui(
 ) {
     let Some(assets) = &ui_state.ui_assets else { return; };
 
+    let thumb_empty_tex = *ui_state.texture_ids.thumb_empty_tex.get_or_insert_with(|| {
+        contexts.add_image(EguiTextureHandle::Strong(assets.thumb_empty.clone()))
+    });
+    let thumb_baseplate_tex = *ui_state.texture_ids.thumb_baseplate_tex.get_or_insert_with(|| {
+        contexts.add_image(EguiTextureHandle::Strong(assets.thumb_baseplate.clone()))
+    });
     let move_tex = *ui_state.texture_ids.move_tex.get_or_insert_with(|| {
         contexts.add_image(EguiTextureHandle::Strong(assets.move_icon.clone()))
     });
@@ -360,4 +368,20 @@ pub fn studio_ui(
         }
     }
     ui_state.hover_state.is_hovering_ui = is_hovering_ui;
+
+    if *ui_state.onboarding_state.get() == crate::studio::tools::OnboardingState::Active {
+        panels::draw_onboarding(
+            ctx,
+            &mut ui_state.next_onboarding_state,
+            &mut ui_res.commands,
+            &mut ui_res.meshes,
+            &mut ui_res.studs_materials,
+            &ui_res.studs_assets,
+            &mut ui_res.count,
+            thumb_empty_tex,
+            thumb_baseplate_tex,
+        );
+
+        ui_state.hover_state.is_hovering_ui = true;
+    }
 }

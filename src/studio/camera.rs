@@ -4,19 +4,13 @@ use bevy::anti_alias::fxaa::Fxaa;
 use bevy::camera_controller::free_camera::FreeCamera;
 use bevy::camera::Hdr;
 use bevy::post_process::bloom::Bloom;
-use bevy::pbr::{ScreenSpaceAmbientOcclusion, ContactShadows, ExtendedMaterial};
-use crate::common::bricks::data::spawn_brick;
+use bevy::pbr::{ScreenSpaceAmbientOcclusion, ContactShadows};
 
 #[derive(Component)]
 pub struct GizmoCamera;
 
 pub fn setup_studio(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    _materials: ResMut<Assets<StandardMaterial>>,
-    mut studs_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
-    studs_assets: Res<crate::common::bricks::studs::StudsAssets>,
-    mut count: ResMut<crate::common::bricks::data::BrickSpawnerCount>,
     mut egui_global_settings: ResMut<bevy_egui::EguiGlobalSettings>,
 ) {
     egui_global_settings.auto_create_primary_context = false;
@@ -76,29 +70,6 @@ pub fn setup_studio(
         bevy_egui::PrimaryEguiContext,
         GizmoCamera,
     ));
-
-    commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28))),
-        MeshMaterial3d(studs_materials.add(ExtendedMaterial {
-            base: StandardMaterial {
-                base_color: Color::srgb(0.28, 0.62, 0.32),
-                perceptual_roughness: 0.95,
-                reflectance: 0.08,
-                metallic: 0.0,
-                ..default()
-            },
-            extension: crate::common::bricks::studs::StudsExtension {
-                stud_texture: studs_assets.stud.clone(),
-                inlet_texture: studs_assets.inlet.clone(),
-            },
-        })),
-        Transform::from_xyz(0.0, -0.14, 0.0).with_scale(Vec3::new(25.0, 1.0, 50.0)),
-        crate::common::bricks::components::Brick,
-        Pickable::default(),
-        Name::new("Baseplate"),
-    ));
-
-    spawn_brick(&mut commands, &mut meshes, &mut studs_materials, &studs_assets, &mut count, Vec3::new(0.0, 0.14, 0.0));
 }
 
 pub fn disable_camera_on_ui_interaction(
@@ -106,9 +77,12 @@ pub fn disable_camera_on_ui_interaction(
     mut contexts: bevy_egui::EguiContexts,
     mut picking_settings: ResMut<bevy::picking::PickingSettings>,
     hover_state: Res<crate::studio::tools::HoverState>,
+    onboarding_state: Res<State<crate::studio::tools::OnboardingState>>,
 ) {
+    let onboarding_active = *onboarding_state.get() == crate::studio::tools::OnboardingState::Active;
+
     if let Ok(ctx) = contexts.ctx_mut() {
-        let wants_input = ctx.egui_wants_pointer_input() || ctx.egui_wants_keyboard_input() || hover_state.is_hovering_ui;
+        let wants_input = ctx.egui_wants_pointer_input() || ctx.egui_wants_keyboard_input() || hover_state.is_hovering_ui || onboarding_active;
         for mut state in &mut camera_query {
             state.enabled = !wants_input;
         }
