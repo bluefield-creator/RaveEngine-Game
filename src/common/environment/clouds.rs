@@ -4,6 +4,7 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use rand::RngExt;
 
 #[derive(Component)]
+#[allow(dead_code)]
 pub struct CloudBillboard {
     pub speed: f32,
     pub size_x: f32,

@@ -1,9 +1,9 @@
 use bevy::prelude::*;
 use bevy::window::{CursorIcon, SystemCursorIcon};
 use bevy::picking::mesh_picking::ray_cast::{MeshRayCast, MeshRayCastSettings};
-use crate::common::components::Brick;
+use crate::common::bricks::components::Brick;
+use crate::common::bricks::data::{BrickData, spawn_from_data};
 use crate::studio::gizmos::ToolGizmo;
-use bevy::pbr::ExtendedMaterial;
 
 #[derive(Default, States, Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum ToolState {
@@ -61,27 +61,6 @@ impl Default for SnapConfig {
         Self {
             enabled: false,
             distance: 1.0,
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct BrickData {
-    pub transform: Transform,
-    pub name: String,
-    pub is_brick: bool,
-    pub mesh: Option<Mesh3d>,
-    pub standard_material: Option<MeshMaterial3d<StandardMaterial>>,
-    pub studs_material: Option<MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::studio::studs::StudsExtension>>>,
-    pub parent: Option<Entity>,
-}
-
-impl BrickData {
-    pub fn remap(&mut self, old: Entity, new: Entity) {
-        if let Some(p) = &mut self.parent {
-            if *p == old {
-                *p = new;
-            }
         }
     }
 }
@@ -177,64 +156,6 @@ pub enum UndoRedoAction {
     Redo,
 }
 
-pub fn spawn_from_data(
-    commands: &mut Commands,
-    data: &BrickData,
-) -> Entity {
-    let mut spawned = commands.spawn((
-        data.transform,
-        Name::new(data.name.clone()),
-        Pickable::default(),
-    ));
-    if data.is_brick {
-        spawned.insert(Brick);
-    }
-    if let Some(ref m) = data.mesh {
-        spawned.insert(m.clone());
-    }
-    if let Some(ref mat) = data.standard_material {
-        spawned.insert(mat.clone());
-    }
-    if let Some(ref studs_mat) = data.studs_material {
-        spawned.insert(studs_mat.clone());
-    }
-    let new_entity = spawned.id();
-    if let Some(parent) = data.parent {
-        commands.entity(parent).add_child(new_entity);
-    }
-    new_entity
-}
-
-pub fn capture_brick_data(
-    entity: Entity,
-    query: &Query<(
-        Entity,
-        &mut Transform,
-        &mut Name,
-        Option<&ChildOf>,
-        Option<&Children>,
-        Option<&Brick>,
-        &GlobalTransform,
-        Option<&Mesh3d>,
-        Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::studio::studs::StudsExtension>>>,
-    ), Without<Camera3d>>,
-) -> Option<BrickData> {
-    if let Ok((_, transform, name, child_of_opt, _, brick_opt, _, mesh_opt, mat_opt, studs_mat_opt)) = query.get(entity) {
-        Some(BrickData {
-            transform: *transform,
-            name: name.to_string(),
-            is_brick: brick_opt.is_some(),
-            mesh: mesh_opt.cloned(),
-            standard_material: mat_opt.cloned(),
-            studs_material: studs_mat_opt.cloned(),
-            parent: child_of_opt.map(|co| co.parent()),
-        })
-    } else {
-        None
-    }
-}
-
 pub fn handle_keyboard_shortcuts(
     keys: Res<ButtonInput<KeyCode>>,
     mut action_writer: MessageWriter<UndoRedoAction>,
@@ -269,7 +190,7 @@ pub fn handle_undo_redo_action(
         Option<&Brick>,
         Option<&Mesh3d>,
         Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::studio::studs::StudsExtension>>>,
+        Option<&MeshMaterial3d<bevy::pbr::ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
     )>,
 ) {
     for action in actions.read() {

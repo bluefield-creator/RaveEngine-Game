@@ -58,7 +58,7 @@ fn handle_physics_simulation_actions(
         &mut Transform,
         &Name,
         Option<&TransformBackup>,
-    ), With<crate::common::components::Brick>>,
+    ), With<crate::common::bricks::components::Brick>>,
 ) {
     for action in actions.read() {
         match *action {
@@ -182,7 +182,7 @@ fn handle_physics_simulation_actions(
 fn handle_newly_spawned_bricks(
     mut commands: Commands,
     state: Res<PhysicsSimulationState>,
-    query: Query<(Entity, &Transform, &Name), (Added<crate::common::components::Brick>, Without<TransformBackup>)>,
+    query: Query<(Entity, &Transform, &Name), (Added<crate::common::bricks::components::Brick>, Without<TransformBackup>)>,
 ) {
     if *state == PhysicsSimulationState::Running {
         for (entity, transform, name) in &query {

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_egui::egui;
 use crate::studio::tools::Selection;
-use crate::common::components::Brick;
+use crate::common::bricks::components::Brick;
 use crate::studio::ui::CopiedEntityBuffer;
 use bevy::pbr::ExtendedMaterial;
 
@@ -21,7 +21,7 @@ pub fn draw_entity_context_menu(
         &GlobalTransform,
         Option<&Mesh3d>,
         Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::studio::studs::StudsExtension>>>,
+        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
     ), Without<Camera3d>>,
     history: &mut ResMut<crate::studio::tools::UndoRedoHistory>,
 ) -> bool {
@@ -64,7 +64,7 @@ pub fn draw_entity_context_menu(
                 commands.entity(new_entity).insert(Brick);
             }
 
-            let data = crate::studio::tools::BrickData {
+            let data = crate::common::bricks::data::BrickData {
                 transform: newtransform,
                 name: format!("{} - Copy", name),
                 is_brick: copiedbuffer.is_brick,
@@ -111,7 +111,7 @@ pub fn draw_entity_context_menu(
                 commands.entity(p).add_child(new_entity);
             }
 
-            let data = crate::studio::tools::BrickData {
+            let data = crate::common::bricks::data::BrickData {
                 transform: newtransform,
                 name: format!("{} - Copy", name.as_str()),
                 is_brick: brick_opt.is_some(),
@@ -131,7 +131,7 @@ pub fn draw_entity_context_menu(
         }
     }
     if ui.button("Delete").clicked() {
-        if let Some(data) = crate::studio::tools::capture_brick_data(entity, entities_query) {
+        if let Some(data) = crate::common::bricks::data::capture_brick_data(entity, entities_query) {
             history.push_command(crate::studio::tools::UndoCommand::Delete {
                 entity,
                 data,

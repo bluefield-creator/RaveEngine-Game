@@ -8,7 +8,7 @@ use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts, EguiTextureHandle};
 use crate::studio::tools::ToolState;
 use crate::studio::tools::Selection;
-use crate::common::components::Brick;
+use crate::common::bricks::components::Brick;
 use bevy::ecs::system::SystemParam;
 use bevy::pbr::ExtendedMaterial;
 //////////
@@ -25,9 +25,9 @@ pub struct UiResources<'w, 's> {
     pub commands: Commands<'w, 's>,
     pub meshes: ResMut<'w, Assets<Mesh>>,
     pub materials: ResMut<'w, Assets<StandardMaterial>>,
-    pub studs_materials: ResMut<'w, Assets<ExtendedMaterial<StandardMaterial, crate::studio::studs::StudsExtension>>>,
-    pub studs_assets: Res<'w, crate::studio::studs::StudsAssets>,
-    pub count: ResMut<'w, crate::studio::bricks::BrickSpawnerCount>,
+    pub studs_materials: ResMut<'w, Assets<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
+    pub studs_assets: Res<'w, crate::common::bricks::studs::StudsAssets>,
+    pub count: ResMut<'w, crate::common::bricks::data::BrickSpawnerCount>,
     pub snap_config: ResMut<'w, crate::studio::tools::SnapConfig>,
     pub history: ResMut<'w, crate::studio::tools::UndoRedoHistory>,
     pub action_writer: MessageWriter<'w, crate::studio::tools::UndoRedoAction>,
@@ -78,7 +78,7 @@ pub struct UiQueries<'w, 's> {
             &'static GlobalTransform,
             Option<&'static Mesh3d>,
             Option<&'static MeshMaterial3d<StandardMaterial>>,
-            Option<&'static MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::studio::studs::StudsExtension>>>,
+            Option<&'static MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
         ),
         Without<Camera3d>,
     >,

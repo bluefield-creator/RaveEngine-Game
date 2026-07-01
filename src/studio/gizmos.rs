@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy::picking::mesh_picking::ray_cast::SimplifiedMesh;
-use crate::common::components::Brick;
+use crate::common::bricks::components::Brick;
 use crate::studio::tools::{Selection, ToolState, HoverState, DragState};
 
 #[derive(Component)]

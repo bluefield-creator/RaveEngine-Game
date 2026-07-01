@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_egui::egui;
 use bevy::pbr::ExtendedMaterial;
-use crate::common::components::Brick;
+use crate::common::bricks::components::Brick;
 
 pub fn draw_properties(
     ui: &mut egui::Ui,
@@ -16,10 +16,10 @@ pub fn draw_properties(
         &GlobalTransform,
         Option<&Mesh3d>,
         Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::studio::studs::StudsExtension>>>,
+        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
     ), Without<Camera3d>>,
     materials: &mut Assets<StandardMaterial>,
-    studs_materials: &mut Assets<ExtendedMaterial<StandardMaterial, crate::studio::studs::StudsExtension>>,
+    studs_materials: &mut Assets<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>,
 ) {
     let Ok((_, mut transform, mut name, _, _, Some(_brick), _, _, mat_opt, studs_mat_opt)) = properties_query.get_mut(selected_entity) else {
         return;
@@ -120,7 +120,6 @@ pub fn draw_properties(
                     let mut rot_deg = Vec3::new(rx.to_degrees(), ry.to_degrees(), rz.to_degrees());
                     let mut rot_changed = false;
                     ui.horizontal(|ui| {
-                        ui.label("X");
                         rot_changed |= ui.add(egui::DragValue::new(&mut rot_deg.x).speed(1.0)).changed();
                         ui.label("Y");
                         rot_changed |= ui.add(egui::DragValue::new(&mut rot_deg.y).speed(1.0)).changed();

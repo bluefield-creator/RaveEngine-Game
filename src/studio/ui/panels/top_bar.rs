@@ -1,9 +1,9 @@
 use bevy::prelude::*;
 use bevy_egui::egui;
 use crate::studio::tools::{ToolState, SnapConfig};
-use crate::studio::bricks::spawn_brick;
-use crate::studio::studs::StudsAssets;
-use crate::studio::bricks::BrickSpawnerCount;
+use crate::common::bricks::data::spawn_brick;
+use crate::common::bricks::studs::StudsAssets;
+use crate::common::bricks::data::BrickSpawnerCount;
 use bevy::pbr::ExtendedMaterial;
 
 #[allow(deprecated)]
@@ -13,7 +13,7 @@ pub fn draw_top_bar(
     current_tool: &Res<State<ToolState>>,
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
-    studs_materials: &mut ResMut<Assets<ExtendedMaterial<StandardMaterial, crate::studio::studs::StudsExtension>>>,
+    studs_materials: &mut ResMut<Assets<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
     studs_assets: &StudsAssets,
     count: &mut ResMut<BrickSpawnerCount>,
     snap_config: &mut ResMut<SnapConfig>,
@@ -234,7 +234,7 @@ pub fn draw_top_bar(
 
                                     let new_entity = spawn_brick(commands, meshes, studs_materials, studs_assets, count, spawn_pos);
 
-                                    let data = crate::studio::tools::BrickData {
+                                    let data = crate::common::bricks::data::BrickData {
                                         transform: Transform::from_translation(spawn_pos),
                                         name: format!("Part{}", count.count - 1),
                                         is_brick: true,
@@ -246,7 +246,7 @@ pub fn draw_top_bar(
                                                 perceptual_roughness: 0.9,
                                                 ..default()
                                             },
-                                            extension: crate::studio::studs::StudsExtension {
+                                            extension: crate::common::bricks::studs::StudsExtension {
                                                 stud_texture: studs_assets.stud.clone(),
                                                 inlet_texture: studs_assets.inlet.clone(),
                                             },

@@ -7,7 +7,7 @@ pub fn draw_settings_window(
     egui::Window::new("Settings")
         .open(open)
         .pivot(egui::Align2::CENTER_CENTER)
-        .default_pos(ctx.screen_rect().center())
+        .default_pos(ctx.content_rect().center())
         .default_size(egui::vec2(250.0, 120.0))
         .resizable(false)
         .collapsible(false)

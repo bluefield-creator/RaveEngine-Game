@@ -5,7 +5,7 @@ use bevy::camera_controller::free_camera::FreeCamera;
 use bevy::camera::Hdr;
 use bevy::post_process::bloom::Bloom;
 use bevy::pbr::{ScreenSpaceAmbientOcclusion, ContactShadows, ExtendedMaterial};
-use crate::studio::bricks::spawn_brick;
+use crate::common::bricks::data::spawn_brick;
 
 #[derive(Component)]
 pub struct GizmoCamera;
@@ -14,9 +14,9 @@ pub fn setup_studio(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     _materials: ResMut<Assets<StandardMaterial>>,
-    mut studs_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, crate::studio::studs::StudsExtension>>>,
-    studs_assets: Res<crate::studio::studs::StudsAssets>,
-    mut count: ResMut<crate::studio::bricks::BrickSpawnerCount>,
+    mut studs_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
+    studs_assets: Res<crate::common::bricks::studs::StudsAssets>,
+    mut count: ResMut<crate::common::bricks::data::BrickSpawnerCount>,
     mut egui_global_settings: ResMut<bevy_egui::EguiGlobalSettings>,
 ) {
     egui_global_settings.auto_create_primary_context = false;
@@ -87,13 +87,13 @@ pub fn setup_studio(
                 metallic: 0.0,
                 ..default()
             },
-            extension: crate::studio::studs::StudsExtension {
+            extension: crate::common::bricks::studs::StudsExtension {
                 stud_texture: studs_assets.stud.clone(),
                 inlet_texture: studs_assets.inlet.clone(),
             },
         })),
         Transform::from_xyz(0.0, -0.14, 0.0).with_scale(Vec3::new(25.0, 1.0, 50.0)),
-        crate::common::components::Brick,
+        crate::common::bricks::components::Brick,
         Pickable::default(),
         Name::new("Baseplate"),
     ));

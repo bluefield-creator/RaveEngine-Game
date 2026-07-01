@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_egui::egui;
 use crate::studio::tools::Selection;
-use crate::common::components::Brick;
+use crate::common::bricks::components::Brick;
 use crate::studio::ui::CopiedEntityBuffer;
 use crate::studio::ui::HierarchyDraggedEntity;
 use crate::studio::ui::panels::context_menu::draw_entity_context_menu;
@@ -19,7 +19,7 @@ fn is_managed_entity(
         &GlobalTransform,
         Option<&Mesh3d>,
         Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::studio::studs::StudsExtension>>>,
+        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
     ), Without<Camera3d>>,
 ) -> bool {
     if let Ok((_, _, name, _, _, brick_opt, _, _, _, _)) = query.get(entity) {
@@ -42,7 +42,7 @@ fn is_descendant(
         &GlobalTransform,
         Option<&Mesh3d>,
         Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::studio::studs::StudsExtension>>>,
+        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
     ), Without<Camera3d>>,
 ) -> bool {
     let mut current = child;
@@ -76,7 +76,7 @@ fn draw_entity_node(
         &GlobalTransform,
         Option<&Mesh3d>,
         Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::studio::studs::StudsExtension>>>,
+        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
     ), Without<Camera3d>>,
     copiedbuffer: &mut CopiedEntityBuffer,
     dragged_entity: &mut ResMut<HierarchyDraggedEntity>,
@@ -301,7 +301,7 @@ pub fn draw_explorer(
         &GlobalTransform,
         Option<&Mesh3d>,
         Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::studio::studs::StudsExtension>>>,
+        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
     ), Without<Camera3d>>,
     copiedbuffer: &mut CopiedEntityBuffer,
     dragged_entity: &mut ResMut<HierarchyDraggedEntity>,

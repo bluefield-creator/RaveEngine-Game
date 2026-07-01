@@ -1,0 +1,119 @@
+use bevy::prelude::*;
+use bevy::pbr::ExtendedMaterial;
+use crate::common::bricks::components::Brick;
+use crate::common::bricks::studs::{StudsAssets, StudsExtension};
+
+#[derive(Resource, Default)]
+pub struct BrickSpawnerCount {
+    pub count: u32,
+}
+
+pub fn spawn_brick(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<ExtendedMaterial<StandardMaterial, StudsExtension>>,
+    studs_assets: &StudsAssets,
+    count: &mut BrickSpawnerCount,
+    spawn_pos: Vec3,
+) -> Entity {
+    let current_index = count.count;
+    count.count += 1;
+
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28))),
+        MeshMaterial3d(materials.add(ExtendedMaterial {
+            base: StandardMaterial {
+                base_color: Color::srgb(0.84, 0.24, 0.16),
+                perceptual_roughness: 0.9,
+                ..default()
+            },
+            extension: StudsExtension {
+                stud_texture: studs_assets.stud.clone(),
+                inlet_texture: studs_assets.inlet.clone(),
+            },
+        })),
+        Transform::from_translation(spawn_pos),
+        Brick,
+        Pickable::default(),
+        Name::new(format!("Part{}", current_index)),
+    )).id()
+}
+
+#[derive(Clone, Debug)]
+pub struct BrickData {
+    pub transform: Transform,
+    pub name: String,
+    pub is_brick: bool,
+    pub mesh: Option<Mesh3d>,
+    pub standard_material: Option<MeshMaterial3d<StandardMaterial>>,
+    pub studs_material: Option<MeshMaterial3d<ExtendedMaterial<StandardMaterial, StudsExtension>>>,
+    pub parent: Option<Entity>,
+}
+
+impl BrickData {
+    pub fn remap(&mut self, old: Entity, new: Entity) {
+        if let Some(p) = &mut self.parent {
+            if *p == old {
+                *p = new;
+            }
+        }
+    }
+}
+
+pub fn spawn_from_data(
+    commands: &mut Commands,
+    data: &BrickData,
+) -> Entity {
+    let mut spawned = commands.spawn((
+        data.transform,
+        Name::new(data.name.clone()),
+        Pickable::default(),
+    ));
+    if data.is_brick {
+        spawned.insert(Brick);
+    }
+    if let Some(ref m) = data.mesh {
+        spawned.insert(m.clone());
+    }
+    if let Some(ref mat) = data.standard_material {
+        spawned.insert(mat.clone());
+    }
+    if let Some(ref studs_mat) = data.studs_material {
+        spawned.insert(studs_mat.clone());
+    }
+    let new_entity = spawned.id();
+    if let Some(parent) = data.parent {
+        commands.entity(parent).add_child(new_entity);
+    }
+    new_entity
+}
+
+pub fn capture_brick_data(
+    entity: Entity,
+    query: &Query<(
+        Entity,
+        &mut Transform,
+        &mut Name,
+        Option<&ChildOf>,
+        Option<&Children>,
+        Option<&Brick>,
+        &GlobalTransform,
+        Option<&Mesh3d>,
+        Option<&MeshMaterial3d<StandardMaterial>>,
+        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, StudsExtension>>>,
+    ), Without<Camera3d>>,
+) -> Option<BrickData> {
+    if let Ok((_, transform, name, child_of_opt, _, brick_opt, _, mesh_opt, mat_opt, studs_mat_opt)) = query.get(entity) {
+        Some(BrickData {
+            transform: *transform,
+            name: name.to_string(),
+            is_brick: brick_opt.is_some(),
+            mesh: mesh_opt.cloned(),
+            standard_material: mat_opt.cloned(),
+            studs_material: studs_mat_opt.cloned(),
+            parent: child_of_opt.map(|co| co.parent()),
+        })
+    } else {
+        None
+    }
+}
