@@ -21,3 +21,20 @@ pub struct HierarchyDraggedEntity {
 pub struct SettingsWindow {
     pub open: bool,
 }
+
+#[derive(Resource)]
+pub struct GraphicsSettings {
+    pub ssao: bool,
+    pub contact_shadows: bool,
+    pub bloom: bool,
+}
+
+impl Default for GraphicsSettings {
+    fn default() -> Self {
+        Self {
+            ssao: false,
+            contact_shadows: false,
+            bloom: true,
+        }
+    }
+}

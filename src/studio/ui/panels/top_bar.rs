@@ -224,11 +224,12 @@ pub fn draw_top_bar(
 
                                     if snap_config.enabled && snap_config.distance > 0.0 {
                                         let snap_interval = snap_config.distance * 0.28;
-                                        spawn_pos.x = (spawn_pos.x / snap_interval).round() * snap_interval;
-                                        spawn_pos.z = (spawn_pos.z / snap_interval).round() * snap_interval;
-                                        spawn_pos.y = (spawn_pos.y / snap_interval).round() * snap_interval;
-                                        if spawn_pos.y < (0.5 * 0.28) {
-                                            spawn_pos.y = 0.5 * 0.28;
+                                        let half_ext = Vec3::new(2.0 * 0.28, 0.5 * 0.28, 1.0 * 0.28);
+                                        spawn_pos.x = ((spawn_pos.x - half_ext.x) / snap_interval).round() * snap_interval + half_ext.x;
+                                        spawn_pos.z = ((spawn_pos.z - half_ext.z) / snap_interval).round() * snap_interval + half_ext.z;
+                                        spawn_pos.y = ((spawn_pos.y - half_ext.y) / snap_interval).round() * snap_interval + half_ext.y;
+                                        if spawn_pos.y < half_ext.y {
+                                            spawn_pos.y = half_ext.y;
                                         }
                                     }
 

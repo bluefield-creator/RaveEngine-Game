@@ -11,14 +11,11 @@ use crate::studio::tools::Selection;
 use crate::common::bricks::components::Brick;
 use bevy::ecs::system::SystemParam;
 use bevy::pbr::ExtendedMaterial;
-//////////
-//todo
-//make it so you cannot interact with the viewport while hovering over UI !!DONE
-//qol updates to general usage of UI, like double clicking a grouped part displays the children of the part
+
 pub use assets::{StudioUiAssets, StudioUiTextureIds, setup_ui_assets};
 pub use indicator::{CameraSpeedIndicator, updatecameraspeedindicator, FovIndicator, update_camera_fov};
 pub use visuals::configure_visuals;
-pub use resources::{CopiedEntityBuffer, HierarchyDraggedEntity, SettingsWindow};
+pub use resources::{CopiedEntityBuffer, HierarchyDraggedEntity, SettingsWindow, GraphicsSettings};
 
 #[derive(SystemParam)]
 pub struct UiResources<'w, 's> {
@@ -51,6 +48,7 @@ pub struct UiStateResources<'w> {
     pub context_menu: ResMut<'w, crate::studio::tools::CanvasContextMenu>,
     pub hover_state: ResMut<'w, crate::studio::tools::HoverState>,
     pub settings_window: ResMut<'w, SettingsWindow>,
+    pub graphics_settings: ResMut<'w, GraphicsSettings>,
     pub onboarding_state: Res<'w, State<crate::studio::tools::OnboardingState>>,
     pub next_onboarding_state: ResMut<'w, NextState<crate::studio::tools::OnboardingState>>,
     pub onboarding_data: ResMut<'w, crate::studio::ui::panels::onboarding::OnboardingData>,
@@ -309,7 +307,7 @@ pub fn studio_ui(
     }
 
     if ui_state.settings_window.open {
-        panels::draw_settings_window(ctx, &mut ui_state.settings_window.open);
+        panels::draw_settings_window(ctx, &mut ui_state.settings_window.open, &mut ui_state.graphics_settings);
     }
 
     indicator::draw_indicator(ctx, &mut ui_state.cameraindicator, &mut queries.cameraquery);

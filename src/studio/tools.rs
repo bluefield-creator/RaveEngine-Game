@@ -442,6 +442,9 @@ pub fn handle_drag_start(
     bricks: Query<&Transform, With<Brick>>,
 ) {
     for drag in drags.read() {
+        if drag.button != PointerButton::Primary {
+            continue;
+        }
         let target = drag.event_target();
         if let Ok(gizmo) = gizmos.get(target) {
             drag_state.active = true;
@@ -479,6 +482,9 @@ pub fn handle_drag(
     let start_scale = *drag_state.start_scale.get_or_insert(brick_global.scale());
 
     for drag in drags.read() {
+        if drag.button != PointerButton::Primary {
+            continue;
+        }
         let delta = drag.delta;
         let center_world = brick_global.translation();
         let axis_world = brick_global.rotation().mul_vec3(gizmo.axis);
@@ -544,7 +550,10 @@ pub fn handle_drag_end(
     mut drag_state: ResMut<DragState>,
     mut history: ResMut<UndoRedoHistory>,
 ) {
-    for _ in drags.read() {
+    for drag in drags.read() {
+        if drag.button != PointerButton::Primary {
+            continue;
+        }
         if let (Some(gizmo_entity), Some(start_transform)) = (drag_state.gizmo_entity, drag_state.start_transform) {
             if let Ok(gizmo) = gizmos.get(gizmo_entity) {
                 if let Ok(final_transform) = bricks.get(gizmo.target) {
@@ -574,9 +583,12 @@ pub fn handle_part_drag_start(
     mut part_drag_state: ResMut<PartDragState>,
 ) {
     for drag in drags.read() {
+        if drag.button != PointerButton::Primary {
+            continue;
+        }
         let target = drag.event_target();
         if gizmos.get(target).is_ok() {
-            return;
+            continue;
         }
         if let Ok(transform) = bricks.get(target) {
             part_drag_state.active = true;
@@ -636,6 +648,16 @@ pub fn handle_part_drag(
     let base_extents = Vec3::new(2.0 * 0.28, 0.5 * 0.28, 1.0 * 0.28);
     let scaled_half_extents = base_extents * brick_scale;
 
+    let local_x = brick_rotation.mul_vec3(Vec3::X);
+    let local_y = brick_rotation.mul_vec3(Vec3::Y);
+    let local_z = brick_rotation.mul_vec3(Vec3::Z);
+
+    let world_half_extents = Vec3::new(
+        local_x.x.abs() * scaled_half_extents.x + local_y.x.abs() * scaled_half_extents.y + local_z.x.abs() * scaled_half_extents.z,
+        local_x.y.abs() * scaled_half_extents.x + local_y.y.abs() * scaled_half_extents.y + local_z.y.abs() * scaled_half_extents.z,
+        local_x.z.abs() * scaled_half_extents.x + local_y.z.abs() * scaled_half_extents.y + local_z.z.abs() * scaled_half_extents.z,
+    );
+
     let filter_func = |entity: Entity| {
         entity != dragged_entity 
             && !is_descendant_of(entity, dragged_entity, &parent_query)
@@ -653,10 +675,6 @@ pub fn handle_part_drag(
         let hit_point = hit.point;
         let hit_normal = hit.normal.normalize();
 
-        let local_x = brick_rotation.mul_vec3(Vec3::X);
-        let local_y = brick_rotation.mul_vec3(Vec3::Y);
-        let local_z = brick_rotation.mul_vec3(Vec3::Z);
-
         let proj_x = hit_normal.dot(local_x).abs() * scaled_half_extents.x;
         let proj_y = hit_normal.dot(local_y).abs() * scaled_half_extents.y;
         let proj_z = hit_normal.dot(local_z).abs() * scaled_half_extents.z;
@@ -665,7 +683,7 @@ pub fn handle_part_drag(
 
         hit_point + hit_normal * total_offset
     } else {
-        let plane_y = scaled_half_extents.y;
+        let plane_y = world_half_extents.y;
         if ray.direction.y.abs() > 0.001 {
             let t = (plane_y - ray.origin.y) / ray.direction.y;
             if t > 0.0 && t < 1000.0 {
@@ -680,11 +698,11 @@ pub fn handle_part_drag(
 
     if snap_config.enabled && snap_config.distance > 0.0 {
         let snap_interval = snap_config.distance * 0.28;
-        target_world_translation.x = (target_world_translation.x / snap_interval).round() * snap_interval;
-        target_world_translation.z = (target_world_translation.z / snap_interval).round() * snap_interval;
-        target_world_translation.y = (target_world_translation.y / snap_interval).round() * snap_interval;
-        if target_world_translation.y < scaled_half_extents.y {
-            target_world_translation.y = scaled_half_extents.y;
+        target_world_translation.x = ((target_world_translation.x - world_half_extents.x) / snap_interval).round() * snap_interval + world_half_extents.x;
+        target_world_translation.z = ((target_world_translation.z - world_half_extents.z) / snap_interval).round() * snap_interval + world_half_extents.z;
+        target_world_translation.y = ((target_world_translation.y - world_half_extents.y) / snap_interval).round() * snap_interval + world_half_extents.y;
+        if target_world_translation.y < world_half_extents.y {
+            target_world_translation.y = world_half_extents.y;
         }
     }
 
@@ -705,7 +723,10 @@ pub fn handle_part_drag_end(
     mut part_drag_state: ResMut<PartDragState>,
     mut history: ResMut<UndoRedoHistory>,
 ) {
-    for _ in drags.read() {
+    for drag in drags.read() {
+        if drag.button != PointerButton::Primary {
+            continue;
+        }
         if let (Some(dragged_entity), Some(start_transform)) = (part_drag_state.dragged_entity, part_drag_state.start_transform) {
             if let Ok(final_transform) = bricks.get(dragged_entity) {
                 if start_transform != *final_transform {

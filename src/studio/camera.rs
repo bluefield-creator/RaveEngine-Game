@@ -12,6 +12,7 @@ pub struct GizmoCamera;
 pub fn setup_studio(
     mut commands: Commands,
     mut egui_global_settings: ResMut<bevy_egui::EguiGlobalSettings>,
+    graphics_settings: Res<crate::studio::ui::GraphicsSettings>,
 ) {
     egui_global_settings.auto_create_primary_context = false;
 
@@ -25,7 +26,7 @@ pub fn setup_studio(
         Transform::from_xyz(4.0, 8.0, 4.0),
     ));
     
-    commands.spawn((
+    let mut camera = commands.spawn((
         Camera3d::default(),
         Projection::Perspective(PerspectiveProjection {
             far: 3000.0,
@@ -40,12 +41,11 @@ pub fn setup_studio(
         FreeCamera::default(),
         DepthPrepass,
         NormalPrepass,
-    )).insert((
+    ));
+
+    camera.insert((
         MotionVectorPrepass,
         Fxaa::default(),
-        Bloom::default(),
-        ScreenSpaceAmbientOcclusion::default(),
-        ContactShadows::default(),
         DistanceFog {
             color: Color::srgb(0.70, 0.90, 1.00),
             falloff: FogFalloff::Linear {
@@ -55,6 +55,16 @@ pub fn setup_studio(
             ..default()
         },
     ));
+
+    if graphics_settings.ssao {
+        camera.insert(ScreenSpaceAmbientOcclusion::default());
+    }
+    if graphics_settings.contact_shadows {
+        camera.insert(ContactShadows::default());
+    }
+    if graphics_settings.bloom {
+        camera.insert(Bloom::default());
+    }
 
     commands.spawn((
         Camera3d::default(),
@@ -70,6 +80,35 @@ pub fn setup_studio(
         bevy_egui::PrimaryEguiContext,
         GizmoCamera,
     ));
+}
+
+pub fn apply_graphics_settings(
+    settings: Res<crate::studio::ui::GraphicsSettings>,
+    mut commands: Commands,
+    camera_query: Query<Entity, (With<Camera3d>, Without<GizmoCamera>)>,
+) {
+    if !settings.is_changed() {
+        return;
+    }
+    for entity in &camera_query {
+        if settings.ssao {
+            commands.entity(entity).insert(ScreenSpaceAmbientOcclusion::default());
+        } else {
+            commands.entity(entity).remove::<ScreenSpaceAmbientOcclusion>();
+        }
+
+        if settings.contact_shadows {
+            commands.entity(entity).insert(ContactShadows::default());
+        } else {
+            commands.entity(entity).remove::<ContactShadows>();
+        }
+
+        if settings.bloom {
+            commands.entity(entity).insert(Bloom::default());
+        } else {
+            commands.entity(entity).remove::<Bloom>();
+        }
+    }
 }
 
 pub fn disable_camera_on_ui_interaction(
