@@ -22,9 +22,9 @@ impl Default for OnboardingData {
     fn default() -> Self {
         Self {
             selected_template: SelectedTemplate::Empty,
-            name: "Lalalalala beautiful game".to_string(),
-            description: "Um vertexia game here".to_string(),
-            save_path: "C:\\Users\\User\\Documents\\game.vrtx".to_string(),
+            name: "My Awesome Game".to_string(),
+            description: "A brand new VERTEXIA adventure!".to_string(),
+            save_path: "C:\\Users\\User\\Documents\\MyVertexiaGame.rave".to_string(),
         }
     }
 }
@@ -153,23 +153,23 @@ pub fn draw_onboarding(
                         ui.vertical(|ui| {
                             let label_size = 11.0;
 
-                            ui.label(egui::RichText::new("Name").size(label_size).strong());
+                            ui.label(egui::RichText::new("NAME").size(label_size).strong());
                             ui.add_space(4.0);
                             ui.add(egui::TextEdit::singleline(&mut onboarding_data.name).desired_width(column_width));
                             ui.add_space(14.0);
 
-                            ui.label(egui::RichText::new("Description").size(label_size).strong());
+                            ui.label(egui::RichText::new("DESCRIPTION").size(label_size).strong());
                             ui.add_space(4.0);
                             ui.add(egui::TextEdit::multiline(&mut onboarding_data.description).desired_width(column_width).desired_rows(3));
                             ui.add_space(14.0);
 
-                            ui.label(egui::RichText::new("Save path").size(label_size).strong());
+                            ui.label(egui::RichText::new("SAVE PATH").size(label_size).strong());
                             ui.add_space(4.0);
                             ui.horizontal(|ui| {
                                 ui.add(egui::TextEdit::singleline(&mut onboarding_data.save_path).desired_width(column_width - 85.0));
                                 if ui.button("Browse...").clicked() {
                                     if let Some(path) = rfd::FileDialog::new()
-                                        .add_filter("VRTX Files", &["vrtx"])
+                                        .add_filter("Rave Project", &["rave"])
                                         .set_directory(std::env::current_dir().unwrap_or_default())
                                         .save_file() {
                                             onboarding_data.save_path = path.display().to_string();
@@ -216,6 +216,10 @@ pub fn draw_onboarding(
                                     })),
                                     Transform::from_xyz(0.0, -0.14, 0.0).with_scale(Vec3::new(25.0, 1.0, 50.0)),
                                     crate::common::bricks::components::Brick,
+                                    crate::common::bricks::components::BrickPhysics {
+                                        enabled: false,
+                                        bounciness: 0.3,
+                                    },
                                     Pickable::default(),
                                     Name::new("Baseplate"),
                                 ));
@@ -258,7 +262,7 @@ pub fn draw_onboarding(
 
                             ui.add(
                                 egui::Button::new(
-                                    egui::RichText::new("Login to VERTEXIA")
+                                    egui::RichText::new("Login to VERTEXIA ↗")
                                         .size(16.0)
                                         .strong()
                                 )
@@ -275,6 +279,7 @@ pub fn draw_onboarding(
                             egui::Label::new(
                                 egui::RichText::new("No thanks, use without login")
                                     .size(12.0)
+                                    .underline()
                             )
                             .sense(egui::Sense::click())
                         );

@@ -82,6 +82,7 @@ pub struct UiQueries<'w, 's> {
             Option<&'static Mesh3d>,
             Option<&'static MeshMaterial3d<StandardMaterial>>,
             Option<&'static MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
+            Option<&'static mut crate::common::bricks::components::BrickPhysics>,
         ),
         Without<Camera3d>,
     >,
@@ -168,7 +169,7 @@ pub fn studio_ui(
 
             let mut selected_brick = None;
             if let Some(selected_entity) = ui_state.selection.entity {
-                if let Ok((_, _, _, _, _, Some(_), _, _, _, _)) = queries.entities_query.get(selected_entity) {
+                if let Ok((_, _, _, _, _, Some(_), _, _, _, _, _)) = queries.entities_query.get(selected_entity) {
                     selected_brick = Some(selected_entity);
                 }
             }
@@ -282,9 +283,9 @@ pub fn studio_ui(
 
     if let Some(dragged) = ui_state.dragged_entity.entity {
         if panel_res.response.hovered() && ctx.input(|i| i.pointer.any_released()) {
-            if let Ok((_, _, _, child_of_opt, _, _, child_global, _, _, _)) = queries.entities_query.get(dragged) {
+            if let Ok((_, _, _, child_of_opt, _, _, child_global, _, _, _, _)) = queries.entities_query.get(dragged) {
                 let old_parent = child_of_opt.map(|co| co.parent());
-                let old_transform = queries.entities_query.get(dragged).ok().map(|(_, t, _, _, _, _, _, _, _, _)| *t).unwrap_or(Transform::IDENTITY);
+                let old_transform = queries.entities_query.get(dragged).ok().map(|(_, t, _, _, _, _, _, _, _, _, _)| *t).unwrap_or(Transform::IDENTITY);
 
                 let new_transform = Transform {
                     translation: child_global.translation(),
@@ -315,7 +316,7 @@ pub fn studio_ui(
     indicator::draw_fov_indicator(ctx, &mut ui_state.fovindicator, &mut queries.camera_projection_query);
 
     if let (Some(entity), Some(pos)) = (ui_state.context_menu.entity, ui_state.context_menu.position) {
-        let mut close_menu = false;
+        let mut open_status = true;
 
         let inner_res = egui::Area::new(egui::Id::new("hahasosigma"))
             .fixed_pos(egui::pos2(pos.x, pos.y))
@@ -337,20 +338,20 @@ pub fn studio_ui(
 
         let clicked_button = inner_res.inner.inner;
         if clicked_button {
-            close_menu = true;
+            open_status = false;
         }
 
         if !ui_state.context_menu.just_opened && ctx.input(|i| i.pointer.any_pressed()) {
             if let Some(mouse_pos) = ctx.pointer_interact_pos() {
                 if !inner_res.response.rect.contains(mouse_pos) {
-                    close_menu = true;
+                    open_status = false;
                 }
             }
         }
 
         ui_state.context_menu.just_opened = false;
 
-        if close_menu {
+        if !open_status {
             ui_state.context_menu.entity = None;
             ui_state.context_menu.position = None;
         }

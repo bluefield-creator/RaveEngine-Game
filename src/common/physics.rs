@@ -57,6 +57,7 @@ fn handle_physics_simulation_actions(
         Entity,
         &mut Transform,
         &Name,
+        Option<&crate::common::bricks::components::BrickPhysics>,
         Option<&TransformBackup>,
     ), With<crate::common::bricks::components::Brick>>,
 ) {
@@ -67,14 +68,29 @@ fn handle_physics_simulation_actions(
                     *state = PhysicsSimulationState::Running;
                     time_physics.unpause();
 
-                    for (entity, transform, name, backup) in &bricks_query {
+                    for (entity, transform, name, phys_opt, backup) in &bricks_query {
                         if backup.is_none() {
                             commands.entity(entity).insert(TransformBackup(*transform));
                         }
 
-                        let is_baseplate = name.as_str() == "Baseplate";
+                        let (enabled, bounciness) = if let Some(phys) = phys_opt {
+                            (phys.enabled, phys.bounciness)
+                        } else {
+                            (true, 0.3)
+                        };
 
-                        if is_baseplate {
+                        if enabled {
+                            commands.entity(entity).insert((
+                                RigidBody::Dynamic,
+                                Collider::cuboid(
+                                    4.0 * 0.28,
+                                    1.0 * 0.28,
+                                    2.0 * 0.28,
+                                ),
+                                Friction::new(0.3),
+                                Restitution::new(bounciness),
+                            ));
+                        } else {
                             commands.entity(entity).insert((
                                 RigidBody::Static,
                                 Collider::cuboid(
@@ -85,17 +101,6 @@ fn handle_physics_simulation_actions(
                                 Friction::new(0.3),
                                 Restitution::new(0.0),
                             ));
-                        } else {
-                            commands.entity(entity).insert((
-                                RigidBody::Dynamic,
-                                Collider::cuboid(
-                                    4.0 * 0.28,
-                                    1.0 * 0.28,
-                                    2.0 * 0.28,
-                                ),
-                                Friction::new(0.3),
-                                Restitution::new(0.3),
-                            ));
                         }
                     }
                 }
@@ -105,7 +110,7 @@ fn handle_physics_simulation_actions(
                     *state = PhysicsSimulationState::Stopped;
                     time_physics.pause();
 
-                    for (entity, mut transform, _, backup) in &mut bricks_query {
+                    for (entity, mut transform, _, _, backup) in &mut bricks_query {
                         if let Some(backup_val) = backup {
                             *transform = backup_val.0;
                             commands.entity(entity).remove::<TransformBackup>();
@@ -124,7 +129,7 @@ fn handle_physics_simulation_actions(
             }
             PhysicsSimulationAction::Replay => {
                 if *state == PhysicsSimulationState::Running {
-                    for (entity, mut transform, _, backup) in &mut bricks_query {
+                    for (entity, mut transform, _, _, backup) in &mut bricks_query {
                         if let Some(backup_val) = backup {
                             *transform = backup_val.0;
                         }
@@ -143,14 +148,29 @@ fn handle_physics_simulation_actions(
                     time_physics.unpause();
                 }
 
-                for (entity, transform, name, backup) in &bricks_query {
+                for (entity, transform, name, phys_opt, backup) in &bricks_query {
                     if backup.is_none() {
                         commands.entity(entity).insert(TransformBackup(*transform));
                     }
 
-                    let is_baseplate = name.as_str() == "Baseplate";
+                    let (enabled, bounciness) = if let Some(phys) = phys_opt {
+                        (phys.enabled, phys.bounciness)
+                    } else {
+                        (true, 0.3)
+                    };
 
-                    if is_baseplate {
+                    if enabled {
+                        commands.entity(entity).insert((
+                            RigidBody::Dynamic,
+                            Collider::cuboid(
+                                4.0 * 0.28,
+                                1.0 * 0.28,
+                                2.0 * 0.28,
+                            ),
+                            Friction::new(0.3),
+                            Restitution::new(bounciness),
+                        ));
+                    } else {
                         commands.entity(entity).insert((
                             RigidBody::Static,
                             Collider::cuboid(
@@ -160,17 +180,6 @@ fn handle_physics_simulation_actions(
                             ),
                             Friction::new(0.3),
                             Restitution::new(0.0),
-                        ));
-                    } else {
-                        commands.entity(entity).insert((
-                            RigidBody::Dynamic,
-                            Collider::cuboid(
-                                4.0 * 0.28,
-                                1.0 * 0.28,
-                                2.0 * 0.28,
-                            ),
-                            Friction::new(0.3),
-                            Restitution::new(0.3),
                         ));
                     }
                 }
@@ -182,15 +191,30 @@ fn handle_physics_simulation_actions(
 fn handle_newly_spawned_bricks(
     mut commands: Commands,
     state: Res<PhysicsSimulationState>,
-    query: Query<(Entity, &Transform, &Name), (Added<crate::common::bricks::components::Brick>, Without<TransformBackup>)>,
+    query: Query<(Entity, &Transform, &Name, Option<&crate::common::bricks::components::BrickPhysics>), (Added<crate::common::bricks::components::Brick>, Without<TransformBackup>)>,
 ) {
     if *state == PhysicsSimulationState::Running {
-        for (entity, transform, name) in &query {
+        for (entity, transform, name, phys_opt) in &query {
             commands.entity(entity).insert(TransformBackup(*transform));
 
-            let is_baseplate = name.as_str() == "Baseplate";
+            let (enabled, bounciness) = if let Some(phys) = phys_opt {
+                (phys.enabled, phys.bounciness)
+            } else {
+                (true, 0.3)
+            };
 
-            if is_baseplate {
+            if enabled {
+                commands.entity(entity).insert((
+                    RigidBody::Dynamic,
+                    Collider::cuboid(
+                        4.0 * 0.28,
+                        1.0 * 0.28,
+                        2.0 * 0.28,
+                    ),
+                    Friction::new(0.3),
+                    Restitution::new(bounciness),
+                ));
+            } else {
                 commands.entity(entity).insert((
                     RigidBody::Static,
                     Collider::cuboid(
@@ -200,17 +224,6 @@ fn handle_newly_spawned_bricks(
                     ),
                     Friction::new(0.3),
                     Restitution::new(0.0),
-                ));
-            } else {
-                commands.entity(entity).insert((
-                    RigidBody::Dynamic,
-                    Collider::cuboid(
-                        4.0 * 0.28,
-                        1.0 * 0.28,
-                        2.0 * 0.28,
-                    ),
-                    Friction::new(0.3),
-                    Restitution::new(0.3),
                 ));
             }
         }

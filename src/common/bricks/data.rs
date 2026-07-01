@@ -34,6 +34,7 @@ pub fn spawn_brick(
         })),
         Transform::from_translation(spawn_pos),
         Brick,
+        crate::common::bricks::components::BrickPhysics::default(),
         Pickable::default(),
         Name::new(format!("Part{}", current_index)),
     )).id()
@@ -48,6 +49,7 @@ pub struct BrickData {
     pub standard_material: Option<MeshMaterial3d<StandardMaterial>>,
     pub studs_material: Option<MeshMaterial3d<ExtendedMaterial<StandardMaterial, StudsExtension>>>,
     pub parent: Option<Entity>,
+    pub physics: Option<crate::common::bricks::components::BrickPhysics>,
 }
 
 impl BrickData {
@@ -81,6 +83,11 @@ pub fn spawn_from_data(
     if let Some(ref studs_mat) = data.studs_material {
         spawned.insert(studs_mat.clone());
     }
+    if let Some(phys) = data.physics {
+        spawned.insert(phys);
+    } else if data.is_brick {
+        spawned.insert(crate::common::bricks::components::BrickPhysics::default());
+    }
     let new_entity = spawned.id();
     if let Some(parent) = data.parent {
         commands.entity(parent).add_child(new_entity);
@@ -101,9 +108,10 @@ pub fn capture_brick_data(
         Option<&Mesh3d>,
         Option<&MeshMaterial3d<StandardMaterial>>,
         Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, StudsExtension>>>,
+        Option<&mut crate::common::bricks::components::BrickPhysics>,
     ), Without<Camera3d>>,
 ) -> Option<BrickData> {
-    if let Ok((_, transform, name, child_of_opt, _, brick_opt, _, mesh_opt, mat_opt, studs_mat_opt)) = query.get(entity) {
+    if let Ok((_, transform, name, child_of_opt, _, brick_opt, _, mesh_opt, mat_opt, studs_mat_opt, phys_opt)) = query.get(entity) {
         Some(BrickData {
             transform: *transform,
             name: name.to_string(),
@@ -112,6 +120,7 @@ pub fn capture_brick_data(
             standard_material: mat_opt.cloned(),
             studs_material: studs_mat_opt.cloned(),
             parent: child_of_opt.map(|co| co.parent()),
+            physics: phys_opt.cloned(),
         })
     } else {
         None

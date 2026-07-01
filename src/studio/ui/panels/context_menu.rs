@@ -22,18 +22,20 @@ pub fn draw_entity_context_menu(
         Option<&Mesh3d>,
         Option<&MeshMaterial3d<StandardMaterial>>,
         Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
+        Option<&mut crate::common::bricks::components::BrickPhysics>,
     ), Without<Camera3d>>,
     history: &mut ResMut<crate::studio::tools::UndoRedoHistory>,
 ) -> bool {
     let mut closed = false;
     if ui.button("Copy").clicked() {
-        if let Ok((_, transform, name, _, _, brick_opt, _, mesh_opt, mat_opt, studs_mat_opt)) = entities_query.get(entity) {
+        if let Ok((_, transform, name, _, _, brick_opt, _, mesh_opt, mat_opt, studs_mat_opt, phys_opt)) = entities_query.get(entity) {
             copiedbuffer.transform = Some(*transform);
             copiedbuffer.mesh = mesh_opt.cloned();
             copiedbuffer.material = mat_opt.cloned();
             copiedbuffer.studs_material = studs_mat_opt.cloned();
             copiedbuffer.name = Some(name.to_string());
             copiedbuffer.is_brick = brick_opt.is_some();
+            copiedbuffer.physics = phys_opt.cloned();
         }
         ui.close();
         closed = true;
@@ -63,6 +65,11 @@ pub fn draw_entity_context_menu(
             if copiedbuffer.is_brick {
                 commands.entity(new_entity).insert(Brick);
             }
+            if let Some(phys) = copiedbuffer.physics {
+                commands.entity(new_entity).insert(phys.clone());
+            } else if copiedbuffer.is_brick {
+                commands.entity(new_entity).insert(crate::common::bricks::components::BrickPhysics::default());
+            }
 
             let data = crate::common::bricks::data::BrickData {
                 transform: newtransform,
@@ -72,6 +79,7 @@ pub fn draw_entity_context_menu(
                 standard_material: copiedbuffer.material.clone(),
                 studs_material: copiedbuffer.studs_material.clone(),
                 parent: None,
+                physics: copiedbuffer.physics.clone(),
             };
 
             history.push_command(crate::studio::tools::UndoCommand::Spawn {
@@ -84,7 +92,7 @@ pub fn draw_entity_context_menu(
         }
     }
     if ui.button("Duplicate").clicked() {
-        if let Ok((_, transform, name, child_of_opt, _, brick_opt, _, mesh_opt, mat_opt, studs_mat_opt)) = entities_query.get(entity) {
+        if let Ok((_, transform, name, child_of_opt, _, brick_opt, _, mesh_opt, mat_opt, studs_mat_opt, phys_opt)) = entities_query.get(entity) {
             let newtransform = *transform;
 
             let new_entity = commands.spawn((
@@ -105,6 +113,11 @@ pub fn draw_entity_context_menu(
             if brick_opt.is_some() {
                 commands.entity(new_entity).insert(Brick);
             }
+            if let Some(phys) = phys_opt {
+                commands.entity(new_entity).insert(phys.clone());
+            } else if brick_opt.is_some() {
+                commands.entity(new_entity).insert(crate::common::bricks::components::BrickPhysics::default());
+            }
 
             let parent_entity = child_of_opt.map(|co| co.parent());
             if let Some(p) = parent_entity {
@@ -119,6 +132,7 @@ pub fn draw_entity_context_menu(
                 standard_material: mat_opt.cloned(),
                 studs_material: studs_mat_opt.cloned(),
                 parent: parent_entity,
+                physics: phys_opt.cloned(),
             };
 
             history.push_command(crate::studio::tools::UndoCommand::Spawn {

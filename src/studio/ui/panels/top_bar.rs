@@ -9,8 +9,8 @@ use bevy::pbr::ExtendedMaterial;
 #[allow(deprecated)]
 pub fn draw_top_bar(
     ui: &mut egui::Ui,
-    next_tool: &mut ResMut<NextState<ToolState>>,
-    current_tool: &Res<State<ToolState>>,
+    next_tool: &mut NextState<ToolState>,
+    current_tool: &State<ToolState>,
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     studs_materials: &mut ResMut<Assets<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
@@ -252,6 +252,7 @@ pub fn draw_top_bar(
                                             },
                                         }))),
                                         parent: None,
+                                        physics: Some(crate::common::bricks::components::BrickPhysics::default()),
                                     };
 
                                     history.push_command(crate::studio::tools::UndoCommand::Spawn {

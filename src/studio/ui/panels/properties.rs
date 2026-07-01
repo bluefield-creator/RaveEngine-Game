@@ -17,11 +17,12 @@ pub fn draw_properties(
         Option<&Mesh3d>,
         Option<&MeshMaterial3d<StandardMaterial>>,
         Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
+        Option<&mut crate::common::bricks::components::BrickPhysics>,
     ), Without<Camera3d>>,
     materials: &mut Assets<StandardMaterial>,
     studs_materials: &mut Assets<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>,
 ) {
-    let Ok((_, mut transform, mut name, _, _, Some(_brick), _, _, mat_opt, studs_mat_opt)) = properties_query.get_mut(selected_entity) else {
+    let Ok((_, mut transform, mut name, _, _, Some(_brick), _, _, mat_opt, studs_mat_opt, mut phys_opt)) = properties_query.get_mut(selected_entity) else {
         return;
     };
 
@@ -107,6 +108,7 @@ pub fn draw_properties(
                         size_changed |= ui.add(egui::DragValue::new(&mut size_studs.x).speed(0.1).range(0.1..=1000.0)).changed();
                         ui.label("Y");
                         size_changed |= ui.add(egui::DragValue::new(&mut size_studs.y).speed(0.1).range(0.1..=1000.0)).changed();
+                        ui.label("Z");
                         size_changed |= ui.add(egui::DragValue::new(&mut size_studs.z).speed(0.1).range(0.1..=1000.0)).changed();
                     });
                     if size_changed {
@@ -167,6 +169,29 @@ pub fn draw_properties(
                             }
                         }
                         ui.end_row();
+                    }
+                });
+        });
+
+    ui.add_space(8.0);
+
+    egui::CollapsingHeader::new(egui::RichText::new("Physics").color(egui::Color32::from_rgb(0, 0, 0)).strong().size(14.0))
+        .default_open(true)
+        .show(ui, |ui| {
+            egui::Grid::new("properties_physics_grid")
+                .num_columns(2)
+                .spacing([12.0, 8.0])
+                .show(ui, |ui| {
+                    if let Some(ref mut phys) = phys_opt {
+                        ui.label(egui::RichText::new("Physics Enabled").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
+                        ui.checkbox(&mut phys.enabled, "");
+                        ui.end_row();
+
+                        if phys.enabled {
+                            ui.label(egui::RichText::new("Bounciness").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
+                            ui.add(egui::DragValue::new(&mut phys.bounciness).speed(0.01).range(0.0..=1.0));
+                            ui.end_row();
+                        }
                     }
                 });
         });
