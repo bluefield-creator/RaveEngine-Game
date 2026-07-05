@@ -30,19 +30,21 @@ pub struct PerformancePlugin;
 
 impl Plugin for PerformancePlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(WinitSettings::desktop_app())
-            .init_resource::<GraphicsSettings>()
-            .add_systems(Update, (
-                apply_graphics_settings,
-                manage_winit_performance,
-            ));
+        if app.is_plugin_added::<bevy::render::RenderPlugin>() {
+            app.insert_resource(WinitSettings::desktop_app())
+                .init_resource::<GraphicsSettings>()
+                .add_systems(Update, (
+                    apply_graphics_settings,
+                    manage_winit_performance,
+                ));
+        }
     }
 }
 
 pub fn apply_graphics_settings(
     settings: Res<GraphicsSettings>,
     mut commands: Commands,
-    camera_query: Query<Entity, (With<Camera3d>, With<FreeCamera>)>,
+    camera_query: Query<Entity, With<Camera3d>>,
 ) {
     if !settings.is_changed() {
         return;
@@ -70,6 +72,7 @@ pub fn apply_graphics_settings(
 
 pub fn manage_winit_performance(
     mut winit_settings: ResMut<WinitSettings>,
+    selection: Option<Res<crate::studio::tools::Selection>>,
     drag_state: Option<Res<crate::studio::tools::DragState>>,
     part_drag_state: Option<Res<crate::studio::tools::PartDragState>>,
     physics_state: Option<Res<crate::common::physics::PhysicsSimulationState>>,
@@ -81,6 +84,12 @@ pub fn manage_winit_performance(
     mut last_mouse_position: Local<Option<Vec2>>,
     mut last_mouse_movement_time: Local<f32>,
 ) {
+    if selection.is_none() {
+        winit_settings.focused_mode = UpdateMode::Continuous;
+        winit_settings.unfocused_mode = UpdateMode::Continuous;
+        return;
+    }
+
     let current_time = time.elapsed_secs();
     
     let mut is_hovered = false;

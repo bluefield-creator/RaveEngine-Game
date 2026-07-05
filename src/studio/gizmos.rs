@@ -95,7 +95,7 @@ pub fn update_gizmos(
 
 pub fn sync_gizmos(
     mut gizmos: Query<(Entity, &mut Transform, &ToolGizmo)>,
-    bricks: Query<&GlobalTransform, (With<Brick>, Without<ToolGizmo>)>,
+    bricks: Query<(&GlobalTransform, Option<&crate::common::bricks::components::BrickShapeComponent>), (With<Brick>, Without<ToolGizmo>)>,
     camera_query: Query<&GlobalTransform, (With<Camera3d>, Without<ToolGizmo>, Without<Brick>)>,
     hover_state: Res<HoverState>,
     drag_state: Res<DragState>,
@@ -103,8 +103,12 @@ pub fn sync_gizmos(
     let camera_pos = camera_query.iter().next().map(|t| t.translation()).unwrap_or(Vec3::ZERO);
 
     for (entity, mut transform, gizmo) in &mut gizmos {
-        if let Ok(brick_global) = bricks.get(gizmo.target) {
-            let base_extents = Vec3::new(2.0 * 0.28, 0.5 * 0.28, 1.0 * 0.28);
+        if let Ok((brick_global, shape_opt)) = bricks.get(gizmo.target) {
+            let shape = shape_opt.map(|s| s.shape).unwrap_or(crate::common::bricks::components::BrickShape::Block);
+            let base_extents = match shape {
+                crate::common::bricks::components::BrickShape::Block => Vec3::new(2.0 * 0.28, 0.5 * 0.28, 1.0 * 0.28),
+                crate::common::bricks::components::BrickShape::Sphere => Vec3::splat(1.0 * 0.28),
+            };
             let global_scale = brick_global.scale();
             let scaled_extents = base_extents * global_scale;
             let face_offset = gizmo.axis.abs().dot(scaled_extents);
@@ -144,18 +148,39 @@ pub fn sync_gizmos(
 
 fn draw_outline_recursive(
     entity: Entity,
-    bricks: &Query<(&GlobalTransform, Option<&Children>), With<Brick>>,
+    bricks: &Query<(&GlobalTransform, Option<&crate::common::bricks::components::BrickShapeComponent>, Option<&Children>), With<Brick>>,
     gizmos: &mut Gizmos,
 ) {
-    if let Ok((global_transform, children_opt)) = bricks.get(entity) {
+    if let Ok((global_transform, shape_opt, children_opt)) = bricks.get(entity) {
         let (scale, rotation, translation) = global_transform.to_scale_rotation_translation();
-        let outline_scale = scale * Vec3::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28);
-        let outline_transform = Transform {
-            translation,
-            rotation,
-            scale: outline_scale,
-        };
-        gizmos.cube(outline_transform, Color::srgb(1.0, 1.0, 1.0));
+        let shape = shape_opt.map(|s| s.shape).unwrap_or(crate::common::bricks::components::BrickShape::Block);
+
+        match shape {
+            crate::common::bricks::components::BrickShape::Block => {
+                let outline_scale = scale * Vec3::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28);
+                let outline_transform = Transform {
+                    translation,
+                    rotation,
+                    scale: outline_scale,
+                };
+                gizmos.cube(outline_transform, Color::srgb(1.0, 1.0, 1.0));
+            }
+            crate::common::bricks::components::BrickShape::Sphere => {
+                let base_radius = 1.0 * 0.28;
+                
+                let half_size_xy = Vec2::new(scale.x * base_radius, scale.y * base_radius);
+                let isometry_xy = Isometry3d::new(translation, rotation);
+                gizmos.ellipse(isometry_xy, half_size_xy, Color::srgb(1.0, 1.0, 1.0));
+
+                let half_size_yz = Vec2::new(scale.z * base_radius, scale.y * base_radius);
+                let isometry_yz = Isometry3d::new(translation, rotation * Quat::from_rotation_y(std::f32::consts::FRAC_PI_2));
+                gizmos.ellipse(isometry_yz, half_size_yz, Color::srgb(1.0, 1.0, 1.0));
+
+                let half_size_xz = Vec2::new(scale.x * base_radius, scale.z * base_radius);
+                let isometry_xz = Isometry3d::new(translation, rotation * Quat::from_rotation_x(std::f32::consts::FRAC_PI_2));
+                gizmos.ellipse(isometry_xz, half_size_xz, Color::srgb(1.0, 1.0, 1.0));
+            }
+        }
 
         if let Some(children) = children_opt {
             for child in children.iter() {
@@ -168,7 +193,7 @@ fn draw_outline_recursive(
 pub fn draw_selection_outline(
     selection: Res<Selection>,
     physics_state: Res<crate::common::physics::PhysicsSimulationState>,
-    bricks: Query<(&GlobalTransform, Option<&Children>), With<Brick>>,
+    bricks: Query<(&GlobalTransform, Option<&crate::common::bricks::components::BrickShapeComponent>, Option<&Children>), With<Brick>>,
     mut gizmos: Gizmos,
 ) {
     if *physics_state == crate::common::physics::PhysicsSimulationState::Running {

@@ -16,6 +16,7 @@ fn is_managed_entity(
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,
+        Option<&mut crate::common::bricks::components::BrickShapeComponent>,
         &GlobalTransform,
         Option<&Mesh3d>,
         Option<&MeshMaterial3d<StandardMaterial>>,
@@ -23,7 +24,7 @@ fn is_managed_entity(
         Option<&mut crate::common::bricks::components::BrickPhysics>,
     ), Without<Camera3d>>,
 ) -> bool {
-    if let Ok((_, _, name, _, _, brick_opt, _, _, _, _, _)) = query.get(entity) {
+    if let Ok((_, _, name, _, _, brick_opt, _, _, _, _, _, _)) = query.get(entity) {
         name.as_str() == "Baseplate" || brick_opt.is_some()
     } else {
         false
@@ -40,6 +41,7 @@ fn is_descendant(
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,
+        Option<&mut crate::common::bricks::components::BrickShapeComponent>,
         &GlobalTransform,
         Option<&Mesh3d>,
         Option<&MeshMaterial3d<StandardMaterial>>,
@@ -49,7 +51,7 @@ fn is_descendant(
 ) -> bool {
     let mut current = child;
     let mut depth = 0;
-    while let Ok((_, _, _, Some(parent_comp), _, _, _, _, _, _, _)) = query.get(current) {
+    while let Ok((_, _, _, Some(parent_comp), _, _, _, _, _, _, _, _)) = query.get(current) {
         let parent_entity = parent_comp.parent();
         if parent_entity == parent {
             return true;
@@ -75,6 +77,7 @@ fn draw_entity_node(
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,
+        Option<&mut crate::common::bricks::components::BrickShapeComponent>,
         &GlobalTransform,
         Option<&Mesh3d>,
         Option<&MeshMaterial3d<StandardMaterial>>,
@@ -87,7 +90,7 @@ fn draw_entity_node(
     workspace_tex: egui::TextureId,
     brick_tex: egui::TextureId,
 ) {
-    let Ok((_, _, name, _, children_opt, _, _, _, _, _, _)) = entities_query.get(entity) else { return };
+    let Ok((_, _, name, _, children_opt, _, _, _, _, _, _, _)) = entities_query.get(entity) else { return };
     let name_str = name.as_str().to_string();
 
     let has_managed_children = if let Some(children_comp) = children_opt {
@@ -142,7 +145,7 @@ fn draw_entity_node(
                             ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
                         }
                         if ui.input(|i| i.pointer.any_released()) && label_res.hovered() {
-                            if let (Ok((_, _, _, _, _, _, parent_global, _, _, _, _)), Ok((_, _, _, _, _, _, child_global, _, _, _, _))) = (
+                            if let (Ok((_, _, _, _, _, _, _, parent_global, _, _, _, _)), Ok((_, _, _, _, _, _, _, child_global, _, _, _, _))) = (
                                 entities_query.get(entity),
                                 entities_query.get(dragged)
                             ) {
@@ -157,8 +160,8 @@ fn draw_entity_node(
                                 let local_rotation = parent_rotation.inverse() * child_rotation;
                                 let local_translation = parent_rotation.inverse().mul_vec3(child_translation - parent_translation);
 
-                                let old_parent = entities_query.get(dragged).ok().and_then(|(_, _, _, child_of_opt, _, _, _, _, _, _, _)| child_of_opt.map(|co| co.parent()));
-                                let old_transform = entities_query.get(dragged).ok().map(|(_, t, _, _, _, _, _, _, _, _, _)| *t).unwrap_or(Transform::IDENTITY);
+                                let old_parent = entities_query.get(dragged).ok().and_then(|(_, _, _, child_of_opt, _, _, _, _, _, _, _, _)| child_of_opt.map(|co| co.parent()));
+                                let old_transform = entities_query.get(dragged).ok().map(|(_, t, _, _, _, _, _, _, _, _, _, _)| *t).unwrap_or(Transform::IDENTITY);
 
                                 let new_transform = Transform {
                                     translation: local_translation,
@@ -191,8 +194,8 @@ fn draw_entity_node(
                     .filter(|&child| is_managed_entity(child, entities_query))
                     .collect();
                 sorted_children.sort_by(|&a, &b| {
-                    let name_a = entities_query.get(a).map(|(_, _, n, _, _, _, _, _, _, _, _)| n.as_str()).unwrap_or("");
-                    let name_b = entities_query.get(b).map(|(_, _, n, _, _, _, _, _, _, _, _)| n.as_str()).unwrap_or("");
+                    let name_a = entities_query.get(a).map(|(_, _, n, _, _, _, _, _, _, _, _, _)| n.as_str()).unwrap_or("");
+                    let name_b = entities_query.get(b).map(|(_, _, n, _, _, _, _, _, _, _, _, _)| n.as_str()).unwrap_or("");
                     name_a.cmp(name_b)
                 });
 
@@ -248,7 +251,7 @@ fn draw_entity_node(
                     ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
                 }
                 if ui.input(|i| i.pointer.any_released()) && label_res.hovered() {
-                    if let (Ok((_, _, _, _, _, _, parent_global, _, _, _, _)), Ok((_, _, _, _, _, _, child_global, _, _, _, _))) = (
+                    if let (Ok((_, _, _, _, _, _, _, parent_global, _, _, _, _)), Ok((_, _, _, _, _, _, _, child_global, _, _, _, _))) = (
                         entities_query.get(entity),
                         entities_query.get(dragged)
                     ) {
@@ -263,8 +266,8 @@ fn draw_entity_node(
                         let local_rotation = parent_rotation.inverse() * child_rotation;
                         let local_translation = parent_rotation.inverse().mul_vec3(child_translation - parent_translation);
 
-                        let old_parent = entities_query.get(dragged).ok().and_then(|(_, _, _, child_of_opt, _, _, _, _, _, _, _)| child_of_opt.map(|co| co.parent()));
-                        let old_transform = entities_query.get(dragged).ok().map(|(_, t, _, _, _, _, _, _, _, _, _)| *t).unwrap_or(Transform::IDENTITY);
+                        let old_parent = entities_query.get(dragged).ok().and_then(|(_, _, _, child_of_opt, _, _, _, _, _, _, _, _)| child_of_opt.map(|co| co.parent()));
+                        let old_transform = entities_query.get(dragged).ok().map(|(_, t, _, _, _, _, _, _, _, _, _, _)| *t).unwrap_or(Transform::IDENTITY);
 
                         let new_transform = Transform {
                             translation: local_translation,
@@ -301,6 +304,7 @@ pub fn draw_explorer(
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,
+        Option<&mut crate::common::bricks::components::BrickShapeComponent>,
         &GlobalTransform,
         Option<&Mesh3d>,
         Option<&MeshMaterial3d<StandardMaterial>>,
@@ -323,7 +327,7 @@ pub fn draw_explorer(
     ui.add_space(8.0);
 
     let mut roots = Vec::new();
-    for (entity, _, name, parent_opt, _, _, _, _, _, _, _) in entities_query {
+    for (entity, _, name, parent_opt, _, _, _, _, _, _, _, _) in entities_query {
         if is_managed_entity(entity, entities_query) {
             let is_root = if let Some(parent_comp) = parent_opt {
                 !is_managed_entity(parent_comp.parent(), entities_query)
@@ -389,9 +393,9 @@ pub fn draw_explorer(
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
         }
         if ui.input(|i| i.pointer.any_released()) && header_res.hovered() {
-            if let Ok((_, _, _, child_of_opt, _, _, child_global, _, _, _, _)) = entities_query.get(dragged) {
+            if let Ok((_, _, _, child_of_opt, _, _, _, child_global, _, _, _, _)) = entities_query.get(dragged) {
                 let old_parent = child_of_opt.map(|co| co.parent());
-                let old_transform = entities_query.get(dragged).ok().map(|(_, t, _, _, _, _, _, _, _, _, _)| *t).unwrap_or(Transform::IDENTITY);
+                let old_transform = entities_query.get(dragged).ok().map(|(_, t, _, _, _, _, _, _, _, _, _, _)| *t).unwrap_or(Transform::IDENTITY);
 
                 let new_transform = Transform {
                     translation: child_global.translation(),

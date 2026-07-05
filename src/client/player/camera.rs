@@ -2,14 +2,15 @@ use bevy::prelude::*;
 use bevy::input::mouse::{MouseMotion, MouseWheel};
 use bevy::window::{CursorGrabMode, CursorOptions};
 use avian3d::prelude::{SpatialQuery, SpatialQueryFilter};
-use super::{Player, PlayerCamera, CameraSettings};
+use super::{PlayerCamera, CameraSettings};
+use crate::client::LocalPlayer;
 
 pub fn update_camera(
     mut mouse_motion: MessageReader<MouseMotion>,
     mut mouse_wheel: MessageReader<MouseWheel>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
-    mut player_query: Query<(Entity, &mut Transform, Option<&Children>), With<Player>>,
-    mut camera_query: Query<(&mut Transform, &mut CameraSettings), (With<PlayerCamera>, Without<Player>)>,
+    mut player_query: Query<(Entity, &mut Transform, Option<&Children>), With<LocalPlayer>>,
+    mut camera_query: Query<(&mut Transform, &mut CameraSettings), (With<PlayerCamera>, Without<LocalPlayer>)>,
     spatial_query: SpatialQuery,
     mut window_query: Query<&mut CursorOptions, With<bevy::window::PrimaryWindow>>,
     mut visibility_query: Query<&mut Visibility>,

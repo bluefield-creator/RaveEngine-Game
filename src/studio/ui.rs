@@ -32,6 +32,7 @@ pub struct UiResources<'w, 's> {
     pub physics_state: Res<'w, crate::common::physics::PhysicsSimulationState>,
     pub physics_action_writer: MessageWriter<'w, crate::common::physics::PhysicsSimulationAction>,
     pub gravity: Option<ResMut<'w, avian3d::prelude::Gravity>>,
+    pub brick_colors: Query<'w, 's, &'static mut crate::common::bricks::components::BrickColor>,
 }
 
 #[derive(SystemParam)]
@@ -66,7 +67,7 @@ pub struct UiQueries<'w, 's> {
         ),
     >,
     pub camera_projection_query: Query<'w, 's, &'static mut Projection, With<Camera3d>>,
-    pub camera_transform_query: Query<'w, 's, &'static Transform, With<Camera3d>>,
+    pub camera_transform_query: Query<'w, 's, &'static mut Transform, With<Camera3d>>,
     pub entities_query: Query<
         'w,
         's,
@@ -77,6 +78,7 @@ pub struct UiQueries<'w, 's> {
             Option<&'static ChildOf>,
             Option<&'static Children>,
             Option<&'static Brick>,
+            Option<&'static mut crate::common::bricks::components::BrickShapeComponent>,
             &'static GlobalTransform,
             Option<&'static Mesh3d>,
             Option<&'static MeshMaterial3d<StandardMaterial>>,
@@ -128,7 +130,7 @@ pub fn studio_ui(
         .fill(egui::Color32::from_rgb(245, 246, 247))
         .inner_margin(egui::Margin::same(0));
 
-    let camera_transform = queries.camera_transform_query.iter().next();
+    let camera_transform_val = queries.camera_transform_query.iter().next().map(|t| *t);
 
     let top_bar_res = egui::Panel::top("topbar")
         .frame(frame)
@@ -139,6 +141,7 @@ pub fn studio_ui(
                 &ui_state.current_tool,
                 &mut ui_res.commands,
                 &mut ui_res.meshes,
+                &mut ui_res.materials,
                 &mut ui_res.studs_materials,
                 &ui_res.studs_assets,
                 &mut ui_res.count,
@@ -148,12 +151,17 @@ pub fn studio_ui(
                 scale_tex,
                 add_tex,
                 &ui_state.diagnostics,
-                camera_transform,
+                camera_transform_val.as_ref(),
                 &mut ui_res.action_writer,
                 &mut ui_res.history,
                 *ui_res.physics_state,
                 &mut ui_res.physics_action_writer,
                 &mut ui_state.settings_window,
+                &mut ui_state.graphics_settings,
+                &mut ui_res.gravity,
+                &mut queries.camera_transform_query,
+                &mut queries.entities_query,
+                &mut ui_state.onboarding_data,
             );
         });
 
@@ -168,7 +176,7 @@ pub fn studio_ui(
 
             let mut selected_brick = None;
             if let Some(selected_entity) = ui_state.selection.entity {
-                if let Ok((_, _, _, _, _, Some(_), _, _, _, _, _)) = queries.entities_query.get(selected_entity) {
+                if let Ok((_, _, _, _, _, Some(_), _, _, _, _, _, _)) = queries.entities_query.get(selected_entity) {
                     selected_brick = Some(selected_entity);
                 }
             }
@@ -238,6 +246,7 @@ pub fn studio_ui(
                             ui,
                             brick_entity,
                             &mut queries.entities_query,
+                            &mut ui_res.brick_colors,
                             &mut ui_res.materials,
                             &mut ui_res.studs_materials,
                         );
@@ -282,9 +291,9 @@ pub fn studio_ui(
 
     if let Some(dragged) = ui_state.dragged_entity.entity {
         if panel_res.response.hovered() && ctx.input(|i| i.pointer.any_released()) {
-            if let Ok((_, _, _, child_of_opt, _, _, child_global, _, _, _, _)) = queries.entities_query.get(dragged) {
+            if let Ok((_, _, _, child_of_opt, _, _, _, child_global, _, _, _, _)) = queries.entities_query.get(dragged) {
                 let old_parent = child_of_opt.map(|co| co.parent());
-                let old_transform = queries.entities_query.get(dragged).ok().map(|(_, t, _, _, _, _, _, _, _, _, _)| *t).unwrap_or(Transform::IDENTITY);
+                let old_transform = queries.entities_query.get(dragged).ok().map(|(_, t, _, _, _, _, _, _, _, _, _, _)| *t).unwrap_or(Transform::IDENTITY);
 
                 let new_transform = Transform {
                     translation: child_global.translation(),

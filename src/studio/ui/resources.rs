@@ -8,6 +8,7 @@ pub struct CopiedEntityBuffer {
     pub studs_material: Option<MeshMaterial3d<bevy::pbr::ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
     pub name: Option<String>,
     pub is_brick: bool,
+    pub shape: crate::common::bricks::components::BrickShape,
     pub physics: Option<crate::common::bricks::components::BrickPhysics>,
 }
 

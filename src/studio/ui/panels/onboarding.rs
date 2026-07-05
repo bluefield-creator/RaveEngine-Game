@@ -169,7 +169,7 @@ pub fn draw_onboarding(
                                 ui.add(egui::TextEdit::singleline(&mut onboarding_data.save_path).desired_width(column_width - 85.0));
                                 if ui.button("Browse...").clicked() {
                                     if let Some(path) = rfd::FileDialog::new()
-                                        .add_filter("Rave Project", &["rave"])
+                                        .add_filter("Rave Project", &["vrtx"])
                                         .set_directory(std::env::current_dir().unwrap_or_default())
                                         .save_file() {
                                             onboarding_data.save_path = path.display().to_string();
@@ -198,6 +198,40 @@ pub fn draw_onboarding(
                         if create_btn.clicked() {
                             next_onboarding_state.set(crate::studio::tools::OnboardingState::Login);
                             
+                            let mut bricks = Vec::new();
+                            if onboarding_data.selected_template == SelectedTemplate::Baseplate {
+                                bricks.push(crate::common::vrtx::VrtxBrick {
+                                    name: "Baseplate".to_string(),
+                                    transform: Transform::from_xyz(0.0, -0.14, 0.0).with_scale(Vec3::new(25.0, 1.0, 50.0)),
+                                    shape: crate::common::bricks::components::BrickShape::Block,
+                                    color: Color::Srgba(Srgba::new(0.28, 0.62, 0.32, 1.0)),
+                                    physics_enabled: false,
+                                    bounciness: 0.3,
+                                });
+                                bricks.push(crate::common::vrtx::VrtxBrick {
+                                    name: "Part0".to_string(),
+                                    transform: Transform::from_xyz(0.0, 0.14, 0.0),
+                                    shape: crate::common::bricks::components::BrickShape::Block,
+                                    color: Color::Srgba(Srgba::new(0.84, 0.24, 0.16, 1.0)),
+                                    physics_enabled: true,
+                                    bounciness: 0.3,
+                                });
+                            }
+
+                            let state = crate::common::vrtx::VrtxFileState {
+                                version: 1,
+                                gravity: Vec3::new(0.0, -186.9 * 0.28, 0.0),
+                                settings: crate::common::vrtx::VrtxSettings {
+                                    ssao: false,
+                                    contact_shadows: false,
+                                    bloom: true,
+                                },
+                                camera_transform: Transform::from_xyz(-10.0, 10.0, -10.0).looking_at(Vec3::ZERO, Vec3::Y),
+                                bricks,
+                            };
+
+                            let _ = state.save_to_file(&onboarding_data.save_path);
+
                             if onboarding_data.selected_template == SelectedTemplate::Baseplate {
                                 commands.spawn((
                                     Mesh3d(meshes.add(Cuboid::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28))),
@@ -216,6 +250,7 @@ pub fn draw_onboarding(
                                     })),
                                     Transform::from_xyz(0.0, -0.14, 0.0).with_scale(Vec3::new(25.0, 1.0, 50.0)),
                                     crate::common::bricks::components::Brick,
+                                    crate::common::bricks::components::BrickShapeComponent { shape: crate::common::bricks::components::BrickShape::Block },
                                     crate::common::bricks::components::BrickPhysics {
                                         enabled: false,
                                         bounciness: 0.3,
@@ -224,7 +259,7 @@ pub fn draw_onboarding(
                                     Name::new("Baseplate"),
                                 ));
 
-                                spawn_brick(commands, meshes, studs_materials, studs_assets, count, Vec3::new(0.0, 0.14, 0.0));
+                                spawn_brick(commands, meshes, studs_materials, studs_assets, count, Vec3::new(0.0, 0.14, 0.0), crate::common::bricks::components::BrickShape::Block);
                             }
                         }
                     });

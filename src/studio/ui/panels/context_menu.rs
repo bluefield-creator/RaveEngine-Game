@@ -18,6 +18,7 @@ pub fn draw_entity_context_menu(
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,
+        Option<&mut crate::common::bricks::components::BrickShapeComponent>,
         &GlobalTransform,
         Option<&Mesh3d>,
         Option<&MeshMaterial3d<StandardMaterial>>,
@@ -28,13 +29,14 @@ pub fn draw_entity_context_menu(
 ) -> bool {
     let mut closed = false;
     if ui.button("Copy").clicked() {
-        if let Ok((_, transform, name, _, _, brick_opt, _, mesh_opt, mat_opt, studs_mat_opt, phys_opt)) = entities_query.get(entity) {
+        if let Ok((_, transform, name, _, _, brick_opt, shape_opt, _, mesh_opt, mat_opt, studs_mat_opt, phys_opt)) = entities_query.get(entity) {
             copiedbuffer.transform = Some(*transform);
             copiedbuffer.mesh = mesh_opt.cloned();
             copiedbuffer.material = mat_opt.cloned();
             copiedbuffer.studs_material = studs_mat_opt.cloned();
             copiedbuffer.name = Some(name.to_string());
             copiedbuffer.is_brick = brick_opt.is_some();
+            copiedbuffer.shape = shape_opt.as_ref().map(|s| s.shape).unwrap_or(crate::common::bricks::components::BrickShape::Block);
             copiedbuffer.physics = phys_opt.cloned();
         }
         ui.close();
@@ -63,7 +65,10 @@ pub fn draw_entity_context_menu(
                 commands.entity(new_entity).insert(studs_mat.clone());
             }
             if copiedbuffer.is_brick {
-                commands.entity(new_entity).insert(Brick);
+                commands.entity(new_entity).insert((
+                    Brick,
+                    crate::common::bricks::components::BrickShapeComponent { shape: copiedbuffer.shape },
+                ));
             }
             if let Some(phys) = copiedbuffer.physics {
                 commands.entity(new_entity).insert(phys.clone());
@@ -75,6 +80,7 @@ pub fn draw_entity_context_menu(
                 transform: newtransform,
                 name: format!("{} - Copy", name),
                 is_brick: copiedbuffer.is_brick,
+                shape: copiedbuffer.shape,
                 mesh: copiedbuffer.mesh.clone(),
                 standard_material: copiedbuffer.material.clone(),
                 studs_material: copiedbuffer.studs_material.clone(),
@@ -92,7 +98,7 @@ pub fn draw_entity_context_menu(
         }
     }
     if ui.button("Duplicate").clicked() {
-        if let Ok((_, transform, name, child_of_opt, _, brick_opt, _, mesh_opt, mat_opt, studs_mat_opt, phys_opt)) = entities_query.get(entity) {
+        if let Ok((_, transform, name, child_of_opt, _, brick_opt, shape_opt, _, mesh_opt, mat_opt, studs_mat_opt, phys_opt)) = entities_query.get(entity) {
             let newtransform = *transform;
 
             let new_entity = commands.spawn((
@@ -110,8 +116,12 @@ pub fn draw_entity_context_menu(
             if let Some(studs_mat) = studs_mat_opt {
                 commands.entity(new_entity).insert(studs_mat.clone());
             }
+            let shape = shape_opt.as_ref().map(|s| s.shape).unwrap_or(crate::common::bricks::components::BrickShape::Block);
             if brick_opt.is_some() {
-                commands.entity(new_entity).insert(Brick);
+                commands.entity(new_entity).insert((
+                    Brick,
+                    crate::common::bricks::components::BrickShapeComponent { shape },
+                ));
             }
             if let Some(phys) = phys_opt {
                 commands.entity(new_entity).insert(phys.clone());
@@ -128,6 +138,7 @@ pub fn draw_entity_context_menu(
                 transform: newtransform,
                 name: format!("{} - Copy", name.as_str()),
                 is_brick: brick_opt.is_some(),
+                shape,
                 mesh: mesh_opt.cloned(),
                 standard_material: mat_opt.cloned(),
                 studs_material: studs_mat_opt.cloned(),

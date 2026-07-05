@@ -13,6 +13,7 @@ pub fn draw_top_bar(
     current_tool: &State<ToolState>,
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
     studs_materials: &mut ResMut<Assets<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
     studs_assets: &StudsAssets,
     count: &mut ResMut<BrickSpawnerCount>,
@@ -28,6 +29,24 @@ pub fn draw_top_bar(
     physics_state: crate::common::physics::PhysicsSimulationState,
     physics_action_writer: &mut MessageWriter<crate::common::physics::PhysicsSimulationAction>,
     settings_window: &mut ResMut<crate::studio::ui::SettingsWindow>,
+    graphics_settings: &mut crate::studio::ui::GraphicsSettings,
+    gravity: &mut Option<ResMut<avian3d::prelude::Gravity>>,
+    camera_transform_query: &mut Query<&mut Transform, With<Camera3d>>,
+    entities_query: &mut Query<(
+        Entity,
+        &mut Transform,
+        &mut Name,
+        Option<&ChildOf>,
+        Option<&Children>,
+        Option<&crate::common::bricks::components::Brick>,
+        Option<&mut crate::common::bricks::components::BrickShapeComponent>,
+        &GlobalTransform,
+        Option<&Mesh3d>,
+        Option<&MeshMaterial3d<StandardMaterial>>,
+        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
+        Option<&mut crate::common::bricks::components::BrickPhysics>,
+    ), Without<Camera3d>>,
+    onboarding_data: &mut crate::studio::ui::panels::onboarding::OnboardingData,
 ) {
     ui.style_mut().interaction.selectable_labels = false;
 
@@ -37,15 +56,218 @@ pub fn draw_top_bar(
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing = egui::vec2(16.0, 0.0);
 
-                ui.label(egui::RichText::new("File").color(egui::Color32::from_rgb(0, 0, 0)).size(13.0));
+                let file_id = ui.make_persistent_id("file_menu_btn");
+                let is_file_hovered = ui.data(|d| d.get_temp::<bool>(file_id)).unwrap_or(false);
+                let file_text_color = if is_file_hovered {
+                    egui::Color32::from_rgb(80, 160, 240)
+                } else {
+                    egui::Color32::from_rgb(60, 60, 60)
+                };
+
+                let mut is_hovered = false;
+                ui.scope(|ui| {
+                    ui.style_mut().visuals.widgets.inactive.weak_bg_fill = egui::Color32::TRANSPARENT;
+                    ui.style_mut().visuals.widgets.inactive.bg_fill = egui::Color32::TRANSPARENT;
+                    ui.style_mut().visuals.widgets.inactive.bg_stroke = egui::Stroke::NONE;
+
+                    ui.style_mut().visuals.widgets.hovered.weak_bg_fill = egui::Color32::TRANSPARENT;
+                    ui.style_mut().visuals.widgets.hovered.bg_fill = egui::Color32::TRANSPARENT;
+                    ui.style_mut().visuals.widgets.hovered.bg_stroke = egui::Stroke::NONE;
+
+                    ui.style_mut().visuals.widgets.active.weak_bg_fill = egui::Color32::TRANSPARENT;
+                    ui.style_mut().visuals.widgets.active.bg_fill = egui::Color32::TRANSPARENT;
+                    ui.style_mut().visuals.widgets.active.bg_stroke = egui::Stroke::NONE;
+
+                    let file_button_res = egui::menu::menu_button(ui, egui::RichText::new("File").color(file_text_color).size(13.0), |ui| {
+                        let save_enabled = !onboarding_data.save_path.is_empty();
+                        if ui.add_enabled(save_enabled, egui::Button::new("Save")).clicked() {
+                            let mut bricks_data = Vec::new();
+                            for (_, transform, name, _, _, brick_opt, shape_opt, _, _, mat_opt, studs_mat_opt, phys_opt) in entities_query.iter() {
+                                if brick_opt.is_some() {
+                                    let shape = shape_opt.as_ref().map(|s| s.shape).unwrap_or(crate::common::bricks::components::BrickShape::Block);
+                                    let mut current_color = Color::Srgba(Srgba::new(0.84, 0.24, 0.16, 1.0));
+                                    if let Some(studs_mat_handle) = studs_mat_opt {
+                                        if let Some(mat) = studs_materials.get(&studs_mat_handle.0) {
+                                            current_color = mat.base.base_color;
+                                        }
+                                    } else if let Some(mat_handle) = mat_opt {
+                                        if let Some(mat) = materials.get(&mat_handle.0) {
+                                            current_color = mat.base_color;
+                                        }
+                                    }
+                                    let (physics_enabled, bounciness) = if let Some(phys) = phys_opt {
+                                        (phys.enabled, phys.bounciness)
+                                    } else {
+                                        (true, 0.3)
+                                    };
+                                    bricks_data.push(crate::common::vrtx::VrtxBrick {
+                                        name: name.to_string(),
+                                        transform: *transform,
+                                        shape,
+                                        color: current_color,
+                                        physics_enabled,
+                                        bounciness,
+                                    });
+                                }
+                            }
+                            let gravity_val = if let Some(g) = gravity.as_ref() {
+                                g.0
+                            } else {
+                                Vec3::new(0.0, -186.9 * 0.28, 0.0)
+                            };
+                            let cam_transform = if let Some(cam_t) = camera_transform_query.iter().next() {
+                                *cam_t
+                            } else {
+                                Transform::IDENTITY
+                            };
+                            let state = crate::common::vrtx::VrtxFileState {
+                                version: 1,
+                                gravity: gravity_val,
+                                settings: crate::common::vrtx::VrtxSettings {
+                                    ssao: graphics_settings.ssao,
+                                    contact_shadows: graphics_settings.contact_shadows,
+                                    bloom: graphics_settings.bloom,
+                                },
+                                camera_transform: cam_transform,
+                                bricks: bricks_data,
+                            };
+                            let _ = state.save_to_file(&onboarding_data.save_path);
+                            ui.close_menu();
+                        }
+                        if ui.button("Save As...").clicked() {
+                            if let Some(path) = rfd::FileDialog::new()
+                                .add_filter("Rave Project", &["vrtx"])
+                                .set_directory(std::env::current_dir().unwrap_or_default())
+                                .save_file() {
+                                let save_path_str = path.display().to_string();
+                                onboarding_data.save_path = save_path_str.clone();
+
+                                let mut bricks_data = Vec::new();
+                                for (_, transform, name, _, _, brick_opt, shape_opt, _, _, mat_opt, studs_mat_opt, phys_opt) in entities_query.iter() {
+                                    if brick_opt.is_some() {
+                                        let shape = shape_opt.as_ref().map(|s| s.shape).unwrap_or(crate::common::bricks::components::BrickShape::Block);
+                                        let mut current_color = Color::Srgba(Srgba::new(0.84, 0.24, 0.16, 1.0));
+                                        if let Some(studs_mat_handle) = studs_mat_opt {
+                                            if let Some(mat) = studs_materials.get(&studs_mat_handle.0) {
+                                                current_color = mat.base.base_color;
+                                            }
+                                        } else if let Some(mat_handle) = mat_opt {
+                                            if let Some(mat) = materials.get(&mat_handle.0) {
+                                                current_color = mat.base_color;
+                                            }
+                                        }
+                                        let (physics_enabled, bounciness) = if let Some(phys) = phys_opt {
+                                            (phys.enabled, phys.bounciness)
+                                        } else {
+                                            (true, 0.3)
+                                        };
+                                        bricks_data.push(crate::common::vrtx::VrtxBrick {
+                                            name: name.to_string(),
+                                            transform: *transform,
+                                            shape,
+                                            color: current_color,
+                                            physics_enabled,
+                                            bounciness,
+                                        });
+                                    }
+                                }
+                                let gravity_val = if let Some(g) = gravity.as_ref() {
+                                    g.0
+                                } else {
+                                    Vec3::new(0.0, -186.9 * 0.28, 0.0)
+                                };
+                                let cam_transform = if let Some(cam_t) = camera_transform_query.iter().next() {
+                                    *cam_t
+                                } else {
+                                    Transform::IDENTITY
+                                };
+                                let state = crate::common::vrtx::VrtxFileState {
+                                    version: 1,
+                                    gravity: gravity_val,
+                                    settings: crate::common::vrtx::VrtxSettings {
+                                        ssao: graphics_settings.ssao,
+                                        contact_shadows: graphics_settings.contact_shadows,
+                                        bloom: graphics_settings.bloom,
+                                    },
+                                    camera_transform: cam_transform,
+                                    bricks: bricks_data,
+                                };
+                                let _ = state.save_to_file(&save_path_str);
+                            }
+                            ui.close_menu();
+                        }
+                        if ui.button("Open...").clicked() {
+                            if let Some(path) = rfd::FileDialog::new()
+                                .add_filter("Rave Project", &["vrtx"])
+                                .set_directory(std::env::current_dir().unwrap_or_default())
+                                .pick_file() {
+                                let open_path_str = path.display().to_string();
+                                if let Ok(state) = crate::common::vrtx::VrtxFileState::load_from_file(&open_path_str) {
+                                    onboarding_data.save_path = open_path_str;
+                                    for (entity, _, _, _, _, brick_opt, _, _, _, _, _, _) in entities_query.iter() {
+                                        if brick_opt.is_some() {
+                                            commands.entity(entity).despawn();
+                                        }
+                                    }
+                                    graphics_settings.ssao = state.settings.ssao;
+                                    graphics_settings.contact_shadows = state.settings.contact_shadows;
+                                    graphics_settings.bloom = state.settings.bloom;
+                                    if let Some(g) = gravity.as_mut() {
+                                        g.0 = state.gravity;
+                                    }
+                                    if let Some(mut cam_t) = camera_transform_query.iter_mut().next() {
+                                        *cam_t = state.camera_transform;
+                                    }
+                                    for brick in state.bricks {
+                                        let mesh_handle = match brick.shape {
+                                            crate::common::bricks::components::BrickShape::Block => {
+                                                meshes.add(Cuboid::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28))
+                                            }
+                                            crate::common::bricks::components::BrickShape::Sphere => {
+                                                meshes.add(Sphere::new(1.0 * 0.28))
+                                            }
+                                        };
+                                        commands.spawn((
+                                            Mesh3d(mesh_handle),
+                                            MeshMaterial3d(studs_materials.add(ExtendedMaterial {
+                                                base: StandardMaterial {
+                                                    base_color: brick.color,
+                                                    perceptual_roughness: 0.9,
+                                                    ..default()
+                                                },
+                                                extension: crate::common::bricks::studs::StudsExtension {
+                                                    stud_texture: studs_assets.stud.clone(),
+                                                    inlet_texture: studs_assets.inlet.clone(),
+                                                },
+                                            })),
+                                            brick.transform,
+                                            crate::common::bricks::components::Brick,
+                                            crate::common::bricks::components::BrickShapeComponent { shape: brick.shape },
+                                            crate::common::bricks::components::BrickPhysics {
+                                                enabled: brick.physics_enabled,
+                                                bounciness: brick.bounciness,
+                                            },
+                                            Pickable::default(),
+                                            Name::new(brick.name),
+                                        ));
+                                    }
+                                }
+                            }
+                            ui.close_menu();
+                        }
+                    });
+                    is_hovered = file_button_res.response.hovered();
+                });
+                ui.data_mut(|d| d.insert_temp(file_id, is_hovered));
+
                 ui.label(egui::RichText::new("Edit").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
                 ui.label(egui::RichText::new("Insert").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
                 ui.label(egui::RichText::new("View").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
                 ui.label(egui::RichText::new("Test").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
 
                 let settings_id = ui.make_persistent_id("settings_menu_btn");
-                let is_hovered = ui.data(|d| d.get_temp::<bool>(settings_id)).unwrap_or(false);
-                let text_color = if is_hovered {
+                let is_hovered_settings = ui.data(|d| d.get_temp::<bool>(settings_id)).unwrap_or(false);
+                let text_color = if is_hovered_settings {
                     egui::Color32::from_rgb(80, 160, 240)
                 } else {
                     egui::Color32::from_rgb(60, 60, 60)
@@ -196,8 +418,11 @@ pub fn draw_top_bar(
                         });
                         ui.separator();
 
-                        let items = ["Part"];
-                        for item in items {
+                        let items = [
+                            ("Block", crate::common::bricks::components::BrickShape::Block),
+                            ("Sphere", crate::common::bricks::components::BrickShape::Sphere),
+                        ];
+                        for (item, shape) in items {
                             if item.to_lowercase().contains(&search_query.to_lowercase()) {
                                 if ui.button(item).clicked() {
                                     let mut spawn_pos = Vec3::new(0.0, 0.14, 0.0);
@@ -224,22 +449,36 @@ pub fn draw_top_bar(
 
                                     if snap_config.enabled && snap_config.distance > 0.0 {
                                         let snap_interval = snap_config.distance * 0.28;
-                                        let half_ext = Vec3::new(2.0 * 0.28, 0.5 * 0.28, 1.0 * 0.28);
+                                        let half_ext = match shape {
+                                            crate::common::bricks::components::BrickShape::Block => Vec3::new(2.0 * 0.28, 0.5 * 0.28, 1.0 * 0.28),
+                                            crate::common::bricks::components::BrickShape::Sphere => Vec3::new(1.0 * 0.28, 1.0 * 0.28, 1.0 * 0.28),
+                                        };
                                         spawn_pos.x = ((spawn_pos.x - half_ext.x) / snap_interval).round() * snap_interval + half_ext.x;
-                                        spawn_pos.z = ((spawn_pos.z - half_ext.z) / snap_interval).round() * snap_interval + half_ext.z;
+                                        spawn_pos.z = ((spawn_pos.z - half_ext.z) / snap_interval).round() * snap_interval + half_ext.x;
                                         spawn_pos.y = ((spawn_pos.y - half_ext.y) / snap_interval).round() * snap_interval + half_ext.y;
                                         if spawn_pos.y < half_ext.y {
                                             spawn_pos.y = half_ext.y;
                                         }
                                     }
 
-                                    let new_entity = spawn_brick(commands, meshes, studs_materials, studs_assets, count, spawn_pos);
+                                    let new_entity = spawn_brick(commands, meshes, studs_materials, studs_assets, count, spawn_pos, shape);
+
+                                    let default_name = match shape {
+                                        crate::common::bricks::components::BrickShape::Block => format!("Part{}", count.count - 1),
+                                        crate::common::bricks::components::BrickShape::Sphere => format!("Sphere{}", count.count - 1),
+                                    };
+
+                                    let default_mesh = match shape {
+                                        crate::common::bricks::components::BrickShape::Block => Some(Mesh3d(meshes.add(Cuboid::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28)))),
+                                        crate::common::bricks::components::BrickShape::Sphere => Some(Mesh3d(meshes.add(Sphere::new(1.0 * 0.28)))),
+                                    };
 
                                     let data = crate::common::bricks::data::BrickData {
                                         transform: Transform::from_translation(spawn_pos),
-                                        name: format!("Part{}", count.count - 1),
+                                        name: default_name,
                                         is_brick: true,
-                                        mesh: Some(Mesh3d(meshes.add(Cuboid::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28)))),
+                                        shape,
+                                        mesh: default_mesh,
                                         standard_material: None,
                                         studs_material: Some(MeshMaterial3d(studs_materials.add(ExtendedMaterial {
                                             base: StandardMaterial {
@@ -268,6 +507,7 @@ pub fn draw_top_bar(
                     },
                 );
 
+                ui.add_space(8.0);
                 ui.visuals_mut().window_fill = original_window_fill;
                 ui.visuals_mut().window_stroke = original_window_stroke;
             });

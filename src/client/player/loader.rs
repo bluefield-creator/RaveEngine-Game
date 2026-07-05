@@ -6,6 +6,11 @@ use avian3d::prelude::*;
 use tobj::LoadOptions;
 use super::{Player, PlayerController, CameraSettings, PlayerCamera};
 
+#[derive(Resource)]
+pub struct PlayerCharacterAssets {
+    pub parts: Vec<(Handle<Mesh>, Handle<StandardMaterial>)>,
+}
+
 pub fn load_obj_file(
     path: &str,
     meshes: &mut Assets<Mesh>,
@@ -135,13 +140,11 @@ pub fn spawn_player(
             GlobalTransform::default(),
             RigidBody::Dynamic,
             Collider::cuboid(4.0 * 0.28, 5.0 * 0.28, 2.0 * 0.28),
-            LockedAxes::new()
-                .lock_rotation_x()
-                .lock_rotation_y()
-                .lock_rotation_z(),
+            LockedAxes::ROTATION_LOCKED,
             Friction::new(0.3),
             Restitution::new(0.0),
             CollidingEntities::default(),
+            SleepingDisabled,
         ))
         .id();
 

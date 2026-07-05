@@ -44,8 +44,17 @@ impl Plugin for PhysicsSimulationPlugin {
     }
 }
 
-fn setup_physics(mut time_physics: ResMut<Time<Physics>>) {
-    time_physics.pause();
+fn setup_physics(
+    mut time_physics: ResMut<Time<Physics>>,
+    mut state: ResMut<PhysicsSimulationState>,
+    server_settings: Option<Res<crate::server::ServerSettings>>,
+) {
+    if server_settings.is_none() {
+        time_physics.pause();
+    } else {
+        *state = PhysicsSimulationState::Running;
+        time_physics.unpause();
+    }
 }
 
 fn handle_physics_simulation_actions(
@@ -57,6 +66,7 @@ fn handle_physics_simulation_actions(
         Entity,
         &mut Transform,
         &Name,
+        Option<&crate::common::bricks::components::BrickShapeComponent>,
         Option<&crate::common::bricks::components::BrickPhysics>,
         Option<&TransformBackup>,
     ), With<crate::common::bricks::components::Brick>>,
@@ -68,7 +78,7 @@ fn handle_physics_simulation_actions(
                     *state = PhysicsSimulationState::Running;
                     time_physics.unpause();
 
-                    for (entity, transform, name, phys_opt, backup) in &bricks_query {
+                    for (entity, transform, _name, shape_opt, phys_opt, backup) in &bricks_query {
                         if backup.is_none() {
                             commands.entity(entity).insert(TransformBackup(*transform));
                         }
@@ -79,25 +89,28 @@ fn handle_physics_simulation_actions(
                             (true, 0.3)
                         };
 
+                        let shape = shape_opt.map(|s| s.shape).unwrap_or(crate::common::bricks::components::BrickShape::Block);
+                        let collider = match shape {
+                            crate::common::bricks::components::BrickShape::Block => {
+                                Collider::cuboid(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28)
+                            }
+                            crate::common::bricks::components::BrickShape::Sphere => {
+                                Collider::sphere(1.0 * 0.28)
+                            }
+                        };
+
                         if enabled {
                             commands.entity(entity).insert((
                                 RigidBody::Dynamic,
-                                Collider::cuboid(
-                                    4.0 * 0.28,
-                                    1.0 * 0.28,
-                                    2.0 * 0.28,
-                                ),
+                                collider,
                                 Friction::new(0.3),
                                 Restitution::new(bounciness),
+                                SleepingDisabled,
                             ));
                         } else {
                             commands.entity(entity).insert((
                                 RigidBody::Static,
-                                Collider::cuboid(
-                                    4.0 * 0.28,
-                                    1.0 * 0.28,
-                                    2.0 * 0.28,
-                                ),
+                                collider,
                                 Friction::new(0.3),
                                 Restitution::new(0.0),
                             ));
@@ -110,7 +123,7 @@ fn handle_physics_simulation_actions(
                     *state = PhysicsSimulationState::Stopped;
                     time_physics.pause();
 
-                    for (entity, mut transform, _, _, backup) in &mut bricks_query {
+                    for (entity, mut transform, _, _, _, backup) in &mut bricks_query {
                         if let Some(backup_val) = backup {
                             *transform = backup_val.0;
                             commands.entity(entity).remove::<TransformBackup>();
@@ -123,13 +136,14 @@ fn handle_physics_simulation_actions(
                             Mass,
                             LinearVelocity,
                             AngularVelocity,
+                            SleepingDisabled,
                         )>();
                     }
                 }
             }
             PhysicsSimulationAction::Replay => {
                 if *state == PhysicsSimulationState::Running {
-                    for (entity, mut transform, _, _, backup) in &mut bricks_query {
+                    for (entity, mut transform, _, _, _, backup) in &mut bricks_query {
                         if let Some(backup_val) = backup {
                             *transform = backup_val.0;
                         }
@@ -141,6 +155,7 @@ fn handle_physics_simulation_actions(
                             Mass,
                             LinearVelocity,
                             AngularVelocity,
+                            SleepingDisabled,
                         )>();
                     }
                 } else {
@@ -148,7 +163,7 @@ fn handle_physics_simulation_actions(
                     time_physics.unpause();
                 }
 
-                for (entity, transform, name, phys_opt, backup) in &bricks_query {
+                for (entity, transform, _name, shape_opt, phys_opt, backup) in &bricks_query {
                     if backup.is_none() {
                         commands.entity(entity).insert(TransformBackup(*transform));
                     }
@@ -159,25 +174,30 @@ fn handle_physics_simulation_actions(
                         (true, 0.3)
                     };
 
+                    let shape = shape_opt.map(|s| s.shape).unwrap_or(crate::common::bricks::components::BrickShape::Block);
+                    let collider = match shape {
+                        crate::common::bricks::components::BrickShape::Block => {
+                            let size = transform.scale * Vec3::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28);
+                            Collider::cuboid(size.x, size.y, size.z)
+                        }
+                        crate::common::bricks::components::BrickShape::Sphere => {
+                            let radius = 1.0 * 0.28 * transform.scale.x;
+                            Collider::sphere(radius)
+                        }
+                    };
+
                     if enabled {
                         commands.entity(entity).insert((
                             RigidBody::Dynamic,
-                            Collider::cuboid(
-                                4.0 * 0.28,
-                                1.0 * 0.28,
-                                2.0 * 0.28,
-                            ),
+                            collider,
                             Friction::new(0.3),
                             Restitution::new(bounciness),
+                            SleepingDisabled,
                         ));
                     } else {
                         commands.entity(entity).insert((
                             RigidBody::Static,
-                            Collider::cuboid(
-                                4.0 * 0.28,
-                                1.0 * 0.28,
-                                2.0 * 0.28,
-                            ),
+                            collider,
                             Friction::new(0.3),
                             Restitution::new(0.0),
                         ));
@@ -191,10 +211,10 @@ fn handle_physics_simulation_actions(
 fn handle_newly_spawned_bricks(
     mut commands: Commands,
     state: Res<PhysicsSimulationState>,
-    query: Query<(Entity, &Transform, &Name, Option<&crate::common::bricks::components::BrickPhysics>), (Added<crate::common::bricks::components::Brick>, Without<TransformBackup>)>,
+    query: Query<(Entity, &Transform, &Name, Option<&crate::common::bricks::components::BrickShapeComponent>, Option<&crate::common::bricks::components::BrickPhysics>), (With<crate::common::bricks::components::Brick>, Without<TransformBackup>)>,
 ) {
     if *state == PhysicsSimulationState::Running {
-        for (entity, transform, name, phys_opt) in &query {
+        for (entity, transform, _name, shape_opt, phys_opt) in &query {
             commands.entity(entity).insert(TransformBackup(*transform));
 
             let (enabled, bounciness) = if let Some(phys) = phys_opt {
@@ -203,25 +223,28 @@ fn handle_newly_spawned_bricks(
                 (true, 0.3)
             };
 
+            let shape = shape_opt.map(|s| s.shape).unwrap_or(crate::common::bricks::components::BrickShape::Block);
+            let collider = match shape {
+                crate::common::bricks::components::BrickShape::Block => {
+                    Collider::cuboid(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28)
+                }
+                crate::common::bricks::components::BrickShape::Sphere => {
+                    Collider::sphere(1.0 * 0.28)
+                }
+            };
+
             if enabled {
                 commands.entity(entity).insert((
                     RigidBody::Dynamic,
-                    Collider::cuboid(
-                        4.0 * 0.28,
-                        1.0 * 0.28,
-                        2.0 * 0.28,
-                    ),
+                    collider,
                     Friction::new(0.3),
                     Restitution::new(bounciness),
+                    SleepingDisabled,
                 ));
             } else {
                 commands.entity(entity).insert((
                     RigidBody::Static,
-                    Collider::cuboid(
-                        4.0 * 0.28,
-                        1.0 * 0.28,
-                        2.0 * 0.28,
-                    ),
+                    collider,
                     Friction::new(0.3),
                     Restitution::new(0.0),
                 ));

@@ -29,15 +29,8 @@ pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
-            Startup,
-            loader::spawn_player.after(crate::common::bricks::studs::setup_studs),
-        )
-        .add_systems(
             Update,
-            (
-                controller::player_movement,
-                camera::update_camera.after(controller::player_movement),
-            ),
+            camera::update_camera,
         );
     }
 }

@@ -41,6 +41,7 @@ pub fn setup_studio(
         FreeCamera::default(),
         DepthPrepass,
         NormalPrepass,
+        bevy::render::occlusion_culling::OcclusionCulling,
     ));
 
     camera.insert((
@@ -56,17 +57,21 @@ pub fn setup_studio(
         },
     ));
 
-    if graphics_settings.ssao {
-        camera.insert(ScreenSpaceAmbientOcclusion::default());
+    let ssao_val = if graphics_settings.ssao { Some(ScreenSpaceAmbientOcclusion::default()) } else { None };
+    let contact_val = if graphics_settings.contact_shadows { Some(ContactShadows::default()) } else { None };
+    let bloom_val = if graphics_settings.bloom { Some(Bloom::default()) } else { None };
+
+    if let Some(ssao) = ssao_val.clone() {
+        camera.insert(ssao);
     }
-    if graphics_settings.contact_shadows {
-        camera.insert(ContactShadows::default());
+    if let Some(contact) = contact_val.clone() {
+        camera.insert(contact);
     }
-    if graphics_settings.bloom {
-        camera.insert(Bloom::default());
+    if let Some(bloom) = bloom_val.clone() {
+        camera.insert(bloom);
     }
 
-    commands.spawn((
+    let mut gizmo_camera = commands.spawn((
         Camera3d::default(),
         Camera {
             order: 1,
@@ -79,7 +84,29 @@ pub fn setup_studio(
         bevy::camera::visibility::RenderLayers::layer(1),
         bevy_egui::PrimaryEguiContext,
         GizmoCamera,
+        DepthPrepass,
+        NormalPrepass,
+        MotionVectorPrepass,
+        DistanceFog {
+            color: Color::srgb(0.70, 0.90, 1.00),
+            falloff: FogFalloff::Linear {
+                start: 400.0,
+                end: 1100.0,
+            },
+            ..default()
+        },
+        bevy::render::occlusion_culling::OcclusionCulling,
     ));
+
+    if let Some(ssao) = ssao_val {
+        gizmo_camera.insert(ssao);
+    }
+    if let Some(contact) = contact_val {
+        gizmo_camera.insert(contact);
+    }
+    if let Some(bloom) = bloom_val {
+        gizmo_camera.insert(bloom);
+    }
 }
 
 pub fn disable_camera_on_ui_interaction(

@@ -2,6 +2,9 @@ pub mod bricks;
 pub mod environment;
 pub mod physics;
 pub mod performance;
+pub mod vrtx;
+pub mod components;
+pub mod network;
 
 use bevy::prelude::*;
 

@@ -19,6 +19,9 @@ pub struct StudsExtension {
     pub inlet_texture: Handle<Image>,
 }
 
+impl Map_samplers for StudsExtension {
+}
+
 impl MaterialExtension for StudsExtension {
     fn fragment_shader() -> ShaderRef {
         "shaders/studs.wgsl".into()
@@ -37,7 +40,11 @@ pub fn setup_studs(
 pub fn configure_studs_samplers(
     stud_assets: Option<Res<StudsAssets>>,
     mut images: ResMut<Assets<Image>>,
+    mut configured: Local<bool>,
 ) {
+    if *configured {
+        return;
+    }
     let Some(assets) = stud_assets else { return };
     if let Some(mut stud_image) = images.get_mut(&assets.stud) {
         if !matches!(stud_image.sampler, bevy::image::ImageSampler::Descriptor(_)) {
@@ -57,4 +64,7 @@ pub fn configure_studs_samplers(
             });
         }
     }
+    *configured = true;
 }
+
+pub trait Map_samplers {}

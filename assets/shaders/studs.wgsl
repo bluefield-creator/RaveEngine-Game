@@ -3,6 +3,7 @@
     pbr_types,
     pbr_fragment::pbr_input_from_standard_material,
     pbr_functions::alpha_discard,
+    mesh_view_bindings::view,
 }
 
 #ifdef PREPASS_PIPELINE
@@ -54,20 +55,25 @@ fn fragment(
 
     let local_normal = rot_t * in.world_normal;
 
+    let dist = distance(in.world_position.xyz, view.world_position);
+    let fade = clamp((45.0 - dist) / 20.0, 0.0, 1.0);
+
     if (local_normal.y > 0.9) {
         let stud_color = textureSample(stud_texture, stud_sampler, uv);
         let shading = stud_color.rgb - vec3<f32>(0.5);
         let blended_rgb = pbr_input.material.base_color.rgb + shading * 0.5;
+        let stud_alpha = stud_color.a * fade;
         pbr_input.material.base_color = vec4<f32>(
-            mix(pbr_input.material.base_color.rgb, clamp(blended_rgb, vec3<f32>(0.0), vec3<f32>(1.0)), stud_color.a),
+            mix(pbr_input.material.base_color.rgb, clamp(blended_rgb, vec3<f32>(0.0), vec3<f32>(1.0)), stud_alpha),
             pbr_input.material.base_color.a
         );
     } else if (local_normal.y < -0.9) {
         let inlet_color = textureSample(inlet_texture, inlet_sampler, uv);
         let shading = inlet_color.rgb - vec3<f32>(0.5);
         let blended_rgb = pbr_input.material.base_color.rgb + shading * 0.5;
+        let inlet_alpha = inlet_color.a * fade;
         pbr_input.material.base_color = vec4<f32>(
-            mix(pbr_input.material.base_color.rgb, clamp(blended_rgb, vec3<f32>(0.0), vec3<f32>(1.0)), inlet_color.a),
+            mix(pbr_input.material.base_color.rgb, clamp(blended_rgb, vec3<f32>(0.0), vec3<f32>(1.0)), inlet_alpha),
             pbr_input.material.base_color.a
         );
     }

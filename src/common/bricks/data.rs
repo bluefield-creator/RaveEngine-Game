@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy::pbr::ExtendedMaterial;
-use crate::common::bricks::components::Brick;
+use crate::common::bricks::components::{Brick, BrickShape, BrickShapeComponent};
 use crate::common::bricks::studs::{StudsAssets, StudsExtension};
 
 #[derive(Resource, Default)]
@@ -15,12 +15,27 @@ pub fn spawn_brick(
     studs_assets: &StudsAssets,
     count: &mut BrickSpawnerCount,
     spawn_pos: Vec3,
+    shape: BrickShape,
 ) -> Entity {
     let current_index = count.count;
     count.count += 1;
 
+    let mesh_handle = match shape {
+        BrickShape::Block => {
+            meshes.add(Cuboid::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28))
+        }
+        BrickShape::Sphere => {
+            meshes.add(Sphere::new(1.0 * 0.28))
+        }
+    };
+
+    let name_prefix = match shape {
+        BrickShape::Block => "Part",
+        BrickShape::Sphere => "Sphere",
+    };
+
     commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28))),
+        Mesh3d(mesh_handle),
         MeshMaterial3d(materials.add(ExtendedMaterial {
             base: StandardMaterial {
                 base_color: Color::srgb(0.84, 0.24, 0.16),
@@ -34,9 +49,11 @@ pub fn spawn_brick(
         })),
         Transform::from_translation(spawn_pos),
         Brick,
+        BrickShapeComponent { shape },
         crate::common::bricks::components::BrickPhysics::default(),
+        crate::common::bricks::components::BrickColor { color: Color::srgb(0.84, 0.24, 0.16) },
         Pickable::default(),
-        Name::new(format!("Part{}", current_index)),
+        Name::new(format!("{}{}", name_prefix, current_index)),
     )).id()
 }
 
@@ -45,6 +62,7 @@ pub struct BrickData {
     pub transform: Transform,
     pub name: String,
     pub is_brick: bool,
+    pub shape: BrickShape,
     pub mesh: Option<Mesh3d>,
     pub standard_material: Option<MeshMaterial3d<StandardMaterial>>,
     pub studs_material: Option<MeshMaterial3d<ExtendedMaterial<StandardMaterial, StudsExtension>>>,
@@ -72,7 +90,11 @@ pub fn spawn_from_data(
         Pickable::default(),
     ));
     if data.is_brick {
-        spawned.insert(Brick);
+        spawned.insert((
+            Brick,
+            BrickShapeComponent { shape: data.shape },
+            crate::common::bricks::components::BrickColor::default(),
+        ));
     }
     if let Some(ref m) = data.mesh {
         spawned.insert(m.clone());
@@ -104,18 +126,22 @@ pub fn capture_brick_data(
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,
+        Option<&mut BrickShapeComponent>,
         &GlobalTransform,
         Option<&Mesh3d>,
         Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, StudsExtension>>>,
+        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
         Option<&mut crate::common::bricks::components::BrickPhysics>,
     ), Without<Camera3d>>,
 ) -> Option<BrickData> {
-    if let Ok((_, transform, name, child_of_opt, _, brick_opt, _, mesh_opt, mat_opt, studs_mat_opt, phys_opt)) = query.get(entity) {
+    if let Ok((_, transform, name, child_of_opt, _, brick_opt, shape_opt, _, mesh_opt, mat_opt, studs_mat_opt, phys_opt)) = query.get(entity) {
+        let is_brick = brick_opt.is_some();
+        let shape = shape_opt.as_ref().map(|s| s.shape).unwrap_or(BrickShape::Block);
         Some(BrickData {
             transform: *transform,
             name: name.to_string(),
-            is_brick: brick_opt.is_some(),
+            is_brick,
+            shape,
             mesh: mesh_opt.cloned(),
             standard_material: mat_opt.cloned(),
             studs_material: studs_mat_opt.cloned(),

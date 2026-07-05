@@ -11,6 +11,15 @@ pub struct StudioPlugin;
 
 impl Plugin for StudioPlugin {
     fn build(&self, app: &mut App) {
+        if !app.is_plugin_added::<bevy_egui::EguiPlugin>() {
+            app.add_plugins(bevy_egui::EguiPlugin::default());
+        }
+        if !app.is_plugin_added::<bevy::diagnostic::FrameTimeDiagnosticsPlugin>() {
+            app.add_plugins(bevy::diagnostic::FrameTimeDiagnosticsPlugin::default());
+        }
+        if !app.is_plugin_added::<bevy::render::occlusion_culling::OcclusionCullingPlugin>() {
+            app.add_plugins(bevy::render::occlusion_culling::OcclusionCullingPlugin);
+        }
         app.init_state::<tools::ToolState>()
             .init_state::<tools::OnboardingState>()
             .init_resource::<tools::Selection>()
