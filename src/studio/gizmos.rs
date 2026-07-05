@@ -199,6 +199,7 @@ pub fn draw_selection_outline(
     if *physics_state == crate::common::physics::PhysicsSimulationState::Running {
         return;
     }
-    let Some(selected_entity) = selection.entity else { return };
-    draw_outline_recursive(selected_entity, &bricks, &mut gizmos);
+    for &selected_entity in &selection.entities {
+        draw_outline_recursive(selected_entity, &bricks, &mut gizmos);
+    }
 }

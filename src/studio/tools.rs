@@ -26,6 +26,7 @@ pub enum OnboardingState {
 #[derive(Resource, Default)]
 pub struct Selection {
     pub entity: Option<Entity>,
+    pub entities: Vec<Entity>,
     pub workspace_selected: bool,
 }
 
@@ -57,6 +58,13 @@ pub struct CanvasContextMenu {
     pub entity: Option<Entity>,
     pub position: Option<Vec2>,
     pub just_opened: bool,
+}
+
+#[derive(Resource, Default)]
+pub struct MarqueeState {
+    pub active: bool,
+    pub start_pos: Option<Vec2>,
+    pub current_pos: Option<Vec2>,
 }
 
 #[derive(Resource, Debug, Clone, Copy)]
@@ -217,6 +225,7 @@ pub fn handle_undo_redo_action(
                             commands.entity(entity).despawn();
                             if selection.entity == Some(entity) {
                                 selection.entity = None;
+                                selection.entities.clear();
                             }
                             history.redo_stack.push(command);
                         }
@@ -225,6 +234,7 @@ pub fn handle_undo_redo_action(
                             history.remap_entity(entity, new_entity);
                             if selection.entity == Some(entity) {
                                 selection.entity = Some(new_entity);
+                                selection.entities = vec![new_entity];
                             }
                             let updated_command = UndoCommand::Delete { entity: new_entity, data };
                             history.redo_stack.push(updated_command);
@@ -257,6 +267,7 @@ pub fn handle_undo_redo_action(
                             history.remap_entity(entity, new_entity);
                             if selection.entity == Some(entity) {
                                 selection.entity = Some(new_entity);
+                                selection.entities = vec![new_entity];
                             }
                             let _updated_command = UndoCommand::Spawn { entity: new_entity, data };
                             history.undo_stack.push(_updated_command);
@@ -265,6 +276,7 @@ pub fn handle_undo_redo_action(
                             commands.entity(entity).despawn();
                             if selection.entity == Some(entity) {
                                 selection.entity = None;
+                                selection.entities.clear();
                             }
                             history.undo_stack.push(command);
                         }
@@ -422,11 +434,13 @@ pub fn select_brick(
         if click.button == PointerButton::Primary {
             if bricks.get(target).is_ok() {
                 selection.entity = Some(target);
+                selection.entities = vec![target];
                 selection.workspace_selected = false;
                 context_menu.entity = None;
                 context_menu.position = None;
             } else if gizmos.get(target).is_err() {
                 selection.entity = None;
+                selection.entities.clear();
                 selection.workspace_selected = false;
                 context_menu.entity = None;
                 context_menu.position = None;
@@ -828,5 +842,75 @@ fn propagate_unscaled(
                 propagate_unscaled(child, child_unscaled, child_query, global_transform_query);
             }
         }
+    }
+}
+
+pub fn handle_marquee_selection(
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
+    windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
+    hover_state: Res<HoverState>,
+    drag_state: Res<DragState>,
+    part_drag_state: Res<PartDragState>,
+    mut marquee_state: ResMut<MarqueeState>,
+    mut selection: ResMut<Selection>,
+    camera_query: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
+    bricks_query: Query<(Entity, &GlobalTransform), With<Brick>>,
+) {
+    let Ok(window) = windows.single() else { return };
+
+    if mouse_buttons.just_pressed(MouseButton::Left) && !hover_state.is_hovering_ui && !drag_state.active && !part_drag_state.active {
+        if let Some(cursor_pos) = window.cursor_position() {
+            marquee_state.start_pos = Some(cursor_pos);
+            marquee_state.current_pos = Some(cursor_pos);
+            marquee_state.active = false;
+        }
+    }
+
+    if mouse_buttons.pressed(MouseButton::Left) {
+        if let Some(start) = marquee_state.start_pos {
+            if let Some(cursor_pos) = window.cursor_position() {
+                marquee_state.current_pos = Some(cursor_pos);
+                if !marquee_state.active {
+                    if start.distance(cursor_pos) > 5.0 {
+                        if !drag_state.active && !part_drag_state.active {
+                            marquee_state.active = true;
+                        }
+                    }
+                }
+            }
+        }
+    } else if mouse_buttons.just_released(MouseButton::Left) {
+        if marquee_state.active {
+            if let (Some(start), Some(end)) = (marquee_state.start_pos, marquee_state.current_pos) {
+                let min_x = start.x.min(end.x);
+                let max_x = start.x.max(end.x);
+                let min_y = start.y.min(end.y);
+                let max_y = start.y.max(end.y);
+
+                let Some((camera, camera_transform)) = camera_query.iter().next() else { return };
+
+                let mut selected_entities = Vec::new();
+                for (entity, global_transform) in &bricks_query {
+                    let world_pos = global_transform.translation();
+                    if let Ok(screen_pos) = camera.world_to_viewport(camera_transform, world_pos) {
+                        if screen_pos.x >= min_x && screen_pos.x <= max_x && screen_pos.y >= min_y && screen_pos.y <= max_y {
+                            selected_entities.push(entity);
+                        }
+                    }
+                }
+
+                if !selected_entities.is_empty() {
+                    selection.entities = selected_entities.clone();
+                    selection.entity = Some(selected_entities[0]);
+                    selection.workspace_selected = false;
+                } else {
+                    selection.entities.clear();
+                    selection.entity = None;
+                }
+            }
+        }
+        marquee_state.active = false;
+        marquee_state.start_pos = None;
+        marquee_state.current_pos = None;
     }
 }

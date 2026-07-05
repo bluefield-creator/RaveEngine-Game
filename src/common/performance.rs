@@ -63,7 +63,7 @@ pub fn apply_graphics_settings(
         }
 
         if settings.bloom {
-            commands.entity(entity).insert(Bloom::default());
+            commands.entity(entity).insert(Bloom { intensity: 0.05, ..default() });
         } else {
             commands.entity(entity).remove::<Bloom>();
         }

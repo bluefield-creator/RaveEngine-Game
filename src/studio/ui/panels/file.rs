@@ -147,7 +147,8 @@ pub fn draw_file_window(
                                     MeshMaterial3d(studs_materials.add(ExtendedMaterial {
                                         base: StandardMaterial {
                                             base_color: brick.color,
-                                            perceptual_roughness: 0.9,
+                                            perceptual_roughness: 0.95,
+                                            reflectance: 0.1,
                                             ..default()
                                         },
                                         extension: crate::common::bricks::studs::StudsExtension {

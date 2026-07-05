@@ -13,8 +13,27 @@ pub fn setup_studio(
     mut commands: Commands,
     mut egui_global_settings: ResMut<bevy_egui::EguiGlobalSettings>,
     graphics_settings: Res<crate::studio::ui::GraphicsSettings>,
+    mut ambient: Option<ResMut<GlobalAmbientLight>>,
 ) {
     egui_global_settings.auto_create_primary_context = false;
+
+    if let Some(mut amb) = ambient {
+        amb.color = Color::srgb(0.85, 0.88, 1.0);
+        amb.brightness = 1000.0;
+    }
+
+    commands.spawn((
+        DirectionalLight {
+            color: Color::srgb(1.0, 0.96, 0.85),
+            illuminance: 12000.0,
+            shadow_maps_enabled: true,
+            contact_shadows_enabled: true,
+            shadow_depth_bias: 0.1,
+            shadow_normal_bias: 1.2,
+            ..default()
+        },
+        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -0.32, 0.95, 0.0)),
+    ));
 
     commands.spawn((
         PointLight {
@@ -28,6 +47,10 @@ pub fn setup_studio(
     
     let mut camera = commands.spawn((
         Camera3d::default(),
+        Camera {
+            clear_color: ClearColorConfig::Custom(Color::srgb(0.70, 0.90, 1.00)),
+            ..default()
+        },
         Projection::Perspective(PerspectiveProjection {
             far: 3000.0,
             fov: 80.0f32.to_radians(),
@@ -35,7 +58,7 @@ pub fn setup_studio(
         }),
         Hdr,
         Msaa::Off,
-        bevy::core_pipeline::tonemapping::Tonemapping::None,
+        bevy::core_pipeline::tonemapping::Tonemapping::TonyMcMapface,
         Transform::from_xyz(-10.0, 10.0, -10.0).looking_at(Vec3::ZERO, Vec3::Y),
         MeshPickingCamera,
         FreeCamera::default(),
@@ -80,7 +103,7 @@ pub fn setup_studio(
         },
         Hdr,
         Msaa::Off,
-        bevy::core_pipeline::tonemapping::Tonemapping::None,
+        bevy::core_pipeline::tonemapping::Tonemapping::TonyMcMapface,
         bevy::camera::visibility::RenderLayers::layer(1),
         bevy_egui::PrimaryEguiContext,
         GizmoCamera,

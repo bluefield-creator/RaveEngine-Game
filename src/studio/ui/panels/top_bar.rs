@@ -232,7 +232,8 @@ pub fn draw_top_bar(
                                             MeshMaterial3d(studs_materials.add(ExtendedMaterial {
                                                 base: StandardMaterial {
                                                     base_color: brick.color,
-                                                    perceptual_roughness: 0.9,
+                                                    perceptual_roughness: 0.95,
+                                                    reflectance: 0.1,
                                                     ..default()
                                                 },
                                                 extension: crate::common::bricks::studs::StudsExtension {
@@ -483,7 +484,8 @@ pub fn draw_top_bar(
                                         studs_material: Some(MeshMaterial3d(studs_materials.add(ExtendedMaterial {
                                             base: StandardMaterial {
                                                 base_color: Color::srgb(0.84, 0.24, 0.16),
-                                                perceptual_roughness: 0.9,
+                                                perceptual_roughness: 0.95,
+                                                reflectance: 0.1,
                                                 ..default()
                                             },
                                             extension: crate::common::bricks::studs::StudsExtension {

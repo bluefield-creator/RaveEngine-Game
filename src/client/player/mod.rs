@@ -21,6 +21,7 @@ pub struct CameraSettings {
     pub yaw: f32,
     pub pitch: f32,
     pub distance: f32,
+    pub current_distance: f32,
     pub target_offset: Vec3,
 }
 

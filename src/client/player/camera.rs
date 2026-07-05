@@ -13,9 +13,9 @@ pub fn update_camera(
     mut camera_query: Query<(&mut Transform, &mut CameraSettings), (With<PlayerCamera>, Without<LocalPlayer>)>,
     spatial_query: SpatialQuery,
     mut window_query: Query<&mut CursorOptions, With<bevy::window::PrimaryWindow>>,
-    mut visibility_query: Query<&mut Visibility>,
+    time: Res<Time>,
 ) {
-    let Some((player_entity, mut player_transform, children_opt)) = player_query.iter_mut().next() else {
+    let Some((player_entity, mut player_transform, _children_opt)) = player_query.iter_mut().next() else {
         return;
     };
     let Some((mut camera_transform, mut settings)) = camera_query.iter_mut().next() else {
@@ -31,7 +31,10 @@ pub fn update_camera(
         settings.distance = (settings.distance - event.y * 0.5).clamp(0.5, 40.0);
     }
 
-    let in_first_person = settings.distance <= 0.6;
+    let lerp_factor = (15.0 * time.delta_secs()).min(1.0);
+    settings.current_distance = settings.current_distance + (settings.distance - settings.current_distance) * lerp_factor;
+
+    let in_first_person = settings.current_distance <= 0.6;
 
     if let Some(mut cursor_opts) = window_query.iter_mut().next() {
         if in_first_person || mouse_buttons.pressed(MouseButton::Right) {
@@ -49,24 +52,12 @@ pub fn update_camera(
         player_transform.rotation = Quat::from_rotation_y(settings.yaw);
     }
 
-    if let Some(children) = children_opt {
-        for child in children.iter() {
-            if let Ok(mut visibility) = visibility_query.get_mut(child) {
-                if in_first_person {
-                    *visibility = Visibility::Hidden;
-                } else {
-                    *visibility = Visibility::Inherited;
-                }
-            }
-        }
-    }
-
     let target_translation = player_transform.translation + settings.target_offset;
     let rotation = Quat::from_rotation_y(settings.yaw) * Quat::from_rotation_x(settings.pitch);
-    let camera_offset = rotation.mul_vec3(Vec3::new(0.0, 0.0, settings.distance));
+    let camera_offset = rotation.mul_vec3(Vec3::new(0.0, 0.0, settings.current_distance));
 
     let ray_dir = camera_offset.normalize_or_zero();
-    let mut final_distance = settings.distance;
+    let mut final_distance = settings.current_distance;
 
     if !in_first_person {
         if let Ok(dir3) = Dir3::new(ray_dir) {
@@ -74,7 +65,7 @@ pub fn update_camera(
             if let Some(hit) = spatial_query.cast_ray(
                 target_translation,
                 dir3,
-                settings.distance,
+                settings.current_distance,
                 true,
                 &filter,
             ) {

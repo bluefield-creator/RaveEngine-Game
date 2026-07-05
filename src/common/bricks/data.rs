@@ -39,7 +39,8 @@ pub fn spawn_brick(
         MeshMaterial3d(materials.add(ExtendedMaterial {
             base: StandardMaterial {
                 base_color: Color::srgb(0.84, 0.24, 0.16),
-                perceptual_roughness: 0.9,
+                perceptual_roughness: 0.95,
+                reflectance: 0.1,
                 ..default()
             },
             extension: StudsExtension {

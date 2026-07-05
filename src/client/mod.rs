@@ -18,6 +18,9 @@ pub struct LocalClientId(pub u64);
 pub struct LocalPlayer;
 
 #[derive(Component)]
+pub struct UniqueLocalMaterial;
+
+#[derive(Component)]
 struct ClientPhysicsInitializer;
 
 #[derive(Component)]
@@ -45,6 +48,7 @@ impl Plugin for ClientPlugin {
                 send_player_inputs,
                 sync_local_player,
                 attach_character_visuals,
+                update_local_player_transparency,
             ))
             .add_observer(on_client_connected)
             .add_observer(on_player_added)
@@ -60,7 +64,7 @@ fn setup_physics_initializer(mut commands: Commands) {
         StartupCamera,
         Transform::from_xyz(0.0, 15.0, 30.0).looking_at(Vec3::ZERO, Vec3::Y),
         Msaa::Sample4,
-        bevy::core_pipeline::tonemapping::Tonemapping::AgX,
+        bevy::core_pipeline::tonemapping::Tonemapping::TonyMcMapface,
         ShadowFilteringMethod::Gaussian,
     ));
 }
@@ -204,24 +208,46 @@ fn on_player_added(
 fn attach_character_visuals(
     mut commands: Commands,
     character_assets: Option<Res<player::loader::PlayerCharacterAssets>>,
-    query: Query<Entity, (With<NeedsCharacterVisuals>, Without<CharacterVisualsSpawned>, Without<Replicate>)>,
+    query: Query<(Entity, &crate::common::components::Player, Option<&LocalPlayer>), (With<NeedsCharacterVisuals>, Without<CharacterVisualsSpawned>, Without<Replicate>)>,
+    local_client_id: Option<Res<LocalClientId>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let Some(assets) = character_assets else {
         return;
     };
 
-    for entity in &query {
+    let local_id = local_client_id.map(|id| id.0);
+
+    for (entity, player_comp, local_player_opt) in &query {
         info!("ATTACHING CHARACTER VISUALS TO {:?}", entity);
-        for (mesh, mat) in &assets.parts {
-            let child_id = commands
-                .spawn((
-                    Mesh3d(mesh.clone()),
-                    MeshMaterial3d(mat.clone()),
-                    Transform::from_translation(Vec3::new(0.0, -0.7, 0.0))
-                        .with_scale(Vec3::splat(0.28)),
-                    GlobalTransform::default(),
-                ))
-                .id();
+        let is_local = (local_id == Some(player_comp.client_id)) || local_player_opt.is_some();
+
+        for (mesh, mat_handle) in &assets.parts {
+            let final_mat_handle = if is_local {
+                if let Some(mat) = materials.get(mat_handle) {
+                    let mut unique_mat = mat.clone();
+                    unique_mat.alpha_mode = AlphaMode::Blend;
+                    materials.add(unique_mat)
+                } else {
+                    mat_handle.clone()
+                }
+            } else {
+                mat_handle.clone()
+            };
+
+            let mut child_cmd = commands.spawn((
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(final_mat_handle),
+                Transform::from_translation(Vec3::new(0.0, -0.7, 0.0))
+                    .with_scale(Vec3::splat(0.28)),
+                GlobalTransform::default(),
+            ));
+
+            if is_local {
+                child_cmd.insert(UniqueLocalMaterial);
+            }
+
+            let child_id = child_cmd.id();
             commands.entity(entity).add_child(child_id);
         }
 
@@ -259,13 +285,49 @@ fn sync_local_player(
                     yaw: 0.0,
                     pitch: -0.35,
                     distance: 4.5,
+                    current_distance: 4.5,
                     target_offset: Vec3::new(0.0, 0.55, 0.0),
                 },
                 Transform::from_xyz(0.0, 5.0, 10.0).looking_at(Vec3::ZERO, Vec3::Y),
                 Msaa::Sample4,
-                bevy::core_pipeline::tonemapping::Tonemapping::AgX,
+                bevy::core_pipeline::tonemapping::Tonemapping::TonyMcMapface,
                 ShadowFilteringMethod::Gaussian,
             ));
+        }
+    }
+}
+
+fn update_local_player_transparency(
+    camera_query: Query<(&Transform, &player::CameraSettings), With<player::PlayerCamera>>,
+    local_player_query: Query<(&Transform, &Children), With<LocalPlayer>>,
+    child_material_query: Query<(Entity, &MeshMaterial3d<StandardMaterial>), With<UniqueLocalMaterial>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut visibility_query: Query<&mut Visibility>,
+) {
+    let Some((camera_transform, camera_settings)) = camera_query.iter().next() else {
+        return;
+    };
+    let Some((player_transform, children)) = local_player_query.iter().next() else {
+        return;
+    };
+
+    let player_target = player_transform.translation + camera_settings.target_offset;
+    let distance = camera_transform.translation.distance(player_target);
+
+    let alpha = ((distance - 0.3) / 1.2).clamp(0.0, 1.0);
+
+    for child in children.iter() {
+        if let Ok((child_entity, mesh_mat)) = child_material_query.get(child) {
+            if let Some(mut mat) = materials.get_mut(&mesh_mat.0) {
+                mat.base_color = mat.base_color.with_alpha(alpha);
+            }
+            if let Ok(mut visibility) = visibility_query.get_mut(child_entity) {
+                if alpha <= 0.001 {
+                    *visibility = Visibility::Hidden;
+                } else {
+                    *visibility = Visibility::Inherited;
+                }
+            }
         }
     }
 }
@@ -276,7 +338,6 @@ fn on_brick_added(
     mut meshes: ResMut<Assets<Mesh>>,
     mut studs_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, StudsExtension>>>,
     studs_assets: Res<StudsAssets>,
-    mut cache: ResMut<crate::common::bricks::BrickMaterialCache>,
     name_query: Query<&Name>,
     shape_query: Query<&BrickShapeComponent>,
     color_query: Query<&crate::common::bricks::components::BrickColor>,
@@ -287,10 +348,10 @@ fn on_brick_added(
 
     let mesh_handle = match shape {
         crate::common::bricks::components::BrickShape::Block => {
-            cache.get_block_mesh(&mut meshes)
+            meshes.add(Cuboid::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28))
         }
         crate::common::bricks::components::BrickShape::Sphere => {
-            cache.get_sphere_mesh(&mut meshes)
+            meshes.add(Sphere::new(1.0 * 0.28))
         }
     };
 
@@ -305,11 +366,19 @@ fn on_brick_added(
         }
     };
 
-    let mat_handle = cache.get_studs_material(base_color, &studs_assets, &mut studs_materials);
-
     commands.entity(entity).insert((
         Mesh3d(mesh_handle),
-        MeshMaterial3d(mat_handle),
+        MeshMaterial3d(studs_materials.add(ExtendedMaterial {
+            base: StandardMaterial {
+                base_color,
+                perceptual_roughness: 0.9,
+                ..default()
+            },
+            extension: StudsExtension {
+                stud_texture: studs_assets.stud.clone(),
+                inlet_texture: studs_assets.inlet.clone(),
+            },
+        })),
     ));
 }
 

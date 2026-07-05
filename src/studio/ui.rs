@@ -54,6 +54,7 @@ pub struct UiStateResources<'w> {
     pub onboarding_state: Res<'w, State<crate::studio::tools::OnboardingState>>,
     pub next_onboarding_state: ResMut<'w, NextState<crate::studio::tools::OnboardingState>>,
     pub onboarding_data: ResMut<'w, crate::studio::ui::panels::onboarding::OnboardingData>,
+    pub marquee_state: Res<'w, crate::studio::tools::MarqueeState>,
 }
 
 #[derive(SystemParam)]
@@ -174,14 +175,14 @@ pub fn studio_ui(
         .show(ctx, |ui| {
             let total_height = ui.available_height();
 
-            let mut selected_brick = None;
-            if let Some(selected_entity) = ui_state.selection.entity {
-                if let Ok((_, _, _, _, _, Some(_), _, _, _, _, _, _)) = queries.entities_query.get(selected_entity) {
-                    selected_brick = Some(selected_entity);
+            let mut selected_bricks = Vec::new();
+            for &entity in &ui_state.selection.entities {
+                if let Ok((_, _, _, _, _, Some(_), _, _, _, _, _, _)) = queries.entities_query.get(entity) {
+                    selected_bricks.push(entity);
                 }
             }
 
-            let has_selection = selected_brick.is_some() || ui_state.selection.workspace_selected;
+            let has_selection = !selected_bricks.is_empty() || ui_state.selection.workspace_selected;
             let mut explorer_height = if has_selection {
                 let id = ui.make_persistent_id("explorer_height_split");
                 ui.data_mut(|d| d.get_temp::<f32>(id).unwrap_or(180.0))
@@ -212,7 +213,7 @@ pub fn studio_ui(
                 }
             );
 
-            if let Some(brick_entity) = selected_brick {
+            if !selected_bricks.is_empty() {
                 let sep_height = 20.0;
                 let (rect, response) = ui.allocate_exact_size(
                     egui::vec2(ui.available_width(), sep_height),
@@ -244,7 +245,7 @@ pub fn studio_ui(
                     .show(ui, |ui| {
                         panels::draw_properties(
                             ui,
-                            brick_entity,
+                            &selected_bricks,
                             &mut queries.entities_query,
                             &mut ui_res.brick_colors,
                             &mut ui_res.materials,
@@ -395,5 +396,30 @@ pub fn studio_ui(
         );
 
         ui_state.hover_state.is_hovering_ui = true;
+    }
+
+    if ui_state.marquee_state.active {
+        egui::Area::new(egui::Id::new("marquee_overlay"))
+            .interactable(false)
+            .fixed_pos(egui::pos2(0.0, 0.0))
+            .show(ctx, |ui| {
+                if let (Some(start), Some(end)) = (ui_state.marquee_state.start_pos, ui_state.marquee_state.current_pos) {
+                    let rect = egui::Rect::from_two_pos(
+                        egui::pos2(start.x, start.y),
+                        egui::pos2(end.x, end.y),
+                    );
+                    ui.painter().rect_filled(
+                        rect,
+                        0.0,
+                        egui::Color32::from_rgba_unmultiplied(80, 160, 240, 30),
+                    );
+                    ui.painter().rect_stroke(
+                        rect,
+                        0.0,
+                        egui::Stroke::new(1.5, egui::Color32::from_rgb(80, 160, 240)),
+                        egui::StrokeKind::Inside,
+                    );
+                }
+            });
     }
 }

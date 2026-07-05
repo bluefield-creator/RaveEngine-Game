@@ -13,7 +13,7 @@ pub fn setup_sun(
     commands.spawn((
         DirectionalLight {
             color: Color::srgb(1.0, 0.96, 0.85),
-            illuminance: 48000.0,
+            illuminance: 12000.0,
             shadow_maps_enabled: true,
             contact_shadows_enabled: true,
             shadow_depth_bias: 0.1,

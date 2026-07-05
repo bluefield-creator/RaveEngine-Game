@@ -14,15 +14,15 @@ pub fn generate_sky_gradient_image() -> Image {
         let horizon_intensity = (1.0 - ((v - 0.5).abs() / 0.08).min(1.0)).powf(2.0);
         let base_color = if v <= 0.5 {
             let t = (v / 0.5).powf(1.1);
-            let r_val = 0.05 + t * (0.70 - 0.05);
-            let g_val = 0.40 + t * (0.90 - 0.40);
-            let b_val = 0.85 + t * (1.00 - 0.85);
+            let r_val = 0.15 + t * (0.75 - 0.15);
+            let g_val = 0.55 + t * (0.92 - 0.55);
+            let b_val = 0.90 + t * (1.00 - 0.90);
             (r_val, g_val, b_val)
         } else {
             let t = (v - 0.5) / 0.5;
-            let r_val = 0.70 + t * (0.40 - 0.70);
-            let g_val = 0.90 + t * (0.60 - 0.90);
-            let b_val = 1.00 + t * (0.80 - 1.00);
+            let r_val = 0.75 + t * (0.50 - 0.75);
+            let g_val = 0.92 + t * (0.75 - 0.92);
+            let b_val = 1.00 + t * (0.90 - 1.00);
             (r_val, g_val, b_val)
         };
         let r = base_color.0 + horizon_intensity * (1.0 - base_color.0);

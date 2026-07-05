@@ -116,6 +116,7 @@ fn draw_entity_node(
 
                 if label_res.clicked() {
                     selection.entity = Some(entity);
+                    selection.entities = vec![entity];
                     selection.workspace_selected = false;
                 }
 
@@ -226,6 +227,7 @@ fn draw_entity_node(
 
         if label_res.clicked() {
             selection.entity = Some(entity);
+            selection.entities = vec![entity];
             selection.workspace_selected = false;
         }
 
@@ -362,6 +364,7 @@ pub fn draw_explorer(
         let label_res = explorerlabel(ui, selection.workspace_selected, "Workspace", Some(workspace_tex));
         if label_res.clicked() {
             selection.entity = None;
+            selection.entities.clear();
             selection.workspace_selected = true;
         }
         if label_res.double_clicked() {

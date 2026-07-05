@@ -27,6 +27,7 @@ impl Plugin for StudioPlugin {
             .init_resource::<tools::PartDragState>()
             .init_resource::<tools::HoverState>()
             .init_resource::<tools::CanvasContextMenu>()
+            .init_resource::<tools::MarqueeState>()
             .init_resource::<ui::StudioUiTextureIds>()
             .init_resource::<ui::CameraSpeedIndicator>()
             .init_resource::<ui::FovIndicator>()
@@ -61,6 +62,7 @@ impl Plugin for StudioPlugin {
                     tools::update_cursor,
                     tools::handle_keyboard_shortcuts,
                     tools::handle_undo_redo_action,
+                    tools::handle_marquee_selection,
                     ui::updatecameraspeedindicator,
                     ui::update_camera_fov
                         .before(bevy::camera_controller::free_camera::run_freecamera_controller),

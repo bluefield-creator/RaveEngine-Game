@@ -165,6 +165,7 @@ pub fn draw_entity_context_menu(
         commands.entity(entity).despawn();
         if selection.entity == Some(entity) {
             selection.entity = None;
+            selection.entities.clear();
         }
         ui.close();
         closed = true;
