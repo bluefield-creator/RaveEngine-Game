@@ -15,8 +15,9 @@ pub fn player_movement(
         With<Player>,
     >,
     camera_query: Query<(&Transform, &CameraSettings), (With<PlayerCamera>, Without<Player>)>,
+    spatial_query: SpatialQuery,
 ) {
-    let Some((_player_entity, mut player_transform, mut velocity, controller, colliding)) =
+    let Some((player_entity, mut player_transform, mut velocity, controller, colliding)) =
         player_query.iter_mut().next()
     else {
         return;
@@ -72,7 +73,18 @@ pub fn player_movement(
         velocity.z = 0.0;
     }
 
-    let is_grounded = !colliding.is_empty() && velocity.y.abs() < 0.2;
+    let is_grounded = {
+        let mut grounded = !colliding.is_empty() && velocity.y.abs() < 0.2;
+        if !grounded {
+            let ray_origin = player_transform.translation;
+            let max_ray_dist = 2.5 * 0.28 + 0.15;
+            let filter = SpatialQueryFilter::default().with_excluded_entities([player_entity]);
+            if spatial_query.cast_ray(ray_origin, Dir3::NEG_Y, max_ray_dist, true, &filter).is_some() {
+                grounded = true;
+            }
+        }
+        grounded
+    };
     if keys.pressed(KeyCode::Space) && is_grounded {
         velocity.y = controller.jump_power;
     }

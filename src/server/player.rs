@@ -51,12 +51,13 @@ pub fn handle_new_client(
 pub fn handle_player_inputs(
     mut receivers: Query<(Entity, &RemoteId, &mut MessageReceiver<PlayerInputMessage>)>,
     mut players: Query<(Entity, &Player, &mut Transform, &mut LinearVelocity, &CollidingEntities, Option<&ControlledBy>)>,
+    spatial_query: SpatialQuery,
 ) {
     for (client_entity, remote_id, mut receiver) in receivers.iter_mut() {
         let client_id = remote_id.0.to_bits();
         for message in receiver.receive() {
             let mut found_player = false;
-            for (_player_entity, player, mut transform, mut lin_vel, colliding, controlled_by) in players.iter_mut() {
+            for (player_entity, player, mut transform, mut lin_vel, colliding, controlled_by) in players.iter_mut() {
                 let is_owner = if let Some(ctrl) = controlled_by {
                     ctrl.owner == client_entity
                 } else {
@@ -94,7 +95,18 @@ pub fn handle_player_inputs(
                     lin_vel.x = direction.x * speed;
                     lin_vel.z = direction.z * speed;
 
-                    let is_grounded = !colliding.is_empty() && lin_vel.y.abs() < 0.2;
+                    let is_grounded = {
+                        let mut grounded = !colliding.is_empty() && lin_vel.y.abs() < 0.2;
+                        if !grounded {
+                            let ray_origin = transform.translation;
+                            let max_ray_dist = 2.5 * 0.28 + 0.15;
+                            let filter = SpatialQueryFilter::default().with_excluded_entities([player_entity]);
+                            if spatial_query.cast_ray(ray_origin, Dir3::NEG_Y, max_ray_dist, true, &filter).is_some() {
+                                grounded = true;
+                            }
+                        }
+                        grounded
+                    };
                     if message.jump && is_grounded {
                         lin_vel.y = player.jump_power;
                     }
