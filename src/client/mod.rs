@@ -421,6 +421,7 @@ fn load_vuis_ui(
         Node {
             width: Val::Percent(100.0),
             height: Val::Percent(100.0),
+            overflow: Overflow::visible(),
             ..default()
         },
     )).id();

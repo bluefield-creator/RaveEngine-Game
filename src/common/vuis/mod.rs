@@ -25,36 +25,57 @@ impl Plugin for VuisPlugin {
 pub fn scale_vuis_root_system(
     window_query: Query<&Window, With<bevy::window::PrimaryWindow>>,
     mut query_root: Query<(&mut UiTransform, &mut Node, &VuisRootContainer)>,
+    mut ui_scale: Option<ResMut<UiScale>>,
 ) {
     let Ok(window) = window_query.single() else { return; };
     for (mut transform, mut node, root_container) in query_root.iter_mut() {
         let scale_x = window.width() / root_container.design_width;
         let scale_y = window.height() / root_container.design_height;
-        let scale = scale_x.min(scale_y).max(0.1);
+        let scale = scale_x.max(scale_y).max(0.1);
 
-        node.width = Val::Px(root_container.design_width);
-        node.height = Val::Px(root_container.design_height);
+        let container_width = window.width() / scale;
+        let container_height = window.height() / scale;
+
+        node.width = Val::Px(container_width);
+        node.height = Val::Px(container_height);
         node.position_type = PositionType::Absolute;
+        node.overflow = Overflow::visible();
         node.left = Val::Percent(50.0);
         node.top = Val::Percent(50.0);
         node.margin = UiRect {
-            left: Val::Px(-root_container.design_width / 2.0),
-            top: Val::Px(-root_container.design_height / 2.0),
+            left: Val::Px(-container_width / 2.0),
+            top: Val::Px(-container_height / 2.0),
             ..default()
         };
-        transform.scale = Vec2::new(scale, scale);
+        transform.scale = Vec2::ONE;
+        if let Some(ref mut scale_res) = ui_scale {
+            if scale_res.0 != scale {
+                scale_res.0 = scale;
+            }
+        }
     }
 }
 
 pub fn grid_layout_update_system(
     query_nodes: Query<(Entity, &VuisNode, Option<&Children>)>,
-    mut query_node_styles: Query<(Option<&VuisNode>, &mut Node)>,
+    mut query_node_styles: Query<(Option<&VuisNode>, &mut Node, Option<&ChildOf>), Without<VuisRootContainer>>,
+    query_root: Query<&Node, With<VuisRootContainer>>,
 ) {
+    let (root_width, root_height) = if let Ok(root_node) = query_root.single() {
+        if let (Val::Px(w), Val::Px(h)) = (root_node.width, root_node.height) {
+            (w, h)
+        } else {
+            (1920.0, 1080.0)
+        }
+    } else {
+        (1920.0, 1080.0)
+    };
+
     for (_, parent_vnode, children_opt) in query_nodes.iter() {
         let is_flow = parent_vnode.LayoutFlow != "None";
         if let Some(children) = children_opt {
             for child_ent in children.iter() {
-                if let Ok((child_vnode_opt, mut child_node)) = query_node_styles.get_mut(child_ent) {
+                if let Ok((child_vnode_opt, mut child_node, child_of_opt)) = query_node_styles.get_mut(child_ent) {
                     if is_flow {
                         if child_node.position_type != PositionType::Relative {
                             child_node.position_type = PositionType::Relative;
@@ -64,9 +85,30 @@ pub fn grid_layout_update_system(
                     } else {
                         if child_node.position_type != PositionType::Absolute {
                             child_node.position_type = PositionType::Absolute;
-                            if let Some(child_vnode) = child_vnode_opt {
-                                child_node.left = Val::Px(child_vnode.PositionX);
-                                child_node.top = Val::Px(child_vnode.PositionY);
+                        }
+                        if let Some(child_vnode) = child_vnode_opt {
+                            let is_top_level = if let Some(child_of) = child_of_opt {
+                                !query_nodes.contains(child_of.parent())
+                            } else {
+                                true
+                            };
+
+                            let adjusted_x = if is_top_level && child_vnode.PositionX > 960.0 {
+                                child_vnode.PositionX + (root_width - 1920.0)
+                            } else {
+                                child_vnode.PositionX
+                            };
+                            let adjusted_y = if is_top_level && child_vnode.PositionY > 540.0 {
+                                child_vnode.PositionY + (root_height - 1080.0)
+                            } else {
+                                child_vnode.PositionY
+                            };
+
+                            if child_node.left != Val::Px(adjusted_x)
+                                || child_node.top != Val::Px(adjusted_y)
+                            {
+                                child_node.left = Val::Px(adjusted_x);
+                                child_node.top = Val::Px(adjusted_y);
                             }
                         }
                     }
@@ -78,33 +120,131 @@ pub fn grid_layout_update_system(
 
 pub fn sync_vuis_node_changes(
     mut commands: Commands,
-    query_changed: Query<(Entity, &VuisNode), Changed<VuisNode>>,
-    mut query_bevy_ui: Query<(&mut Node, &mut BackgroundColor, &mut UiTransform)>,
+    query_nodes: Query<(Entity, &VuisNode, Option<&ChildOf>)>,
+    query_changed: Query<(Entity, &VuisNode, Option<&ChildOf>), Changed<VuisNode>>,
+    mut query_bevy_ui: Query<(&mut Node, &mut BackgroundColor, &mut UiTransform), Without<VuisRootContainer>>,
     query_children: Query<&Children>,
     query_text: Query<&Text>,
+    query_root_changed: Query<Entity, (With<VuisRootContainer>, Changed<Node>)>,
+    query_root_all: Query<&Node, With<VuisRootContainer>>,
 ) {
-    for (entity, node) in query_changed.iter() {
-        info!(
-            "VUIS: Node component changed for element (ID: {}), syncing Bevy UI... Pos: ({}, {}), Size: ({}x{})",
-            node.Id, node.PositionX, node.PositionY, node.WidthPx, node.HeightPx
-        );
+    let root_changed = !query_root_changed.is_empty();
+    
+    let nodes_to_update: Vec<(Entity, &VuisNode, Option<&ChildOf>)> = if root_changed {
+        query_nodes.iter().map(|(e, n, p)| (e, n, p)).collect()
+    } else {
+        query_changed.iter().map(|(e, n, p)| (e, n, p)).collect()
+    };
+
+    let (root_width, root_height) = if let Ok(root_node) = query_root_all.single() {
+        if let (Val::Px(w), Val::Px(h)) = (root_node.width, root_node.height) {
+            (w, h)
+        } else {
+            (1920.0, 1080.0)
+        }
+    } else {
+        (1920.0, 1080.0)
+    };
+
+    for (entity, node, parent_opt) in nodes_to_update {
+        let is_top_level = if let Some(child_of) = parent_opt {
+            !query_nodes.contains(child_of.parent())
+        } else {
+            true
+        };
+
+        let adjusted_x = if is_top_level && node.PositionX > 960.0 {
+            node.PositionX + (root_width - 1920.0)
+        } else {
+            node.PositionX
+        };
+        let adjusted_y = if is_top_level && node.PositionY > 540.0 {
+            node.PositionY + (root_height - 1080.0)
+        } else {
+            node.PositionY
+        };
+
         if let Ok((mut bevy_node, mut bg_color, mut transform)) = query_bevy_ui.get_mut(entity) {
-            bevy_node.left = Val::Px(node.PositionX);
-            bevy_node.top = Val::Px(node.PositionY);
-            bevy_node.width = if node.WidthPx <= 0.0 { Val::Auto } else { Val::Px(node.WidthPx) };
-            bevy_node.height = if node.HeightPx <= 0.0 { Val::Auto } else { Val::Px(node.HeightPx) };
-            bevy_node.border_radius = BorderRadius::all(Val::Px(node.BorderRadiusPx));
-            bevy_node.overflow = if node.IsScrollable { Overflow::scroll_y() } else { Overflow::visible() };
-            bevy_node.scrollbar_width = if node.IsScrollable { node.ScrollbarWidth } else { 0.0 };
+            if bevy_node.left != Val::Px(adjusted_x) {
+                bevy_node.left = Val::Px(adjusted_x);
+            }
+            if bevy_node.top != Val::Px(adjusted_y) {
+                bevy_node.top = Val::Px(adjusted_y);
+            }
+            
+            let expected_width = if node.WidthPx <= 0.0 { Val::Auto } else { Val::Px(node.WidthPx) };
+            if bevy_node.width != expected_width {
+                bevy_node.width = expected_width;
+            }
+            
+            let expected_height = if node.HeightPx <= 0.0 { Val::Auto } else { Val::Px(node.HeightPx) };
+            if bevy_node.height != expected_height {
+                bevy_node.height = expected_height;
+            }
+            
+            let expected_border_radius = BorderRadius::all(Val::Px(node.BorderRadiusPx));
+            if bevy_node.border_radius != expected_border_radius {
+                bevy_node.border_radius = expected_border_radius;
+            }
+            
+            let expected_overflow = if node.IsScrollable { Overflow::scroll_y() } else { Overflow::visible() };
+            if bevy_node.overflow != expected_overflow {
+                bevy_node.overflow = expected_overflow;
+            }
+            
+            let expected_scrollbar_width = if node.IsScrollable { node.ScrollbarWidth } else { 0.0 };
+            if bevy_node.scrollbar_width != expected_scrollbar_width {
+                bevy_node.scrollbar_width = expected_scrollbar_width;
+            }
 
-            bevy_node.display = if node.LayoutFlow == "Grid" || (node.LayoutFlow == "None" && node.IsGrid) { Display::Grid } else { Display::Flex };
-            bevy_node.grid_template_columns = if node.LayoutFlow == "Grid" || (node.LayoutFlow == "None" && node.IsGrid) { vec![RepeatedGridTrack::flex(node.GridColumns as u16, 1.0)] } else { Vec::new() };
-            bevy_node.grid_template_rows = if node.LayoutFlow == "Grid" || (node.LayoutFlow == "None" && node.IsGrid) { vec![RepeatedGridTrack::flex(node.GridRows as u16, 1.0)] } else { Vec::new() };
-            bevy_node.column_gap = if node.LayoutFlow == "Grid" || (node.LayoutFlow == "None" && node.IsGrid) { Val::Px(node.GridColumnGap) } else { Val::Auto };
-            bevy_node.row_gap = if node.LayoutFlow == "Grid" || (node.LayoutFlow == "None" && node.IsGrid) { Val::Px(node.GridRowGap) } else { Val::Auto };
+            let expected_display = if node.LayoutFlow == "Grid" || (node.LayoutFlow == "None" && node.IsGrid) { Display::Grid } else { Display::Flex };
+            if bevy_node.display != expected_display {
+                bevy_node.display = expected_display;
+            }
+            
+            let expected_columns = if node.LayoutFlow == "Grid" || (node.LayoutFlow == "None" && node.IsGrid) { vec![RepeatedGridTrack::flex(node.GridColumns as u16, 1.0)] } else { Vec::new() };
+            if bevy_node.grid_template_columns != expected_columns {
+                bevy_node.grid_template_columns = expected_columns;
+            }
+            
+            let expected_rows = if node.LayoutFlow == "Grid" || (node.LayoutFlow == "None" && node.IsGrid) { vec![RepeatedGridTrack::flex(node.GridRows as u16, 1.0)] } else { Vec::new() };
+            if bevy_node.grid_template_rows != expected_rows {
+                bevy_node.grid_template_rows = expected_rows;
+            }
+            
+            let expected_column_gap = if node.LayoutFlow == "Grid" || (node.LayoutFlow == "None" && node.IsGrid) { Val::Px(node.GridColumnGap) } else { Val::Auto };
+            if bevy_node.column_gap != expected_column_gap {
+                bevy_node.column_gap = expected_column_gap;
+            }
+            
+            let expected_row_gap = if node.LayoutFlow == "Grid" || (node.LayoutFlow == "None" && node.IsGrid) { Val::Px(node.GridRowGap) } else { Val::Auto };
+            if bevy_node.row_gap != expected_row_gap {
+                bevy_node.row_gap = expected_row_gap;
+            }
+            
+            let expected_border = UiRect::all(Val::Px(node.BorderWidthPx));
+            if bevy_node.border != expected_border {
+                bevy_node.border = expected_border;
+            }
 
-            bg_color.0 = node.BackgroundColor;
-            transform.rotation = Rot2::radians(-node.Rotation);
+            let expected_align = if node.HasText { AlignItems::Center } else { AlignItems::default() };
+            if bevy_node.align_items != expected_align {
+                bevy_node.align_items = expected_align;
+            }
+            
+            let expected_justify = if node.HasText { JustifyContent::Center } else { JustifyContent::default() };
+            if bevy_node.justify_content != expected_justify {
+                bevy_node.justify_content = expected_justify;
+            }
+
+            if bg_color.0 != node.BackgroundColor {
+                bg_color.0 = node.BackgroundColor;
+            }
+            
+            let expected_rotation = Rot2::radians(-node.Rotation);
+            if transform.rotation != expected_rotation {
+                transform.rotation = expected_rotation;
+            }
         }
 
         if node.IsHidden {
@@ -129,10 +269,21 @@ pub fn sync_vuis_node_changes(
             if let Ok(children) = query_children.get(entity) {
                 for child in children.iter() {
                     if query_text.get(child).is_ok() {
+                        let offset_y = -0.1 * node.FontSizePx;
+                        commands.entity(child).insert(UiTransform::from_translation(Val2::new(
+                            Val::Px(0.0),
+                            Val::Px(offset_y),
+                        )));
+
                         if node.HasShadow {
+                            let mut shadow_color = node.ShadowColor.to_srgba();
+                            shadow_color.alpha *= 0.4;
                             commands.entity(child).insert(TextShadow {
-                                offset: Vec2::new(node.ShadowOffsetX, node.ShadowOffsetY),
-                                color: node.ShadowColor,
+                                offset: Vec2::new(
+                                    (node.ShadowOffsetX * 0.15).clamp(-1.0, 1.0),
+                                    (node.ShadowOffsetY * 0.15).clamp(-1.0, 1.0),
+                                ),
+                                color: Color::Srgba(shadow_color),
                             });
                         } else {
                             commands.entity(child).remove::<TextShadow>();
@@ -156,13 +307,7 @@ pub fn sync_vuis_node_changes(
         }
 
         if node.BorderWidthPx > 0.0 {
-            commands.entity(entity).insert((
-                Node {
-                    border: UiRect::all(Val::Px(node.BorderWidthPx)),
-                    ..default()
-                },
-                BorderColor::all(node.BorderColor),
-            ));
+            commands.entity(entity).insert(BorderColor::all(node.BorderColor));
         } else {
             commands.entity(entity).remove::<BorderColor>();
         }
@@ -172,32 +317,46 @@ pub fn sync_vuis_node_changes(
 pub fn placeholder_update_system(
     mut commands: Commands,
     query_nodes: Query<(Entity, &VuisNode, Option<&Children>)>,
-    query_main_text: Query<&Text, Without<PlaceholderTextComponent>>,
+    query_main_text: Query<(&Text, &TextFont), Without<PlaceholderTextComponent>>,
     query_placeholder: Query<&PlaceholderTextComponent>,
     mut query_placeholder_mut: Query<(&mut Text, &mut Visibility, &PlaceholderTextComponent)>,
+    input_focus: Option<Res<bevy::input_focus::InputFocus>>,
 ) {
     for (node_entity, vnode, children_opt) in query_nodes.iter() {
         if !vnode.IsInput { continue; }
         
         let mut has_placeholder = false;
+        let mut main_text_font = None;
         
         if let Some(children) = children_opt {
             for child in children.iter() {
                 if query_placeholder.get(child).is_ok() {
                     has_placeholder = true;
+                } else if let Ok((_, text_font)) = query_main_text.get(child) {
+                    main_text_font = Some(text_font.clone());
                 }
             }
         }
         
         if !has_placeholder {
+            let font = if let Some(ref m_font) = main_text_font {
+                m_font.font.clone()
+            } else {
+                FontSource::default()
+            };
+
             let p_ent = commands.spawn((
                 Text::new(vnode.Placeholder.clone()),
-                TextFont { font_size: FontSize::Px(vnode.FontSizePx), ..default() },
+                TextFont {
+                    font,
+                    font_size: FontSize::Px(vnode.FontSizePx),
+                    ..default()
+                },
                 TextColor(Color::srgba(0.5, 0.5, 0.5, 0.8)),
                 Node {
                     position_type: PositionType::Absolute,
-                    left: Val::Px(0.0),
-                    top: Val::Px(0.0),
+                    left: Val::Px(8.0),
+                    align_self: AlignSelf::Center,
                     ..default()
                 },
                 PlaceholderTextComponent(node_entity),
@@ -208,24 +367,45 @@ pub fn placeholder_update_system(
 
     for (mut p_text, mut p_vis, p_comp) in query_placeholder_mut.iter_mut() {
         if let Ok((_, vnode, children_opt)) = query_nodes.get(p_comp.0) {
-            p_text.0 = vnode.Placeholder.clone();
+            if p_text.0 != vnode.Placeholder {
+                p_text.0 = vnode.Placeholder.clone();
+            }
+            
+            let is_focused = if let Some(ref focus) = input_focus {
+                if let Some(focused_entity) = focus.get() {
+                    if focused_entity == p_comp.0 {
+                        true
+                    } else if let Some(children) = children_opt {
+                        children.contains(&focused_entity)
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+
             let mut has_main_text = false;
             if let Some(children) = children_opt {
                 for child in children.iter() {
-                    if query_main_text.get(child).is_ok() {
-                        if let Ok(text) = query_main_text.get(child) {
-                            if !text.0.is_empty() {
-                                has_main_text = true;
-                            }
+                    if let Ok((text, _)) = query_main_text.get(child) {
+                        if !text.0.is_empty() {
+                            has_main_text = true;
                         }
                     }
                 }
             }
 
-            if has_main_text {
-                *p_vis = Visibility::Hidden;
+            let expected_vis = if has_main_text || is_focused {
+                Visibility::Hidden
             } else {
-                *p_vis = Visibility::Inherited;
+                Visibility::Inherited
+            };
+
+            if *p_vis != expected_vis {
+                *p_vis = expected_vis;
             }
         }
     }
@@ -237,21 +417,45 @@ pub fn text_styling_update_system(
 ) {
     for (node, children_opt) in query_nodes.iter() {
         if let Some(children) = children_opt {
+            let mut custom_font = None;
+            for child in children.iter() {
+                if let Ok((_, text_font)) = query_text_fonts.get(child) {
+                    if text_font.font != FontSource::default() {
+                        custom_font = Some(text_font.font.clone());
+                        break;
+                    }
+                }
+            }
+
             for child in children.iter() {
                 if let Ok((_, mut text_font)) = query_text_fonts.get_mut(child) {
-                    text_font.font_size = FontSize::Px(node.FontSizePx);
-                    
-                    text_font.weight = if node.IsBold {
+                    let expected_weight = if node.IsBold {
                         bevy::text::FontWeight::BOLD
                     } else {
                         bevy::text::FontWeight::default()
                     };
-
-                    text_font.style = if node.IsItalic {
+                    let expected_style = if node.IsItalic {
                         bevy::text::FontStyle::Italic
                     } else {
                         bevy::text::FontStyle::default()
                     };
+
+                    let expected_font = if let Some(ref font) = custom_font {
+                        font.clone()
+                    } else {
+                        FontSource::default()
+                    };
+
+                    if text_font.font_size != FontSize::Px(node.FontSizePx)
+                        || text_font.weight != expected_weight
+                        || text_font.style != expected_style
+                        || text_font.font != expected_font
+                    {
+                        text_font.font_size = FontSize::Px(node.FontSizePx);
+                        text_font.weight = expected_weight;
+                        text_font.style = expected_style;
+                        text_font.font = expected_font;
+                    }
                 }
             }
         }

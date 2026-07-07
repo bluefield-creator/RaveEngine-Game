@@ -38,6 +38,7 @@ impl VuisEngine {
                 position_type: PositionType::Absolute,
                 width: Val::Px(1920.0),
                 height: Val::Px(1080.0),
+                overflow: Overflow::visible(),
                 ..default()
             },
             UiTransform::IDENTITY,
@@ -77,6 +78,7 @@ impl VuisEngine {
                 height: if node.HeightPx <= 0.0 { Val::Auto } else { Val::Px(node.HeightPx) },
                 border_radius: BorderRadius::all(Val::Px(node.BorderRadiusPx)),
                 overflow: if node.IsScrollable { Overflow::scroll_y() } else { Overflow::visible() },
+                border: UiRect::all(Val::Px(node.BorderWidthPx)),
                 ..default()
             },
             BackgroundColor(node.BackgroundColor),
@@ -109,16 +111,11 @@ impl VuisEngine {
         }
 
         if node.BorderWidthPx > 0.0 {
-            commands.entity(entity).insert((
-                Node {
-                    border: UiRect::all(Val::Px(node.BorderWidthPx)),
-                    ..default()
-                },
-                BorderColor::all(node.BorderColor),
-            ));
+            commands.entity(entity).insert(BorderColor::all(node.BorderColor));
         }
 
         if node.HasText {
+            let offset_y = -0.1 * node.FontSizePx;
             let mut text_commands = commands.spawn((
                 Text::new(""),
                 TextColor(node.TextColor),
@@ -126,11 +123,20 @@ impl VuisEngine {
                     font_size: FontSize::Px(node.FontSizePx),
                     ..default()
                 },
+                UiTransform::from_translation(Val2::new(
+                    Val::Px(0.0),
+                    Val::Px(offset_y),
+                )),
             ));
             if node.HasShadow {
+                let mut shadow_color = node.ShadowColor.to_srgba();
+                shadow_color.alpha *= 0.4;
                 text_commands.insert(TextShadow {
-                    offset: Vec2::new(node.ShadowOffsetX, node.ShadowOffsetY),
-                    color: node.ShadowColor,
+                    offset: Vec2::new(
+                        (node.ShadowOffsetX * 0.15).clamp(-1.0, 1.0),
+                        (node.ShadowOffsetY * 0.15).clamp(-1.0, 1.0),
+                    ),
+                    color: Color::Srgba(shadow_color),
                 });
             }
             let text_entity = text_commands.id();
@@ -298,7 +304,7 @@ impl VuisEngine {
             ScrollbarBorderRadius: data.ScrollbarBorderRadius.unwrap_or(4.0),
         };
 
-        let mut entity_commands = commands.spawn((
+        let mut EntityCommands = commands.spawn((
             node.clone(),
             VuisAnimationState::default(),
             Node {
@@ -328,19 +334,19 @@ impl VuisEngine {
         ));
 
         if node.IsScrollable {
-            entity_commands.insert(ScrollPosition::default());
+            EntityCommands.insert(ScrollPosition::default());
         }
 
         if node.IsHidden {
-            entity_commands.insert(Visibility::Hidden);
+            EntityCommands.insert(Visibility::Hidden);
         }
 
-        if let Some(handle) = image_handle {
-            entity_commands.insert(ImageNode::new(handle));
+        if let Some(Handle) = image_handle {
+            EntityCommands.insert(ImageNode::new(Handle));
         }
 
         if node.HasShadow {
-            entity_commands.insert(BoxShadow::new(
+            EntityCommands.insert(BoxShadow::new(
                 node.ShadowColor,
                 Val::Px(node.ShadowOffsetX),
                 Val::Px(node.ShadowOffsetY),
@@ -350,7 +356,7 @@ impl VuisEngine {
         }
 
         if node.IsGradient {
-            entity_commands.insert(BackgroundGradient::from(LinearGradient {
+            EntityCommands.insert(BackgroundGradient::from(LinearGradient {
                 color_space: InterpolationColorSpace::Oklaba,
                 angle: 0.0,
                 stops: vec![
@@ -361,42 +367,52 @@ impl VuisEngine {
         }
 
         if node.BorderWidthPx > 0.0 {
-            entity_commands.insert(BorderColor::all(node.BorderColor));
+            EntityCommands.insert(BorderColor::all(node.BorderColor));
         }
 
-        let spawned_entity = entity_commands.id();
+        let SpawnedEntity = EntityCommands.id();
 
         if node.HasText {
-            let mut text_commands = commands.spawn((
+            let offset_y = -0.1 * node.FontSizePx;
+            let mut TextCommands = commands.spawn((
                 Text::new(data.TextContent.clone().unwrap_or_default()),
                 TextColor(node.TextColor),
+                UiTransform::from_translation(Val2::new(
+                    Val::Px(0.0),
+                    Val::Px(offset_y),
+                )),
             ));
 
-            if let Some(handle) = font_handle {
-                text_commands.insert(TextFont { font: FontSource::Handle(handle), font_size: FontSize::Px(node.FontSizePx), ..default() });
+            if let Some(Handle) = font_handle {
+                TextCommands.insert(TextFont { font: FontSource::Handle(Handle), font_size: FontSize::Px(node.FontSizePx), ..default() });
             } else {
-                text_commands.insert(TextFont { font_size: FontSize::Px(node.FontSizePx), ..default() });
+                TextCommands.insert(TextFont { font_size: FontSize::Px(node.FontSizePx), ..default() });
             }
 
             if node.IsInput {
-                text_commands.insert(bevy::text::EditableText::default());
+                TextCommands.insert(bevy::text::EditableText::default());
             }
 
             if node.HasShadow {
-                text_commands.insert(TextShadow {
-                    offset: Vec2::new(node.ShadowOffsetX, node.ShadowOffsetY),
-                    color: node.ShadowColor,
+                let mut shadow_color = node.ShadowColor.to_srgba();
+                shadow_color.alpha *= 0.4;
+                TextCommands.insert(TextShadow {
+                    offset: Vec2::new(
+                        (node.ShadowOffsetX * 0.15).clamp(-1.0, 1.0),
+                        (node.ShadowOffsetY * 0.15).clamp(-1.0, 1.0),
+                    ),
+                    color: Color::Srgba(shadow_color),
                 });
             }
 
-            let text_entity = text_commands.id();
-            commands.entity(spawned_entity).add_child(text_entity);
+            let TextEntity = TextCommands.id();
+            commands.entity(SpawnedEntity).add_child(TextEntity);
         }
 
-        commands.entity(parent_entity).add_child(spawned_entity);
+        commands.entity(parent_entity).add_child(SpawnedEntity);
 
-        for child_data in &data.Children {
-            self.spawn_data_tree(commands, images, fonts, spawned_entity, child_data);
+        for ChildData in &data.Children {
+            self.spawn_data_tree(commands, images, fonts, SpawnedEntity, ChildData);
         }
     }
 }
