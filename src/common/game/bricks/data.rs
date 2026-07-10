@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy::pbr::ExtendedMaterial;
-use crate::common::bricks::components::{Brick, BrickShape, BrickShapeComponent};
-use crate::common::bricks::studs::{StudsAssets, StudsExtension};
+use crate::common::game::bricks::components::{Brick, BrickShape, BrickShapeComponent};
+use crate::common::game::bricks::studs::{StudsAssets, StudsExtension};
 
 #[derive(Resource, Default)]
 pub struct BrickSpawnerCount {
@@ -51,8 +51,8 @@ pub fn spawn_brick(
         Transform::from_translation(spawn_pos),
         Brick,
         BrickShapeComponent { shape },
-        crate::common::bricks::components::BrickPhysics::default(),
-        crate::common::bricks::components::BrickColor { color: Color::srgb(0.84, 0.24, 0.16) },
+        crate::common::game::bricks::components::BrickPhysics::default(),
+        crate::common::game::bricks::components::BrickColor { color: Color::srgb(0.84, 0.24, 0.16) },
         Pickable::default(),
         Name::new(format!("{}{}", name_prefix, current_index)),
     )).id()
@@ -68,7 +68,7 @@ pub struct BrickData {
     pub standard_material: Option<MeshMaterial3d<StandardMaterial>>,
     pub studs_material: Option<MeshMaterial3d<ExtendedMaterial<StandardMaterial, StudsExtension>>>,
     pub parent: Option<Entity>,
-    pub physics: Option<crate::common::bricks::components::BrickPhysics>,
+    pub physics: Option<crate::common::game::bricks::components::BrickPhysics>,
 }
 
 impl BrickData {
@@ -94,7 +94,7 @@ pub fn spawn_from_data(
         spawned.insert((
             Brick,
             BrickShapeComponent { shape: data.shape },
-            crate::common::bricks::components::BrickColor::default(),
+            crate::common::game::bricks::components::BrickColor::default(),
         ));
     }
     if let Some(ref m) = data.mesh {
@@ -109,7 +109,7 @@ pub fn spawn_from_data(
     if let Some(phys) = data.physics {
         spawned.insert(phys);
     } else if data.is_brick {
-        spawned.insert(crate::common::bricks::components::BrickPhysics::default());
+        spawned.insert(crate::common::game::bricks::components::BrickPhysics::default());
     }
     let new_entity = spawned.id();
     if let Some(parent) = data.parent {
@@ -131,8 +131,8 @@ pub fn capture_brick_data(
         &GlobalTransform,
         Option<&Mesh3d>,
         Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
-        Option<&mut crate::common::bricks::components::BrickPhysics>,
+        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
+        Option<&mut crate::common::game::bricks::components::BrickPhysics>,
     ), Without<Camera3d>>,
 ) -> Option<BrickData> {
     if let Ok((_, transform, name, child_of_opt, _, brick_opt, shape_opt, _, mesh_opt, mat_opt, studs_mat_opt, phys_opt)) = query.get(entity) {

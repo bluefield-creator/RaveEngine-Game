@@ -2,8 +2,8 @@ use bevy::prelude::*;
 use lightyear::prelude::*;
 use lightyear::prelude::server::*;
 use avian3d::prelude::*;
-use crate::common::components::{Player, NetworkTransform};
-use crate::common::network::PlayerInputMessage;
+use crate::common::net::components::{Player, NetworkTransform};
+use crate::common::net::messages::PlayerInputMessage;
 
 pub fn handle_new_client(
     trigger: On<Add, Connected>,

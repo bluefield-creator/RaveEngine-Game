@@ -5,11 +5,11 @@ pub struct CopiedEntityBuffer {
     pub transform: Option<Transform>,
     pub mesh: Option<Mesh3d>,
     pub material: Option<MeshMaterial3d<StandardMaterial>>,
-    pub studs_material: Option<MeshMaterial3d<bevy::pbr::ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
+    pub studs_material: Option<MeshMaterial3d<bevy::pbr::ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
     pub name: Option<String>,
     pub is_brick: bool,
-    pub shape: crate::common::bricks::components::BrickShape,
-    pub physics: Option<crate::common::bricks::components::BrickPhysics>,
+    pub shape: crate::common::game::bricks::components::BrickShape,
+    pub physics: Option<crate::common::game::bricks::components::BrickPhysics>,
 }
 
 #[derive(Resource, Default)]

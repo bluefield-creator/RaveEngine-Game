@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_egui::egui;
 use bevy::pbr::ExtendedMaterial;
-use crate::common::bricks::components::Brick;
+use crate::common::game::bricks::components::Brick;
 
 fn draw_coord_edit(
     ui: &mut egui::Ui,
@@ -42,16 +42,16 @@ pub fn draw_properties(
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,
-        Option<&mut crate::common::bricks::components::BrickShapeComponent>,
+        Option<&mut crate::common::game::bricks::components::BrickShapeComponent>,
         &GlobalTransform,
         Option<&Mesh3d>,
         Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
-        Option<&mut crate::common::bricks::components::BrickPhysics>,
+        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
+        Option<&mut crate::common::game::bricks::components::BrickPhysics>,
     ), Without<Camera3d>>,
-    brick_colors: &mut Query<&mut crate::common::bricks::components::BrickColor>,
+    brick_colors: &mut Query<&mut crate::common::game::bricks::components::BrickColor>,
     materials: &mut Assets<StandardMaterial>,
-    studs_materials: &mut Assets<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>,
+    studs_materials: &mut Assets<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>,
 ) {
     if selected_entities.is_empty() {
         return;
@@ -109,7 +109,7 @@ pub fn draw_properties(
     let first_pos = first_transform_val.translation / 0.28;
     let first_scale = first_transform_val.scale;
     let first_rot = first_transform_val.rotation;
-    let first_shape = first_shape_opt_val.unwrap_or(crate::common::bricks::components::BrickShape::Block);
+    let first_shape = first_shape_opt_val.unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
 
     let mut all_names_same = true;
     let mut all_pos_x_same = true;
@@ -140,7 +140,7 @@ pub fn draw_properties(
             let rot = transform.rotation;
             if rot.dot(first_rot).abs() < 0.999 { all_rot_same = false; }
             
-            let shape = shape_opt.map(|s| s.shape).unwrap_or(crate::common::bricks::components::BrickShape::Block);
+            let shape = shape_opt.map(|s| s.shape).unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
             if shape != first_shape { all_shape_same = false; }
             
             let mut color = Color::srgb(0.84, 0.24, 0.16);
@@ -339,10 +339,10 @@ pub fn draw_properties(
                             egui::ComboBox::from_id_salt("brick_shape_select")
                                 .selected_text(combo_label)
                                 .show_ui(ui, |ui| {
-                                    if ui.selectable_value(&mut current_shape, crate::common::bricks::components::BrickShape::Block, "Block").clicked() {
+                                    if ui.selectable_value(&mut current_shape, crate::common::game::bricks::components::BrickShape::Block, "Block").clicked() {
                                         selection_changed = true;
                                     }
-                                    if ui.selectable_value(&mut current_shape, crate::common::bricks::components::BrickShape::Sphere, "Sphere").clicked() {
+                                    if ui.selectable_value(&mut current_shape, crate::common::game::bricks::components::BrickShape::Sphere, "Sphere").clicked() {
                                         selection_changed = true;
                                     }
                                 });

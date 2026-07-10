@@ -75,7 +75,7 @@ pub fn manage_winit_performance(
     selection: Option<Res<crate::studio::tools::Selection>>,
     drag_state: Option<Res<crate::studio::tools::DragState>>,
     part_drag_state: Option<Res<crate::studio::tools::PartDragState>>,
-    physics_state: Option<Res<crate::common::physics::PhysicsSimulationState>>,
+    physics_state: Option<Res<crate::common::game::physics::PhysicsSimulationState>>,
     camera_query: Query<(Entity, &Transform), (With<Camera3d>, With<FreeCamera>)>,
     windows: Query<&Window, With<PrimaryWindow>>,
     time: Res<Time>,
@@ -131,7 +131,7 @@ pub fn manage_winit_performance(
         }
     }
     if let Some(ps) = physics_state {
-        if *ps == crate::common::physics::PhysicsSimulationState::Running {
+        if *ps == crate::common::game::physics::PhysicsSimulationState::Running {
             is_active = true;
         }
     }

@@ -1,6 +1,8 @@
 pub mod camera;
 pub mod controller;
 pub mod loader;
+pub mod animation;
+pub mod model;
 
 use bevy::prelude::*;
 
@@ -29,9 +31,19 @@ pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            Update,
-            camera::update_camera,
-        );
+        app.init_resource::<animation::PlayerAnimationGraphLoaded>()
+            .init_resource::<animation::AvatarAnimationsRetargeted>()
+            .add_systems(
+                Update,
+                (
+                    camera::update_camera,
+                    animation::add_missing_animation_players,
+                    animation::build_avatar_animation_graph,
+                    animation::retarget_avatar_clips,
+                    animation::init_player_animations,
+                    animation::track_player_velocities,
+                    animation::animate_player,
+                ),
+            );
     }
 }

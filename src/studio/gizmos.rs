@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy::picking::mesh_picking::ray_cast::SimplifiedMesh;
-use crate::common::bricks::components::Brick;
+use crate::common::game::bricks::components::Brick;
 use crate::studio::tools::{Selection, ToolState, HoverState, DragState};
 
 #[derive(Component)]
@@ -14,7 +14,7 @@ pub fn update_gizmos(
     mut commands: Commands,
     selection: Res<Selection>,
     tool_state: Res<State<ToolState>>,
-    physics_state: Res<crate::common::physics::PhysicsSimulationState>,
+    physics_state: Res<crate::common::game::physics::PhysicsSimulationState>,
     gizmos: Query<Entity, With<ToolGizmo>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -27,7 +27,7 @@ pub fn update_gizmos(
         commands.entity(entity).despawn();
     }
 
-    if *physics_state == crate::common::physics::PhysicsSimulationState::Running {
+    if *physics_state == crate::common::game::physics::PhysicsSimulationState::Running {
         return;
     }
 
@@ -95,7 +95,7 @@ pub fn update_gizmos(
 
 pub fn sync_gizmos(
     mut gizmos: Query<(Entity, &mut Transform, &ToolGizmo)>,
-    bricks: Query<(&GlobalTransform, Option<&crate::common::bricks::components::BrickShapeComponent>), (With<Brick>, Without<ToolGizmo>)>,
+    bricks: Query<(&GlobalTransform, Option<&crate::common::game::bricks::components::BrickShapeComponent>), (With<Brick>, Without<ToolGizmo>)>,
     camera_query: Query<&GlobalTransform, (With<Camera3d>, Without<ToolGizmo>, Without<Brick>)>,
     hover_state: Res<HoverState>,
     drag_state: Res<DragState>,
@@ -104,10 +104,10 @@ pub fn sync_gizmos(
 
     for (entity, mut transform, gizmo) in &mut gizmos {
         if let Ok((brick_global, shape_opt)) = bricks.get(gizmo.target) {
-            let shape = shape_opt.map(|s| s.shape).unwrap_or(crate::common::bricks::components::BrickShape::Block);
+            let shape = shape_opt.map(|s| s.shape).unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
             let base_extents = match shape {
-                crate::common::bricks::components::BrickShape::Block => Vec3::new(2.0 * 0.28, 0.5 * 0.28, 1.0 * 0.28),
-                crate::common::bricks::components::BrickShape::Sphere => Vec3::splat(1.0 * 0.28),
+                crate::common::game::bricks::components::BrickShape::Block => Vec3::new(2.0 * 0.28, 0.5 * 0.28, 1.0 * 0.28),
+                crate::common::game::bricks::components::BrickShape::Sphere => Vec3::splat(1.0 * 0.28),
             };
             let global_scale = brick_global.scale();
             let scaled_extents = base_extents * global_scale;
@@ -148,15 +148,15 @@ pub fn sync_gizmos(
 
 fn draw_outline_recursive(
     entity: Entity,
-    bricks: &Query<(&GlobalTransform, Option<&crate::common::bricks::components::BrickShapeComponent>, Option<&Children>), With<Brick>>,
+    bricks: &Query<(&GlobalTransform, Option<&crate::common::game::bricks::components::BrickShapeComponent>, Option<&Children>), With<Brick>>,
     gizmos: &mut Gizmos,
 ) {
     if let Ok((global_transform, shape_opt, children_opt)) = bricks.get(entity) {
         let (scale, rotation, translation) = global_transform.to_scale_rotation_translation();
-        let shape = shape_opt.map(|s| s.shape).unwrap_or(crate::common::bricks::components::BrickShape::Block);
+        let shape = shape_opt.map(|s| s.shape).unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
 
         match shape {
-            crate::common::bricks::components::BrickShape::Block => {
+            crate::common::game::bricks::components::BrickShape::Block => {
                 let outline_scale = scale * Vec3::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28);
                 let outline_transform = Transform {
                     translation,
@@ -165,7 +165,7 @@ fn draw_outline_recursive(
                 };
                 gizmos.cube(outline_transform, Color::srgb(1.0, 1.0, 1.0));
             }
-            crate::common::bricks::components::BrickShape::Sphere => {
+            crate::common::game::bricks::components::BrickShape::Sphere => {
                 let base_radius = 1.0 * 0.28;
                 
                 let half_size_xy = Vec2::new(scale.x * base_radius, scale.y * base_radius);
@@ -192,11 +192,11 @@ fn draw_outline_recursive(
 
 pub fn draw_selection_outline(
     selection: Res<Selection>,
-    physics_state: Res<crate::common::physics::PhysicsSimulationState>,
-    bricks: Query<(&GlobalTransform, Option<&crate::common::bricks::components::BrickShapeComponent>, Option<&Children>), With<Brick>>,
+    physics_state: Res<crate::common::game::physics::PhysicsSimulationState>,
+    bricks: Query<(&GlobalTransform, Option<&crate::common::game::bricks::components::BrickShapeComponent>, Option<&Children>), With<Brick>>,
     mut gizmos: Gizmos,
 ) {
-    if *physics_state == crate::common::physics::PhysicsSimulationState::Running {
+    if *physics_state == crate::common::game::physics::PhysicsSimulationState::Running {
         return;
     }
     for &selected_entity in &selection.entities {

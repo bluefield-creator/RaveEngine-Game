@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_egui::egui;
 use crate::studio::tools::Selection;
-use crate::common::bricks::components::Brick;
+use crate::common::game::bricks::components::Brick;
 use crate::studio::ui::CopiedEntityBuffer;
 use crate::studio::ui::HierarchyDraggedEntity;
 use crate::studio::ui::panels::context_menu::draw_entity_context_menu;
@@ -16,12 +16,12 @@ fn is_managed_entity(
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,
-        Option<&mut crate::common::bricks::components::BrickShapeComponent>,
+        Option<&mut crate::common::game::bricks::components::BrickShapeComponent>,
         &GlobalTransform,
         Option<&Mesh3d>,
         Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
-        Option<&mut crate::common::bricks::components::BrickPhysics>,
+        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
+        Option<&mut crate::common::game::bricks::components::BrickPhysics>,
     ), Without<Camera3d>>,
 ) -> bool {
     if let Ok((_, _, name, _, _, brick_opt, _, _, _, _, _, _)) = query.get(entity) {
@@ -41,12 +41,12 @@ fn is_descendant(
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,
-        Option<&mut crate::common::bricks::components::BrickShapeComponent>,
+        Option<&mut crate::common::game::bricks::components::BrickShapeComponent>,
         &GlobalTransform,
         Option<&Mesh3d>,
         Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
-        Option<&mut crate::common::bricks::components::BrickPhysics>,
+        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
+        Option<&mut crate::common::game::bricks::components::BrickPhysics>,
     ), Without<Camera3d>>,
 ) -> bool {
     let mut current = child;
@@ -77,12 +77,12 @@ fn draw_entity_node(
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,
-        Option<&mut crate::common::bricks::components::BrickShapeComponent>,
+        Option<&mut crate::common::game::bricks::components::BrickShapeComponent>,
         &GlobalTransform,
         Option<&Mesh3d>,
         Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
-        Option<&mut crate::common::bricks::components::BrickPhysics>,
+        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
+        Option<&mut crate::common::game::bricks::components::BrickPhysics>,
     ), Without<Camera3d>>,
     copiedbuffer: &mut CopiedEntityBuffer,
     dragged_entity: &mut ResMut<HierarchyDraggedEntity>,
@@ -306,12 +306,12 @@ pub fn draw_explorer(
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,
-        Option<&mut crate::common::bricks::components::BrickShapeComponent>,
+        Option<&mut crate::common::game::bricks::components::BrickShapeComponent>,
         &GlobalTransform,
         Option<&Mesh3d>,
         Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
-        Option<&mut crate::common::bricks::components::BrickPhysics>,
+        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
+        Option<&mut crate::common::game::bricks::components::BrickPhysics>,
     ), Without<Camera3d>>,
     copiedbuffer: &mut CopiedEntityBuffer,
     dragged_entity: &mut ResMut<HierarchyDraggedEntity>,

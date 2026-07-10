@@ -41,7 +41,7 @@ impl Plugin for StudioPlugin {
             .add_plugins(MeshPickingPlugin)
             .add_plugins(FreeCameraPlugin)
             .add_systems(Startup, (
-                camera::setup_studio.after(crate::common::bricks::studs::setup_studs),
+                camera::setup_studio.after(crate::common::game::bricks::studs::setup_studs),
                 ui::setup_ui_assets,
                 ui::configure_visuals,
             ))

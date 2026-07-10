@@ -28,7 +28,7 @@ impl Plugin for ServerPlugin {
         .add_plugins(server::ServerPlugins {
             tick_duration: Duration::from_secs_f64(1.0 / 60.0),
         })
-        .add_plugins(crate::common::network::ProtocolPlugin)
+        .add_plugins(crate::common::net::ProtocolPlugin)
         .add_systems(Startup, (setup_server, map::load_map))
         .add_systems(Update, player::handle_player_inputs)
         .add_systems(PostUpdate, player::sync_transforms_to_network)

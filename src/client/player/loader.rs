@@ -53,7 +53,6 @@ pub fn load_obj_file(
                 let mut normals = Vec::new();
                 for i in 0..tobj_mesh.normals.len() / 3 {
                     normals.push([
-                        tobj_mesh.normals[3 * i],
                         tobj_mesh.normals[3 * i + 1],
                         tobj_mesh.normals[3 * i + 2],
                     ]);
@@ -138,7 +137,7 @@ pub fn spawn_player(
         ))
         .id();
 
-    let avatar_scene = asset_server.load("content/game/character/Avatar.glb#Scene0");
+    let avatar_scene = asset_server.load("content/game/character/Legacy/Av.glb#Scene0");
 
     let child_id = commands
         .spawn((

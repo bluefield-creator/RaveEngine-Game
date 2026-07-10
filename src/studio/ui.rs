@@ -8,7 +8,7 @@ use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts, EguiTextureHandle};
 use crate::studio::tools::ToolState;
 use crate::studio::tools::Selection;
-use crate::common::bricks::components::Brick;
+use crate::common::game::bricks::components::Brick;
 use bevy::ecs::system::SystemParam;
 use bevy::pbr::ExtendedMaterial;
 
@@ -16,23 +16,23 @@ pub use assets::{StudioUiAssets, StudioUiTextureIds, setup_ui_assets};
 pub use indicator::{CameraSpeedIndicator, updatecameraspeedindicator, FovIndicator, update_camera_fov};
 pub use visuals::configure_visuals;
 pub use resources::{CopiedEntityBuffer, HierarchyDraggedEntity, SettingsWindow};
-pub use crate::common::performance::GraphicsSettings;
+pub use crate::common::core::performance::GraphicsSettings;
 
 #[derive(SystemParam)]
 pub struct UiResources<'w, 's> {
     pub commands: Commands<'w, 's>,
     pub meshes: ResMut<'w, Assets<Mesh>>,
     pub materials: ResMut<'w, Assets<StandardMaterial>>,
-    pub studs_materials: ResMut<'w, Assets<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
-    pub studs_assets: Res<'w, crate::common::bricks::studs::StudsAssets>,
-    pub count: ResMut<'w, crate::common::bricks::data::BrickSpawnerCount>,
+    pub studs_materials: ResMut<'w, Assets<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
+    pub studs_assets: Res<'w, crate::common::game::bricks::studs::StudsAssets>,
+    pub count: ResMut<'w, crate::common::game::bricks::data::BrickSpawnerCount>,
     pub snap_config: ResMut<'w, crate::studio::tools::SnapConfig>,
     pub history: ResMut<'w, crate::studio::tools::UndoRedoHistory>,
     pub action_writer: MessageWriter<'w, crate::studio::tools::UndoRedoAction>,
-    pub physics_state: Res<'w, crate::common::physics::PhysicsSimulationState>,
-    pub physics_action_writer: MessageWriter<'w, crate::common::physics::PhysicsSimulationAction>,
+    pub physics_state: Res<'w, crate::common::game::physics::PhysicsSimulationState>,
+    pub physics_action_writer: MessageWriter<'w, crate::common::game::physics::PhysicsSimulationAction>,
     pub gravity: Option<ResMut<'w, avian3d::prelude::Gravity>>,
-    pub brick_colors: Query<'w, 's, &'static mut crate::common::bricks::components::BrickColor>,
+    pub brick_colors: Query<'w, 's, &'static mut crate::common::game::bricks::components::BrickColor>,
 }
 
 #[derive(SystemParam)]
@@ -79,12 +79,12 @@ pub struct UiQueries<'w, 's> {
             Option<&'static ChildOf>,
             Option<&'static Children>,
             Option<&'static Brick>,
-            Option<&'static mut crate::common::bricks::components::BrickShapeComponent>,
+            Option<&'static mut crate::common::game::bricks::components::BrickShapeComponent>,
             &'static GlobalTransform,
             Option<&'static Mesh3d>,
             Option<&'static MeshMaterial3d<StandardMaterial>>,
-            Option<&'static MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
-            Option<&'static mut crate::common::bricks::components::BrickPhysics>,
+            Option<&'static MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
+            Option<&'static mut crate::common::game::bricks::components::BrickPhysics>,
         ),
         Without<Camera3d>,
     >,

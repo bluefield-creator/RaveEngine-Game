@@ -6,7 +6,7 @@ use bevy::prelude::*;
 pub struct VrtxBrick {
     pub name: String,
     pub transform: Transform,
-    pub shape: crate::common::bricks::components::BrickShape,
+    pub shape: crate::common::game::bricks::components::BrickShape,
     pub color: Color,
     pub physics_enabled: bool,
     pub bounciness: f32,
@@ -418,9 +418,9 @@ fn collect_bricks_recursive(
             };
 
             let shape = if shape_type == "Sphere" {
-                crate::common::bricks::components::BrickShape::Sphere
+                crate::common::game::bricks::components::BrickShape::Sphere
             } else {
-                crate::common::bricks::components::BrickShape::Block
+                crate::common::game::bricks::components::BrickShape::Block
             };
 
             let is_standard_brick = data.len() >= 15 && match &data[0] {
@@ -434,10 +434,10 @@ fn collect_bricks_recursive(
 
             let bevy_scale = if is_standard_brick {
                 match shape {
-                    crate::common::bricks::components::BrickShape::Block => {
+                    crate::common::game::bricks::components::BrickShape::Block => {
                         Vec3::new(local_scale.x / 4.0, local_scale.y / 1.0, local_scale.z / 2.0)
                     }
-                    crate::common::bricks::components::BrickShape::Sphere => {
+                    crate::common::game::bricks::components::BrickShape::Sphere => {
                         local_scale / 2.0
                     }
                 }
@@ -475,7 +475,7 @@ fn collect_bricks_recursive(
             let is_custom_node = match &data[0] {
                 GodotVariant::String(s) => {
                     s == "RemoteEvent" || s == "Terrain" || s == "NPC" || s == "Model" || s == "Weld" ||
-                    s == "Decal" || s == "Hinge" || s == "Label3D" || s == "Sound" || s == "Script" || s == "LocalScript"
+                    s == "Decal" || s == "Terrain" || s == "Hinge" || s == "Label3D" || s == "Sound" || s == "Script" || s == "LocalScript"
                 }
                 _ => false,
             };
@@ -608,8 +608,8 @@ impl VrtxFileState {
             writer.write_all(&brick.transform.scale.z.to_le_bytes())?;
 
             let shape_val = match brick.shape {
-                crate::common::bricks::components::BrickShape::Block => 0u8,
-                crate::common::bricks::components::BrickShape::Sphere => 1u8,
+                crate::common::game::bricks::components::BrickShape::Block => 0u8,
+                crate::common::game::bricks::components::BrickShape::Sphere => 1u8,
             };
             writer.write_all(&[shape_val])?;
 
@@ -771,8 +771,8 @@ impl VrtxFileState {
                 let mut shape_bytes = [0u8; 1];
                 reader.read_exact(&mut shape_bytes)?;
                 let shape = match shape_bytes[0] {
-                    0 => crate::common::bricks::components::BrickShape::Block,
-                    1 => crate::common::bricks::components::BrickShape::Sphere,
+                    0 => crate::common::game::bricks::components::BrickShape::Block,
+                    1 => crate::common::game::bricks::components::BrickShape::Sphere,
                     _ => {
                         error!("load_from_file: Invalid brick shape enum value");
                         return Err(std::io::Error::new(

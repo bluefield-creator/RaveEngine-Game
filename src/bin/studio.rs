@@ -19,7 +19,15 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(LogPlugin {
             filter: "info,wgpu=warn,naga=warn,wgpu_hal=warn,wgpu_core=warn,offset_allocator=off".to_string(),
-            custom_layer: RaveEngineLib::common::vuis::logging::vuis_custom_layer,
+            custom_layer: RaveEngineLib::common::ui::vuis::logging::vuis_custom_layer,
+            ..default()
+        }).set(bevy::render::RenderPlugin {
+            render_creation: bevy::render::settings::RenderCreation::Automatic(Box::new(
+                bevy::render::settings::WgpuSettings {
+                    disabled_features: Some(bevy::render::settings::WgpuFeatures::TEXTURE_BINDING_ARRAY),
+                    ..default()
+                }
+            )),
             ..default()
         }))
         .add_plugins(CommonPlugin)

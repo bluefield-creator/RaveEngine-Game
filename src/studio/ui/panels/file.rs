@@ -9,8 +9,8 @@ pub fn draw_file_window(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
-    studs_materials: &mut ResMut<Assets<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
-    studs_assets: &crate::common::bricks::studs::StudsAssets,
+    studs_materials: &mut ResMut<Assets<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
+    studs_assets: &crate::common::game::bricks::studs::StudsAssets,
     graphics_settings: &mut crate::studio::ui::GraphicsSettings,
     gravity: &mut Option<ResMut<avian3d::prelude::Gravity>>,
     camera_transform_query: &mut Query<&mut Transform, With<Camera3d>>,
@@ -20,13 +20,13 @@ pub fn draw_file_window(
         &mut Name,
         Option<&ChildOf>,
         Option<&Children>,
-        Option<&crate::common::bricks::components::Brick>,
-        Option<&mut crate::common::bricks::components::BrickShapeComponent>,
+        Option<&crate::common::game::bricks::components::Brick>,
+        Option<&mut crate::common::game::bricks::components::BrickShapeComponent>,
         &GlobalTransform,
         Option<&Mesh3d>,
         Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
-        Option<&mut crate::common::bricks::components::BrickPhysics>,
+        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
+        Option<&mut crate::common::game::bricks::components::BrickPhysics>,
     ), Without<Camera3d>>,
 ) {
     egui::Window::new("File")
@@ -61,7 +61,7 @@ pub fn draw_file_window(
                     let mut bricks_data = Vec::new();
                     for (_, transform, name, _, _, brick_opt, shape_opt, _, _, mat_opt, studs_mat_opt, phys_opt) in entities_query.iter() {
                         if brick_opt.is_some() {
-                            let shape = shape_opt.as_ref().map(|s| s.shape).unwrap_or(crate::common::bricks::components::BrickShape::Block);
+                            let shape = shape_opt.as_ref().map(|s| s.shape).unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
                             let mut current_color = Color::Srgba(Srgba::new(0.84, 0.24, 0.16, 1.0));
                             if let Some(studs_mat_handle) = studs_mat_opt {
                                 if let Some(mat) = studs_materials.get(&studs_mat_handle.0) {
@@ -77,7 +77,7 @@ pub fn draw_file_window(
                             } else {
                                 (true, 0.3)
                             };
-                            bricks_data.push(crate::common::vrtx::VrtxBrick {
+                            bricks_data.push(crate::common::core::vrtx::VrtxBrick {
                                 name: name.to_string(),
                                 transform: *transform,
                                 shape,
@@ -97,10 +97,10 @@ pub fn draw_file_window(
                     } else {
                         Transform::IDENTITY
                     };
-                    let state = crate::common::vrtx::VrtxFileState {
+                    let state = crate::common::core::vrtx::VrtxFileState {
                         version: 1,
                         gravity: gravity_val,
-                        settings: crate::common::vrtx::VrtxSettings {
+                        settings: crate::common::core::vrtx::VrtxSettings {
                             ssao: graphics_settings.ssao,
                             contact_shadows: graphics_settings.contact_shadows,
                             bloom: graphics_settings.bloom,
@@ -117,7 +117,7 @@ pub fn draw_file_window(
                         .set_directory(std::env::current_dir().unwrap_or_default())
                         .pick_file() {
                         let open_path_str = path.display().to_string();
-                        if let Ok(state) = crate::common::vrtx::VrtxFileState::load_from_file(&open_path_str) {
+                        if let Ok(state) = crate::common::core::vrtx::VrtxFileState::load_from_file(&open_path_str) {
                             onboarding_data.save_path = open_path_str;
                             for (entity, _, _, _, _, brick_opt, _, _, _, _, _, _) in entities_query.iter() {
                                 if brick_opt.is_some() {
@@ -135,10 +135,10 @@ pub fn draw_file_window(
                             }
                             for brick in state.bricks {
                                 let mesh_handle = match brick.shape {
-                                    crate::common::bricks::components::BrickShape::Block => {
+                                    crate::common::game::bricks::components::BrickShape::Block => {
                                         meshes.add(Cuboid::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28))
                                     }
-                                    crate::common::bricks::components::BrickShape::Sphere => {
+                                    crate::common::game::bricks::components::BrickShape::Sphere => {
                                         meshes.add(Sphere::new(1.0 * 0.28))
                                     }
                                 };
@@ -151,15 +151,15 @@ pub fn draw_file_window(
                                             reflectance: 0.1,
                                             ..default()
                                         },
-                                        extension: crate::common::bricks::studs::StudsExtension {
+                                        extension: crate::common::game::bricks::studs::StudsExtension {
                                             stud_texture: studs_assets.stud.clone(),
                                             inlet_texture: studs_assets.inlet.clone(),
                                         },
                                     })),
                                     brick.transform,
-                                    crate::common::bricks::components::Brick,
-                                    crate::common::bricks::components::BrickShapeComponent { shape: brick.shape },
-                                    crate::common::bricks::components::BrickPhysics {
+                                    crate::common::game::bricks::components::Brick,
+                                    crate::common::game::bricks::components::BrickShapeComponent { shape: brick.shape },
+                                    crate::common::game::bricks::components::BrickPhysics {
                                         enabled: brick.physics_enabled,
                                         bounciness: brick.bounciness,
                                     },

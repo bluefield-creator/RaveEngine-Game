@@ -6,10 +6,13 @@ use bevy::light::ShadowFilteringMethod;
 use avian3d::prelude::Physics;
 use avian3d::schedule::PhysicsTime;
 use lightyear::prelude::*;
-use crate::common::bricks::components::{Brick, BrickShapeComponent};
-use crate::common::bricks::studs::{StudsAssets, StudsExtension};
-use crate::common::components::NetworkTransform;
-use crate::common::physics::PhysicsSimulationState;
+use crate::common::game::bricks::components::{Brick, BrickShapeComponent};
+use crate::common::game::bricks::studs::{StudsAssets, StudsExtension};
+use crate::common::net::components::NetworkTransform;
+use crate::common::game::physics::PhysicsSimulationState;
+
+#[derive(Resource)]
+pub struct ClientUkey(pub String);
 
 #[derive(Resource)]
 pub struct LocalClientId(pub u64);
@@ -42,7 +45,7 @@ pub struct ClientPlugin;
 impl Plugin for ClientPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(player::PlayerPlugin)
-            .add_plugins(crate::common::network::ProtocolPlugin)
+            .add_plugins(crate::common::net::ProtocolPlugin)
             .add_systems(Startup, (
                 setup_physics_initializer,
                 setup_player_assets,
@@ -56,6 +59,7 @@ impl Plugin for ClientPlugin {
                 attach_character_visuals.after(sync_local_player),
                 update_local_player_transparency,
                 cleanup_orphaned_visuals,
+                cleanup_duplicate_gltf_nodes,
             ))
             .add_observer(on_client_connected)
             .add_observer(on_player_added)
@@ -90,11 +94,13 @@ pub fn setup_player_assets(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
 ) {
-    let avatar_scene = asset_server.load("content/game/character/Avatar.glb#Scene0");
+    let avatar_scene = asset_server.load("content/game/character/Legacy/Av.glb#Scene0");
+    let gltf_handle = asset_server.load("content/game/character/Legacy/Av.glb");
 
     commands.insert_resource(player::loader::PlayerCharacterAssets {
         avatar_scene,
     });
+    commands.insert_resource(player::model::PlayerGltfHandle(gltf_handle));
 }
 
 fn initialize_client_physics(
@@ -115,7 +121,7 @@ fn sync_network_transforms_to_client(
     mut query: Query<(
         &NetworkTransform,
         &mut Transform,
-        Option<&crate::common::components::Player>,
+        Option<&crate::common::net::components::Player>,
         Option<&LocalPlayer>,
     ), Without<Replicate>>,
     camera_query: Query<&player::CameraSettings, With<player::PlayerCamera>>,
@@ -144,7 +150,7 @@ fn sync_network_transforms_to_client(
 fn send_player_inputs(
     keys: Res<ButtonInput<KeyCode>>,
     camera_query: Query<(&Transform, &player::CameraSettings), With<player::PlayerCamera>>,
-    mut sender_query: Query<&mut MessageSender<crate::common::network::PlayerInputMessage>>,
+    mut sender_query: Query<&mut MessageSender<crate::common::net::messages::PlayerInputMessage>>,
 ) {
     let Some((_camera_transform, camera_settings)) = camera_query.iter().next() else {
         trace!("send_player_inputs skipped: PlayerCamera query empty");
@@ -167,7 +173,7 @@ fn send_player_inputs(
             w, a, s, d, jump, camera_settings.yaw, in_first_person);
     }
 
-    let message = crate::common::network::PlayerInputMessage {
+    let message = crate::common::net::messages::PlayerInputMessage {
         w,
         a,
         s,
@@ -177,7 +183,7 @@ fn send_player_inputs(
         in_first_person,
     };
 
-    let _ = sender.send::<crate::common::network::GameChannel>(message);
+    let _ = sender.send::<crate::common::net::messages::GameChannel>(message);
 }
 
 fn on_client_connected(
@@ -196,7 +202,7 @@ fn on_client_connected(
 }
 
 fn on_player_added(
-    trigger: On<Add, crate::common::components::Player>,
+    trigger: On<Add, crate::common::net::components::Player>,
     mut commands: Commands,
     query: Query<Entity, Without<Replicate>>,
 ) {
@@ -209,7 +215,7 @@ fn on_player_added(
 }
 
 fn on_player_removed(
-    trigger: On<Remove, crate::common::components::Player>,
+    trigger: On<Remove, crate::common::net::components::Player>,
     mut commands: Commands,
 ) {
     debug!("CLIENT PLAYER REMOVED: {:?}, performing recursive despawn of children", trigger.entity);
@@ -221,7 +227,7 @@ fn on_player_removed(
 fn cleanup_orphaned_visuals(
     mut commands: Commands,
     query_visuals: Query<(Entity, &PlayerVisualChild)>,
-    query_parents: Query<Entity, With<crate::common::components::Player>>,
+    query_parents: Query<Entity, With<crate::common::net::components::Player>>,
 ) {
     for (entity, visual_child) in &query_visuals {
         if query_parents.get(visual_child.parent).is_err() {
@@ -236,7 +242,7 @@ fn cleanup_orphaned_visuals(
 fn attach_character_visuals(
     mut commands: Commands,
     character_assets: Option<Res<player::loader::PlayerCharacterAssets>>,
-    query: Query<(Entity, &crate::common::components::Player, Option<&LocalPlayer>), (With<NeedsCharacterVisuals>, Without<CharacterVisualsSpawned>, Without<Replicate>)>,
+    query: Query<(Entity, &crate::common::net::components::Player, Option<&LocalPlayer>), (With<NeedsCharacterVisuals>, Without<CharacterVisualsSpawned>, Without<Replicate>)>,
     local_client_id: Option<Res<LocalClientId>>,
 ) {
     let Some(assets) = character_assets else {
@@ -272,7 +278,7 @@ fn attach_character_visuals(
 
 fn sync_local_player(
     mut commands: Commands,
-    query: Query<(Entity, &crate::common::components::Player), (Without<LocalPlayer>, Without<Replicate>)>,
+    query: Query<(Entity, &crate::common::net::components::Player), (Without<LocalPlayer>, Without<Replicate>)>,
     client_query: Query<&LocalId, With<lightyear::prelude::client::Client>>,
     startup_cameras: Query<Entity, With<StartupCamera>>,
 ) {
@@ -350,17 +356,17 @@ fn on_brick_added(
     studs_assets: Res<StudsAssets>,
     name_query: Query<&Name>,
     shape_query: Query<&BrickShapeComponent>,
-    color_query: Query<&crate::common::bricks::components::BrickColor>,
+    color_query: Query<&crate::common::game::bricks::components::BrickColor>,
 ) {
     let entity = trigger.entity;
     trace!("Brick added to scene: {:?}", entity);
-    let shape = shape_query.get(entity).map(|s| s.shape).unwrap_or(crate::common::bricks::components::BrickShape::Block);
+    let shape = shape_query.get(entity).map(|s| s.shape).unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
 
     let mesh_handle = match shape {
-        crate::common::bricks::components::BrickShape::Block => {
+        crate::common::game::bricks::components::BrickShape::Block => {
             meshes.add(Cuboid::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28))
         }
-        crate::common::bricks::components::BrickShape::Sphere => {
+        crate::common::game::bricks::components::BrickShape::Sphere => {
             meshes.add(Sphere::new(1.0 * 0.28))
         }
     };
@@ -414,9 +420,8 @@ fn load_vuis_ui(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
     mut fonts: ResMut<Assets<Font>>,
-    vuis_engine: Res<crate::common::vuis::api::VuisEngine>,
+    vuis_engine: Res<crate::common::ui::vuis::api::VuisEngine>,
 ) {
-    info!("VUIS: Loading main VUIS UI file on client startup...");
     let root = commands.spawn((
         Node {
             width: Val::Percent(100.0),
@@ -427,30 +432,22 @@ fn load_vuis_ui(
     )).id();
 
     let path = "assets/content/game/ui/main.vuis";
-    match vuis_engine.load(&mut commands, &mut images, &mut fonts, root, path) {
-        Ok(entity) => {
-            info!("VUIS: Successfully loaded UI from {} with root entity: {:?}", path, entity);
-        }
-        Err(e) => {
-            warn!("VUIS: Could not load UI from {}: {}. Spawning fallback UI element.", path, e);
-            let fallback_node = crate::common::vuis::types::VuisNode {
-                Id: "FallbackRoot".to_string(),
-                BackgroundColor: Color::LinearRgba(LinearRgba::new(0.1, 0.1, 0.1, 0.95)),
-                WidthPx: 360.0,
-                HeightPx: 120.0,
-                PositionX: 40.0,
-                PositionY: 40.0,
-                HasText: true,
-                FontSizePx: 18.0,
-                TextColor: Color::WHITE,
-                BorderRadiusPx: 8.0,
-                ..default()
-            };
-            let entity = vuis_engine.add_element(&mut commands, root, fallback_node);
-            vuis_engine.edit_element(&mut commands, entity, |node| {
-                node.Id = "FallbackEdited".to_string();
-                node.WidthPx = 380.0;
-            });
+    let _ = vuis_engine.load(&mut commands, &mut images, &mut fonts, root, path);
+}
+
+fn cleanup_duplicate_gltf_nodes(
+    mut commands: Commands,
+    player_visuals: Query<(Entity, &Children), With<PlayerVisualChild>>,
+    name_query: Query<&Name>,
+) {
+    for (visual_entity, children) in &player_visuals {
+        for child in children.iter() {
+            if let Ok(name) = name_query.get(child) {
+                let name_str = name.as_str();
+                if name_str.contains(".001") || name_str.contains(".002") || name_str.contains(".003") || name_str.contains(".004") {
+                    commands.entity(child).despawn();
+                }
+            }
         }
     }
 }

@@ -66,10 +66,10 @@ fn handle_physics_simulation_actions(
         Entity,
         &mut Transform,
         &Name,
-        Option<&crate::common::bricks::components::BrickShapeComponent>,
-        Option<&crate::common::bricks::components::BrickPhysics>,
+        Option<&crate::common::game::bricks::components::BrickShapeComponent>,
+        Option<&crate::common::game::bricks::components::BrickPhysics>,
         Option<&TransformBackup>,
-    ), With<crate::common::bricks::components::Brick>>,
+    ), With<crate::common::game::bricks::components::Brick>>,
 ) {
     for action in actions.read() {
         match *action {
@@ -89,12 +89,12 @@ fn handle_physics_simulation_actions(
                             (true, 0.3)
                         };
 
-                        let shape = shape_opt.map(|s| s.shape).unwrap_or(crate::common::bricks::components::BrickShape::Block);
+                        let shape = shape_opt.map(|s| s.shape).unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
                         let collider = match shape {
-                            crate::common::bricks::components::BrickShape::Block => {
+                            crate::common::game::bricks::components::BrickShape::Block => {
                                 Collider::cuboid(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28)
                             }
-                            crate::common::bricks::components::BrickShape::Sphere => {
+                            crate::common::game::bricks::components::BrickShape::Sphere => {
                                 Collider::sphere(1.0 * 0.28)
                             }
                         };
@@ -174,12 +174,12 @@ fn handle_physics_simulation_actions(
                         (true, 0.3)
                     };
 
-                    let shape = shape_opt.map(|s| s.shape).unwrap_or(crate::common::bricks::components::BrickShape::Block);
+                    let shape = shape_opt.map(|s| s.shape).unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
                     let collider = match shape {
-                        crate::common::bricks::components::BrickShape::Block => {
+                        crate::common::game::bricks::components::BrickShape::Block => {
                             Collider::cuboid(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28)
                         }
-                        crate::common::bricks::components::BrickShape::Sphere => {
+                        crate::common::game::bricks::components::BrickShape::Sphere => {
                             Collider::sphere(1.0 * 0.28)
                         }
                     };
@@ -209,7 +209,7 @@ fn handle_physics_simulation_actions(
 fn handle_newly_spawned_bricks(
     mut commands: Commands,
     state: Res<PhysicsSimulationState>,
-    query: Query<(Entity, &Transform, &Name, Option<&crate::common::bricks::components::BrickShapeComponent>, Option<&crate::common::bricks::components::BrickPhysics>), (With<crate::common::bricks::components::Brick>, Without<TransformBackup>)>,
+    query: Query<(Entity, &Transform, &Name, Option<&crate::common::game::bricks::components::BrickShapeComponent>, Option<&crate::common::game::bricks::components::BrickPhysics>), (With<crate::common::game::bricks::components::Brick>, Without<TransformBackup>)>,
 ) {
     if *state == PhysicsSimulationState::Running {
         for (entity, transform, _name, shape_opt, phys_opt) in &query {
@@ -221,12 +221,12 @@ fn handle_newly_spawned_bricks(
                 (true, 0.3)
             };
 
-            let shape = shape_opt.map(|s| s.shape).unwrap_or(crate::common::bricks::components::BrickShape::Block);
+            let shape = shape_opt.map(|s| s.shape).unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
             let collider = match shape {
-                crate::common::bricks::components::BrickShape::Block => {
+                crate::common::game::bricks::components::BrickShape::Block => {
                     Collider::cuboid(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28)
                 }
-                crate::common::bricks::components::BrickShape::Sphere => {
+                crate::common::game::bricks::components::BrickShape::Sphere => {
                     Collider::sphere(1.0 * 0.28)
                 }
             };

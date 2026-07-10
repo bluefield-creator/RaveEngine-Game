@@ -37,7 +37,7 @@ fn main() {
     app.add_plugins(LogPlugin {
         level: bevy::log::Level::DEBUG,
         filter: "wgpu=error,bevy_render=error,bevy_ecs=warn,lightyear=debug,lightyear_udp=trace,lightyear_netcode=trace,naga=warn,wgpu_hal=warn,wgpu_core=warn,offset_allocator=off".to_string(),
-        custom_layer: RaveEngineLib::common::vuis::logging::vuis_custom_layer,
+        custom_layer: RaveEngineLib::common::ui::vuis::logging::vuis_custom_layer,
         ..default()
     });
     app.add_plugins(MinimalPlugins);

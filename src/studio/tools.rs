@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 use bevy::window::{CursorIcon, SystemCursorIcon};
 use bevy::picking::mesh_picking::ray_cast::{MeshRayCast, MeshRayCastSettings};
-use crate::common::bricks::components::Brick;
-use crate::common::bricks::data::{BrickData, spawn_from_data};
+use crate::common::game::bricks::components::Brick;
+use crate::common::game::bricks::data::{BrickData, spawn_from_data};
 use crate::studio::gizmos::ToolGizmo;
 
 #[derive(Default, States, Debug, Clone, Copy, Eq, PartialEq, Hash)]
@@ -207,7 +207,7 @@ pub fn handle_undo_redo_action(
         Option<&Brick>,
         Option<&Mesh3d>,
         Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<bevy::pbr::ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
+        Option<&MeshMaterial3d<bevy::pbr::ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
     )>,
 ) {
     for action in actions.read() {
@@ -479,9 +479,9 @@ pub fn handle_drag(
     camera_query: Query<(&Camera, &GlobalTransform)>,
     windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
     snap_config: Res<SnapConfig>,
-    physics_state: Res<crate::common::physics::PhysicsSimulationState>,
+    physics_state: Res<crate::common::game::physics::PhysicsSimulationState>,
 ) {
-    if *physics_state == crate::common::physics::PhysicsSimulationState::Running { return; }
+    if *physics_state == crate::common::game::physics::PhysicsSimulationState::Running { return; }
     if !drag_state.active { return; }
 
     let Some(gizmo_entity) = drag_state.gizmo_entity else { return };
@@ -639,9 +639,9 @@ pub fn handle_part_drag(
     windows: Query<&Window, With<bevy::window::PrimaryWindow>>,
     mut raycast: MeshRayCast,
     snap_config: Res<SnapConfig>,
-    physics_state: Res<crate::common::physics::PhysicsSimulationState>,
+    physics_state: Res<crate::common::game::physics::PhysicsSimulationState>,
 ) {
-    if *physics_state == crate::common::physics::PhysicsSimulationState::Running { return; }
+    if *physics_state == crate::common::game::physics::PhysicsSimulationState::Running { return; }
     if !part_drag_state.active { return; }
     let Some(dragged_entity) = part_drag_state.dragged_entity else { return };
 

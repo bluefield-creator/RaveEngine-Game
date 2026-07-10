@@ -1,9 +1,9 @@
 use bevy::prelude::*;
 use bevy_egui::egui;
 use crate::studio::tools::{ToolState, SnapConfig};
-use crate::common::bricks::data::spawn_brick;
-use crate::common::bricks::studs::StudsAssets;
-use crate::common::bricks::data::BrickSpawnerCount;
+use crate::common::game::bricks::data::spawn_brick;
+use crate::common::game::bricks::studs::StudsAssets;
+use crate::common::game::bricks::data::BrickSpawnerCount;
 use bevy::pbr::ExtendedMaterial;
 
 #[allow(deprecated)]
@@ -14,7 +14,7 @@ pub fn draw_top_bar(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
-    studs_materials: &mut ResMut<Assets<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
+    studs_materials: &mut ResMut<Assets<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
     studs_assets: &StudsAssets,
     count: &mut ResMut<BrickSpawnerCount>,
     snap_config: &mut ResMut<SnapConfig>,
@@ -26,8 +26,8 @@ pub fn draw_top_bar(
     camera_transform: Option<&Transform>,
     _action_writer: &mut MessageWriter<crate::studio::tools::UndoRedoAction>,
     history: &mut ResMut<crate::studio::tools::UndoRedoHistory>,
-    physics_state: crate::common::physics::PhysicsSimulationState,
-    physics_action_writer: &mut MessageWriter<crate::common::physics::PhysicsSimulationAction>,
+    physics_state: crate::common::game::physics::PhysicsSimulationState,
+    physics_action_writer: &mut MessageWriter<crate::common::game::physics::PhysicsSimulationAction>,
     settings_window: &mut ResMut<crate::studio::ui::SettingsWindow>,
     graphics_settings: &mut crate::studio::ui::GraphicsSettings,
     gravity: &mut Option<ResMut<avian3d::prelude::Gravity>>,
@@ -38,13 +38,13 @@ pub fn draw_top_bar(
         &mut Name,
         Option<&ChildOf>,
         Option<&Children>,
-        Option<&crate::common::bricks::components::Brick>,
-        Option<&mut crate::common::bricks::components::BrickShapeComponent>,
+        Option<&crate::common::game::bricks::components::Brick>,
+        Option<&mut crate::common::game::bricks::components::BrickShapeComponent>,
         &GlobalTransform,
         Option<&Mesh3d>,
         Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::bricks::studs::StudsExtension>>>,
-        Option<&mut crate::common::bricks::components::BrickPhysics>,
+        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
+        Option<&mut crate::common::game::bricks::components::BrickPhysics>,
     ), Without<Camera3d>>,
     onboarding_data: &mut crate::studio::ui::panels::onboarding::OnboardingData,
 ) {
@@ -84,7 +84,7 @@ pub fn draw_top_bar(
                             let mut bricks_data = Vec::new();
                             for (_, transform, name, _, _, brick_opt, shape_opt, _, _, mat_opt, studs_mat_opt, phys_opt) in entities_query.iter() {
                                 if brick_opt.is_some() {
-                                    let shape = shape_opt.as_ref().map(|s| s.shape).unwrap_or(crate::common::bricks::components::BrickShape::Block);
+                                    let shape = shape_opt.as_ref().map(|s| s.shape).unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
                                     let mut current_color = Color::Srgba(Srgba::new(0.84, 0.24, 0.16, 1.0));
                                     if let Some(studs_mat_handle) = studs_mat_opt {
                                         if let Some(mat) = studs_materials.get(&studs_mat_handle.0) {
@@ -100,7 +100,7 @@ pub fn draw_top_bar(
                                     } else {
                                         (true, 0.3)
                                     };
-                                    bricks_data.push(crate::common::vrtx::VrtxBrick {
+                                    bricks_data.push(crate::common::core::vrtx::VrtxBrick {
                                         name: name.to_string(),
                                         transform: *transform,
                                         shape,
@@ -120,10 +120,10 @@ pub fn draw_top_bar(
                             } else {
                                 Transform::IDENTITY
                             };
-                            let state = crate::common::vrtx::VrtxFileState {
+                            let state = crate::common::core::vrtx::VrtxFileState {
                                 version: 1,
                                 gravity: gravity_val,
-                                settings: crate::common::vrtx::VrtxSettings {
+                                settings: crate::common::core::vrtx::VrtxSettings {
                                     ssao: graphics_settings.ssao,
                                     contact_shadows: graphics_settings.contact_shadows,
                                     bloom: graphics_settings.bloom,
@@ -145,7 +145,7 @@ pub fn draw_top_bar(
                                 let mut bricks_data = Vec::new();
                                 for (_, transform, name, _, _, brick_opt, shape_opt, _, _, mat_opt, studs_mat_opt, phys_opt) in entities_query.iter() {
                                     if brick_opt.is_some() {
-                                        let shape = shape_opt.as_ref().map(|s| s.shape).unwrap_or(crate::common::bricks::components::BrickShape::Block);
+                                        let shape = shape_opt.as_ref().map(|s| s.shape).unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
                                         let mut current_color = Color::Srgba(Srgba::new(0.84, 0.24, 0.16, 1.0));
                                         if let Some(studs_mat_handle) = studs_mat_opt {
                                             if let Some(mat) = studs_materials.get(&studs_mat_handle.0) {
@@ -161,7 +161,7 @@ pub fn draw_top_bar(
                                         } else {
                                             (true, 0.3)
                                         };
-                                        bricks_data.push(crate::common::vrtx::VrtxBrick {
+                                        bricks_data.push(crate::common::core::vrtx::VrtxBrick {
                                             name: name.to_string(),
                                             transform: *transform,
                                             shape,
@@ -181,10 +181,10 @@ pub fn draw_top_bar(
                                 } else {
                                     Transform::IDENTITY
                                 };
-                                let state = crate::common::vrtx::VrtxFileState {
+                                let state = crate::common::core::vrtx::VrtxFileState {
                                     version: 1,
                                     gravity: gravity_val,
-                                    settings: crate::common::vrtx::VrtxSettings {
+                                    settings: crate::common::core::vrtx::VrtxSettings {
                                         ssao: graphics_settings.ssao,
                                         contact_shadows: graphics_settings.contact_shadows,
                                         bloom: graphics_settings.bloom,
@@ -202,7 +202,7 @@ pub fn draw_top_bar(
                                 .set_directory(std::env::current_dir().unwrap_or_default())
                                 .pick_file() {
                                 let open_path_str = path.display().to_string();
-                                if let Ok(state) = crate::common::vrtx::VrtxFileState::load_from_file(&open_path_str) {
+                                if let Ok(state) = crate::common::core::vrtx::VrtxFileState::load_from_file(&open_path_str) {
                                     onboarding_data.save_path = open_path_str;
                                     for (entity, _, _, _, _, brick_opt, _, _, _, _, _, _) in entities_query.iter() {
                                         if brick_opt.is_some() {
@@ -220,10 +220,10 @@ pub fn draw_top_bar(
                                     }
                                     for brick in state.bricks {
                                         let mesh_handle = match brick.shape {
-                                            crate::common::bricks::components::BrickShape::Block => {
+                                            crate::common::game::bricks::components::BrickShape::Block => {
                                                 meshes.add(Cuboid::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28))
                                             }
-                                            crate::common::bricks::components::BrickShape::Sphere => {
+                                            crate::common::game::bricks::components::BrickShape::Sphere => {
                                                 meshes.add(Sphere::new(1.0 * 0.28))
                                             }
                                         };
@@ -236,15 +236,15 @@ pub fn draw_top_bar(
                                                     reflectance: 0.1,
                                                     ..default()
                                                 },
-                                                extension: crate::common::bricks::studs::StudsExtension {
+                                                extension: crate::common::game::bricks::studs::StudsExtension {
                                                     stud_texture: studs_assets.stud.clone(),
                                                     inlet_texture: studs_assets.inlet.clone(),
                                                 },
                                             })),
                                             brick.transform,
-                                            crate::common::bricks::components::Brick,
-                                            crate::common::bricks::components::BrickShapeComponent { shape: brick.shape },
-                                            crate::common::bricks::components::BrickPhysics {
+                                            crate::common::game::bricks::components::Brick,
+                                            crate::common::game::bricks::components::BrickShapeComponent { shape: brick.shape },
+                                            crate::common::game::bricks::components::BrickPhysics {
                                                 enabled: brick.physics_enabled,
                                                 bounciness: brick.bounciness,
                                             },
@@ -338,17 +338,17 @@ pub fn draw_top_bar(
                 ui.add_space(8.0);
 
                 match physics_state {
-                    crate::common::physics::PhysicsSimulationState::Stopped => {
+                    crate::common::game::physics::PhysicsSimulationState::Stopped => {
                         if ribbonbutton(ui, None, "Play", false).clicked() {
-                            physics_action_writer.write(crate::common::physics::PhysicsSimulationAction::Play);
+                            physics_action_writer.write(crate::common::game::physics::PhysicsSimulationAction::Play);
                         }
                     }
-                    crate::common::physics::PhysicsSimulationState::Running => {
+                    crate::common::game::physics::PhysicsSimulationState::Running => {
                         if ribbonbutton(ui, None, "Stop", false).clicked() {
-                            physics_action_writer.write(crate::common::physics::PhysicsSimulationAction::Stop);
+                            physics_action_writer.write(crate::common::game::physics::PhysicsSimulationAction::Stop);
                         }
                         if ribbonbutton(ui, None, "Replay", false).clicked() {
-                            physics_action_writer.write(crate::common::physics::PhysicsSimulationAction::Replay);
+                            physics_action_writer.write(crate::common::game::physics::PhysicsSimulationAction::Replay);
                         }
                     }
                 }
@@ -411,7 +411,7 @@ pub fn draw_top_bar(
 
                         ui.set_min_width(150.0);
                         ui.horizontal(|ui| {
-                            ui.label("🔍"); //KEEP THIS!! It looks kinda good ngl
+                            ui.label("🔍"); 
                             let text_edit_res = ui.text_edit_singleline(&mut search_query);
                             if text_edit_res.changed() {
                                 ui.data_mut(|d| d.insert_temp(popup_id, search_query.clone()));
@@ -420,8 +420,8 @@ pub fn draw_top_bar(
                         ui.separator();
 
                         let items = [
-                            ("Block", crate::common::bricks::components::BrickShape::Block),
-                            ("Sphere", crate::common::bricks::components::BrickShape::Sphere),
+                            ("Block", crate::common::game::bricks::components::BrickShape::Block),
+                            ("Sphere", crate::common::game::bricks::components::BrickShape::Sphere),
                         ];
                         for (item, shape) in items {
                             if item.to_lowercase().contains(&search_query.to_lowercase()) {
@@ -451,8 +451,8 @@ pub fn draw_top_bar(
                                     if snap_config.enabled && snap_config.distance > 0.0 {
                                         let snap_interval = snap_config.distance * 0.28;
                                         let half_ext = match shape {
-                                            crate::common::bricks::components::BrickShape::Block => Vec3::new(2.0 * 0.28, 0.5 * 0.28, 1.0 * 0.28),
-                                            crate::common::bricks::components::BrickShape::Sphere => Vec3::new(1.0 * 0.28, 1.0 * 0.28, 1.0 * 0.28),
+                                            crate::common::game::bricks::components::BrickShape::Block => Vec3::new(2.0 * 0.28, 0.5 * 0.28, 1.0 * 0.28),
+                                            crate::common::game::bricks::components::BrickShape::Sphere => Vec3::new(1.0 * 0.28, 1.0 * 0.28, 1.0 * 0.28),
                                         };
                                         spawn_pos.x = ((spawn_pos.x - half_ext.x) / snap_interval).round() * snap_interval + half_ext.x;
                                         spawn_pos.z = ((spawn_pos.z - half_ext.z) / snap_interval).round() * snap_interval + half_ext.x;
@@ -465,16 +465,16 @@ pub fn draw_top_bar(
                                     let new_entity = spawn_brick(commands, meshes, studs_materials, studs_assets, count, spawn_pos, shape);
 
                                     let default_name = match shape {
-                                        crate::common::bricks::components::BrickShape::Block => format!("Part{}", count.count - 1),
-                                        crate::common::bricks::components::BrickShape::Sphere => format!("Sphere{}", count.count - 1),
+                                        crate::common::game::bricks::components::BrickShape::Block => format!("Part{}", count.count - 1),
+                                        crate::common::game::bricks::components::BrickShape::Sphere => format!("Sphere{}", count.count - 1),
                                     };
 
                                     let default_mesh = match shape {
-                                        crate::common::bricks::components::BrickShape::Block => Some(Mesh3d(meshes.add(Cuboid::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28)))),
-                                        crate::common::bricks::components::BrickShape::Sphere => Some(Mesh3d(meshes.add(Sphere::new(1.0 * 0.28)))),
+                                        crate::common::game::bricks::components::BrickShape::Block => Some(Mesh3d(meshes.add(Cuboid::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28)))),
+                                        crate::common::game::bricks::components::BrickShape::Sphere => Some(Mesh3d(meshes.add(Sphere::new(1.0 * 0.28)))),
                                     };
 
-                                    let data = crate::common::bricks::data::BrickData {
+                                    let data = crate::common::game::bricks::data::BrickData {
                                         transform: Transform::from_translation(spawn_pos),
                                         name: default_name,
                                         is_brick: true,
@@ -488,13 +488,13 @@ pub fn draw_top_bar(
                                                 reflectance: 0.1,
                                                 ..default()
                                             },
-                                            extension: crate::common::bricks::studs::StudsExtension {
+                                            extension: crate::common::game::bricks::studs::StudsExtension {
                                                 stud_texture: studs_assets.stud.clone(),
                                                 inlet_texture: studs_assets.inlet.clone(),
                                             },
                                         }))),
                                         parent: None,
-                                        physics: Some(crate::common::bricks::components::BrickPhysics::default()),
+                                        physics: Some(crate::common::game::bricks::components::BrickPhysics::default()),
                                     };
 
                                     history.push_command(crate::studio::tools::UndoCommand::Spawn {

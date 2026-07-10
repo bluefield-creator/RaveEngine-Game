@@ -4,7 +4,7 @@ use base64::prelude::*;
 use flate2::read::GzDecoder;
 use std::io::Read;
 use std::fs;
-use crate::common::vuis::types::{VuisNode, VuisAnimationState, VuisFile, VuisDataNode};
+use crate::common::ui::vuis::types::{VuisNode, VuisAnimationState, VuisFile, VuisDataNode};
 
 #[derive(Resource, Default)]
 pub struct VuisEngine;
@@ -18,21 +18,17 @@ impl VuisEngine {
         parent: Entity,
         file_path: &str,
     ) -> Result<Entity, String> {
-        info!("VUIS: Attempting to load file from path: {}", file_path);
         let compressed_data = fs::read(file_path)
             .map_err(|e| format!("Failed to read VUIS file from {}: {}", file_path, e))?;
 
-        debug!("VUIS: Successfully read {} bytes of compressed data", compressed_data.len());
         let mut decoder = GzDecoder::new(&compressed_data[..]);
         let mut json_string = String::new();
         decoder.read_to_string(&mut json_string)
             .map_err(|e| format!("Failed to decompress VUIS file: {}", e))?;
 
-        debug!("VUIS: Successfully decompressed into {} bytes of JSON", json_string.len());
         let file_data = serde_json::from_str::<VuisFile>(&json_string)
             .map_err(|e| format!("Failed to parse VUIS JSON structure: {}", e))?;
 
-        info!("VUIS: Parsed file version: {}, spawning root node tree", file_data.Version);
         let root_entity = commands.spawn((
             Node {
                 position_type: PositionType::Absolute,
@@ -42,7 +38,7 @@ impl VuisEngine {
                 ..default()
             },
             UiTransform::IDENTITY,
-            crate::common::vuis::types::VuisRootContainer {
+            crate::common::ui::vuis::types::VuisRootContainer {
                 design_width: 1920.0,
                 design_height: 1080.0,
             },
@@ -63,10 +59,6 @@ impl VuisEngine {
         parent: Entity,
         node: VuisNode,
     ) -> Entity {
-        info!(
-            "VUIS: API call to add element dynamically under parent: {:?}. ID: {}, Pos: ({}, {}), Size: ({}x{})",
-            parent, node.Id, node.PositionX, node.PositionY, node.WidthPx, node.HeightPx
-        );
         let entity = commands.spawn((
             node.clone(),
             VuisAnimationState::default(),
@@ -153,7 +145,6 @@ impl VuisEngine {
         entity: Entity,
         edit_fn: impl FnOnce(&mut VuisNode) + Send + 'static,
     ) -> bool {
-        info!("VUIS: API call to edit element: {:?}", entity);
         commands.queue(move |world: &mut World| {
             if let Some(mut component) = world.get_mut::<VuisNode>(entity) {
                 edit_fn(&mut component);
@@ -170,16 +161,12 @@ impl VuisEngine {
         parent_entity: Entity,
         data: &VuisDataNode,
     ) {
-        info!(
-            "VUIS: Spawning data tree node: {} under parent: {:?}. Pos: ({}, {}), Size: ({}x{}), HasText: {}, TextContent: {:?}",
-            data.Id, parent_entity, data.PositionX, data.PositionY, data.WidthPx, data.HeightPx, data.HasText, data.TextContent
-        );
         let mut image_data = Option::None;
         let mut image_handle = Option::None;
 
         if let Some(base64_img) = &data.Base64Image {
             if let Ok(decoded) = BASE64_STANDARD.decode(base64_img) {
-                if let Some(loaded_image) = crate::common::vuis::types::load_image_from_bytes(&decoded) {
+                if let Some(loaded_image) = crate::common::ui::vuis::types::load_image_from_bytes(&decoded) {
                     image_handle = Some(images.add(loaded_image));
                     image_data = Some(decoded);
                 }

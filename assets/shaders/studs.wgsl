@@ -20,9 +20,9 @@
 #endif
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(100) var stud_texture: texture_2d<f32>;
-@group(#{MATERIAL_BIND_GROUP}) @binding(101) var stud_sampler: sampler;
+@group(#{MATERIAL_BIND_GROUP}) @binding(101) var stud_texture_sampler: sampler;
 @group(#{MATERIAL_BIND_GROUP}) @binding(102) var inlet_texture: texture_2d<f32>;
-@group(#{MATERIAL_BIND_GROUP}) @binding(103) var inlet_sampler: sampler;
+@group(#{MATERIAL_BIND_GROUP}) @binding(103) var inlet_texture_sampler: sampler;
 
 @fragment
 fn fragment(
@@ -59,7 +59,7 @@ fn fragment(
     let fade = clamp((45.0 - dist) / 20.0, 0.0, 1.0);
 
     if (local_normal.y > 0.9) {
-        let stud_color = textureSample(stud_texture, stud_sampler, uv);
+        let stud_color = textureSample(stud_texture, stud_texture_sampler, uv);
         let shading = stud_color.rgb - vec3<f32>(0.5);
         let blended_rgb = pbr_input.material.base_color.rgb + shading * 0.5;
         let stud_alpha = stud_color.a * fade;
@@ -68,7 +68,7 @@ fn fragment(
             pbr_input.material.base_color.a
         );
     } else if (local_normal.y < -0.9) {
-        let inlet_color = textureSample(inlet_texture, inlet_sampler, uv);
+        let inlet_color = textureSample(inlet_texture, inlet_texture_sampler, uv);
         let shading = inlet_color.rgb - vec3<f32>(0.5);
         let blended_rgb = pbr_input.material.base_color.rgb + shading * 0.5;
         let inlet_alpha = inlet_color.a * fade;

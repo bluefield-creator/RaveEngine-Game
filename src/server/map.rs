@@ -1,9 +1,9 @@
 use bevy::prelude::*;
 use lightyear::prelude::Replicate;
 use avian3d::prelude::*;
-use crate::common::vrtx::VrtxFileState;
-use crate::common::bricks::components::{Brick, BrickShape, BrickShapeComponent, BrickPhysics, BrickColor};
-use crate::common::components::NetworkTransform;
+use crate::common::core::vrtx::VrtxFileState;
+use crate::common::game::bricks::components::{Brick, BrickShape, BrickShapeComponent, BrickPhysics, BrickColor};
+use crate::common::net::components::NetworkTransform;
 use crate::server::ServerSettings;
 
 pub fn load_fallback_map(
@@ -78,7 +78,7 @@ pub fn load_map(
     }
 }
 
-pub fn spawn_brick_entity(commands: &mut Commands, brick: crate::common::vrtx::VrtxBrick) {
+pub fn spawn_brick_entity(commands: &mut Commands, brick: crate::common::core::vrtx::VrtxBrick) {
     let collider = match brick.shape {
         BrickShape::Block => {
             Collider::cuboid(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28)
