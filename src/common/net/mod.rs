@@ -40,7 +40,8 @@ pub fn register_protocol(app: &mut App) {
         mode: ChannelMode::OrderedReliable(ReliableSettings::default()),
         ..default()
     })
-    .add_direction(lightyear::prelude::NetworkDirection::ClientToServer);
+    .add_direction(lightyear::prelude::NetworkDirection::ClientToServer)
+    .add_direction(lightyear::prelude::NetworkDirection::ServerToClient);
 
     app.component::<components::Player>().replicate();
     app.component::<components::NetworkTransform>().replicate();
@@ -52,4 +53,13 @@ pub fn register_protocol(app: &mut App) {
 
     app.register_message::<messages::PlayerInputMessage>()
         .add_direction(lightyear::prelude::NetworkDirection::ClientToServer);
+
+    app.register_message::<messages::HelloMessage>()
+        .add_direction(lightyear::prelude::NetworkDirection::ClientToServer);
+
+    app.register_message::<messages::KickMessage>()
+        .add_direction(lightyear::prelude::NetworkDirection::ServerToClient);
+
+    app.register_message::<messages::AuthSuccessMessage>()
+        .add_direction(lightyear::prelude::NetworkDirection::ServerToClient);
 }

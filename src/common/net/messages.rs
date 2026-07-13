@@ -13,3 +13,19 @@ pub struct PlayerInputMessage {
     pub yaw: f32,
     pub in_first_person: bool,
 }
+
+#[derive(Message, Serialize, Deserialize, Debug, Clone)]
+pub struct HelloMessage {
+    pub ukey: String,
+}
+
+#[derive(Message, Serialize, Deserialize, Debug, Clone)]
+pub struct KickMessage {
+    pub reason: String,
+}
+
+#[derive(Message, Serialize, Deserialize, Debug, Clone)]
+pub struct AuthSuccessMessage {
+    pub uid: i32,
+    pub username: String,
+}

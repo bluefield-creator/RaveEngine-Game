@@ -121,7 +121,7 @@ pub fn draw_file_window(
                             onboarding_data.save_path = open_path_str;
                             for (entity, _, _, _, _, brick_opt, _, _, _, _, _, _) in entities_query.iter() {
                                 if brick_opt.is_some() {
-                                    commands.entity(entity).despawn();
+                                    commands.entity(entity).try_despawn();
                                 }
                             }
                             graphics_settings.ssao = state.settings.ssao;

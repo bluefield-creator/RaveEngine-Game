@@ -49,13 +49,13 @@ pub fn setup_studio(
     ));
 
     let ssao_val = if graphics_settings.ssao { Some(ScreenSpaceAmbientOcclusion::default()) } else { None };
-    let contact_val = if graphics_settings.contact_shadows { Some(ContactShadows::default()) } else { None };
+    let contact_shadows_val = if graphics_settings.contact_shadows { Some(ContactShadows::default()) } else { None };
     let bloom_val = if graphics_settings.bloom { Some(Bloom::default()) } else { None };
 
     if let Some(ssao) = ssao_val.clone() {
         camera.insert(ssao);
     }
-    if let Some(contact) = contact_val.clone() {
+    if let Some(contact) = contact_shadows_val.clone() {
         camera.insert(contact);
     }
     if let Some(bloom) = bloom_val.clone() {
@@ -84,7 +84,7 @@ pub fn setup_studio(
     if let Some(ssao) = ssao_val {
         gizmo_camera.insert(ssao);
     }
-    if let Some(contact) = contact_val {
+    if let Some(contact) = contact_shadows_val {
         gizmo_camera.insert(contact);
     }
     if let Some(bloom) = bloom_val {
@@ -103,11 +103,13 @@ pub fn disable_camera_on_ui_interaction(
     mut picking_settings: ResMut<bevy::picking::PickingSettings>,
     hover_state: Res<crate::studio::tools::HoverState>,
     onboarding_state: Res<State<crate::studio::tools::OnboardingState>>,
+    playtest: Option<Res<crate::client::PlaytestState>>,
 ) {
     let onboarding_active = *onboarding_state.get() != crate::studio::tools::OnboardingState::Inactive;
+    let playtesting_active = playtest.map_or(false, |p| p.active);
 
     if let Ok(ctx) = contexts.ctx_mut() {
-        let wants_input = ctx.egui_wants_pointer_input() || ctx.egui_wants_keyboard_input() || hover_state.is_hovering_ui || onboarding_active;
+        let wants_input = ctx.egui_wants_pointer_input() || ctx.egui_wants_keyboard_input() || hover_state.is_hovering_ui || onboarding_active || playtesting_active;
         for mut state in &mut camera_query {
             state.enabled = !wants_input;
         }
@@ -116,13 +118,64 @@ pub fn disable_camera_on_ui_interaction(
 }
 
 pub fn sync_gizmo_camera(
-    camera_query: Query<(&Transform, &Projection), (With<Camera3d>, Without<GizmoCamera>)>,
+    camera_query: Query<(&Transform, &Projection, &Camera), (With<Camera3d>, Without<GizmoCamera>)>,
     mut gizmo_camera: Query<(&mut Transform, &mut Projection), With<GizmoCamera>>,
 ) {
-    if let Some((main_trans, main_proj)) = camera_query.iter().next() {
+    let mut chosen = None;
+    for (trans, proj, cam) in &camera_query {
+        if cam.is_active {
+            chosen = Some((trans, proj));
+            break;
+        }
+    }
+    if chosen.is_none() {
+        if let Some((trans, proj, _)) = camera_query.iter().next() {
+            chosen = Some((trans, proj));
+        }
+    }
+    if let Some((main_trans, main_proj)) = chosen {
         if let Some((mut gizmo_trans, mut gizmo_proj)) = gizmo_camera.iter_mut().next() {
             *gizmo_trans = *main_trans;
             *gizmo_proj = main_proj.clone();
         }
+    }
+}
+
+pub fn toggle_editor_camera_active(
+    playtest: Option<Res<crate::client::PlaytestState>>,
+    mut camera_query: Query<&mut Camera, (With<bevy::camera_controller::free_camera::FreeCamera>, Without<crate::client::player::PlayerCamera>)>,
+) {
+    let playtesting_active = playtest.map_or(false, |p| p.active);
+    for mut camera in &mut camera_query {
+        camera.is_active = !playtesting_active;
+    }
+}
+
+pub fn disable_cameras_on_minimization(
+    window_query: Query<&Window, With<bevy::window::PrimaryWindow>>,
+    mut camera_query: Query<(Entity, &mut Camera)>,
+    mut previous_active_states: Local<std::collections::HashMap<Entity, bool>>,
+) {
+    let Ok(window) = window_query.single() else {
+        return;
+    };
+    let is_minimized = window.width() <= 0.0 || window.height() <= 0.0;
+    
+    if is_minimized {
+        for (entity, mut camera) in &mut camera_query {
+            if camera.is_active {
+                previous_active_states.insert(entity, true);
+                camera.is_active = false;
+            }
+        }
+    } else {
+        for (entity, mut camera) in &mut camera_query {
+            if let Some(&prev_state) = previous_active_states.get(&entity) {
+                if prev_state && !camera.is_active {
+                    camera.is_active = true;
+                }
+            }
+        }
+        previous_active_states.clear();
     }
 }

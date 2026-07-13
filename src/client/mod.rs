@@ -1,4 +1,5 @@
 pub mod player;
+pub mod ui;
 
 use bevy::prelude::*;
 use bevy::pbr::ExtendedMaterial;
@@ -7,9 +8,12 @@ use avian3d::prelude::Physics;
 use avian3d::schedule::PhysicsTime;
 use lightyear::prelude::*;
 use crate::common::game::bricks::components::{Brick, BrickShapeComponent};
+use crate::common::game::bricks::components;
 use crate::common::game::bricks::studs::{StudsAssets, StudsExtension};
 use crate::common::net::components::NetworkTransform;
 use crate::common::game::physics::PhysicsSimulationState;
+use bevy_egui::EguiContexts;
+use bevy::camera::Hdr;
 
 #[derive(Resource)]
 pub struct ClientUkey(pub String);
@@ -40,27 +44,61 @@ pub struct PlayerVisualChild {
     pub parent: Entity,
 }
 
+#[derive(Resource, Default)]
+pub struct PlaytestState {
+    pub active: bool,
+}
+
+#[derive(Component)]
+pub struct HelloSent;
+
+pub fn is_playtesting(playtest: Option<Res<PlaytestState>>) -> bool {
+    if std::env::var("VERTIGO_APP").unwrap_or_default() == "client" {
+        return true;
+    }
+    playtest.map_or(false, |p| p.active)
+}
+
 pub struct ClientPlugin;
 
 impl Plugin for ClientPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(player::PlayerPlugin)
+        if !app.is_plugin_added::<bevy_egui::EguiPlugin>() {
+            app.add_plugins(bevy_egui::EguiPlugin::default());
+        }
+
+        app.init_resource::<ui::ChatboxState>()
+            .init_resource::<PlaytestState>()
+            .add_plugins(player::PlayerPlugin)
             .add_plugins(crate::common::net::ProtocolPlugin)
             .add_systems(Startup, (
                 setup_physics_initializer,
                 setup_player_assets,
-                load_vuis_ui,
             ))
             .add_systems(PreUpdate, initialize_client_physics)
             .add_systems(Update, (
                 sync_network_transforms_to_client,
+                sync_predicted_interpolated_transforms,
+                sync_brick_color_to_material,
                 send_player_inputs,
                 sync_local_player,
                 attach_character_visuals.after(sync_local_player),
                 update_local_player_transparency,
-                cleanup_orphaned_visuals,
                 cleanup_duplicate_gltf_nodes,
-            ))
+                hide_confirmed_player_visuals.after(update_local_player_transparency),
+                send_hello_message,
+                handle_kick_message,
+                handle_auth_success,
+                debug_cameras,
+            ).run_if(is_playtesting))
+            .add_systems(Update, cleanup_orphaned_visuals)
+            .add_systems(bevy_egui::EguiPrimaryContextPass, (
+                ui::configure_client_visuals,
+                ui::draw_scoreboard,
+                ui::draw_chatbox,
+                ui::draw_health_bar,
+                ui::draw_chat_container,
+            ).run_if(is_playtesting))
             .add_observer(on_client_connected)
             .add_observer(on_player_added)
             .add_observer(on_player_removed)
@@ -69,15 +107,27 @@ impl Plugin for ClientPlugin {
     }
 }
 
-fn setup_physics_initializer(mut commands: Commands) {
+fn setup_physics_initializer(
+    mut commands: Commands,
+    mut egui_global_settings: ResMut<bevy_egui::EguiGlobalSettings>,
+) {
+    if std::env::var("VERTIGO_APP").unwrap_or_default() == "studio" {
+        return;
+    }
+
+    egui_global_settings.auto_create_primary_context = false;
+
     commands.spawn(ClientPhysicsInitializer);
     commands.spawn((
         Camera3d::default(),
+        Camera::default(),
         StartupCamera,
         Transform::from_xyz(0.0, 15.0, 30.0).looking_at(Vec3::ZERO, Vec3::Y),
         Msaa::Sample4,
+        Hdr,
         bevy::core_pipeline::tonemapping::Tonemapping::TonyMcMapface,
         ShadowFilteringMethod::Gaussian,
+        bevy_egui::PrimaryEguiContext,
     ));
     commands.spawn((
         Camera2d,
@@ -86,6 +136,7 @@ fn setup_physics_initializer(mut commands: Commands) {
             clear_color: ClearColorConfig::None,
             ..default()
         },
+        Hdr,
         bevy::ui::prelude::IsDefaultUiCamera,
     ));
 }
@@ -109,6 +160,9 @@ fn initialize_client_physics(
     mut commands: Commands,
     query: Query<Entity, With<ClientPhysicsInitializer>>,
 ) {
+    if query.is_empty() {
+        return;
+    }
     *state = PhysicsSimulationState::Running;
     time_physics.unpause();
     for entity in &query {
@@ -151,7 +205,14 @@ fn send_player_inputs(
     keys: Res<ButtonInput<KeyCode>>,
     camera_query: Query<(&Transform, &player::CameraSettings), With<player::PlayerCamera>>,
     mut sender_query: Query<&mut MessageSender<crate::common::net::messages::PlayerInputMessage>>,
+    mut contexts: EguiContexts,
 ) {
+    let wants_keyboard = if let Ok(ctx) = contexts.ctx_mut() {
+        ctx.egui_wants_keyboard_input()
+    } else {
+        false
+    };
+
     let Some((_camera_transform, camera_settings)) = camera_query.iter().next() else {
         trace!("send_player_inputs skipped: PlayerCamera query empty");
         return;
@@ -161,11 +222,11 @@ fn send_player_inputs(
         return;
     };
 
-    let w = keys.pressed(KeyCode::KeyW);
-    let a = keys.pressed(KeyCode::KeyA);
-    let s = keys.pressed(KeyCode::KeyS);
-    let d = keys.pressed(KeyCode::KeyD);
-    let jump = keys.pressed(KeyCode::Space);
+    let w = !wants_keyboard && keys.pressed(KeyCode::KeyW);
+    let a = !wants_keyboard && keys.pressed(KeyCode::KeyA);
+    let s = !wants_keyboard && keys.pressed(KeyCode::KeyS);
+    let d = !wants_keyboard && keys.pressed(KeyCode::KeyD);
+    let jump = !wants_keyboard && keys.pressed(KeyCode::Space);
     let in_first_person = camera_settings.distance <= 0.6;
 
     if w || a || s || d || jump {
@@ -279,13 +340,13 @@ fn attach_character_visuals(
 fn sync_local_player(
     mut commands: Commands,
     query: Query<(Entity, &crate::common::net::components::Player), (Without<LocalPlayer>, Without<Replicate>)>,
-    client_query: Query<&LocalId, With<lightyear::prelude::client::Client>>,
+    local_client_id: Option<Res<LocalClientId>>,
     startup_cameras: Query<Entity, With<StartupCamera>>,
 ) {
-    let Ok(local_id) = client_query.single() else {
+    let Some(local_id) = local_client_id else {
         return;
     };
-    let local_client_id = local_id.0.to_bits();
+    let local_client_id = local_id.0;
     for (entity, player) in &query {
         trace!("sync_local_player checking entity={:?}, player client_id={}, expected client_id={}",
             entity, player.client_id, local_client_id);
@@ -297,8 +358,14 @@ fn sync_local_player(
                 commands.entity(camera_entity).despawn();
             }
 
-            commands.spawn((
+            let mut cam_cmd = commands.spawn((
                 Camera3d::default(),
+                Camera::default(),
+                Projection::Perspective(PerspectiveProjection {
+                    far: 3000.0,
+                    fov: 70.0f32.to_radians(),
+                    ..default()
+                }),
                 player::PlayerCamera,
                 player::CameraSettings {
                     yaw: 0.0,
@@ -309,31 +376,32 @@ fn sync_local_player(
                 },
                 Transform::from_xyz(0.0, 5.0, 10.0).looking_at(Vec3::ZERO, Vec3::Y),
                 Msaa::Sample4,
+                Hdr,
                 bevy::core_pipeline::tonemapping::Tonemapping::TonyMcMapface,
                 ShadowFilteringMethod::Gaussian,
-                bevy::ui::prelude::IsDefaultUiCamera,
             ));
+
+            if std::env::var("VERTIGO_APP").unwrap_or_default() == "client" {
+                cam_cmd.insert(bevy_egui::PrimaryEguiContext);
+            }
         }
     }
 }
 
 fn update_local_player_transparency(
-    camera_query: Query<(&Transform, &player::CameraSettings), With<player::PlayerCamera>>,
+    camera_query: Query<&player::CameraSettings, With<player::PlayerCamera>>,
     local_player_query: Query<(&Transform, &Children), With<LocalPlayer>>,
     child_query: Query<Entity, With<UniqueLocalMaterial>>,
     mut visibility_query: Query<&mut Visibility>,
 ) {
-    let Some((camera_transform, camera_settings)) = camera_query.iter().next() else {
+    let Some(camera_settings) = camera_query.iter().next() else {
         return;
     };
-    let Some((player_transform, children)) = local_player_query.iter().next() else {
+    let Some((_player_transform, children)) = local_player_query.iter().next() else {
         return;
     };
 
-    let player_target = player_transform.translation + camera_settings.target_offset;
-    let distance = camera_transform.translation.distance(player_target);
-
-    let show = distance > 0.6;
+    let show = camera_settings.distance > 0.6;
 
     for child in children.iter() {
         if let Ok(child_entity) = child_query.get(child) {
@@ -416,38 +484,140 @@ fn on_network_transform_added(
     ));
 }
 
-fn load_vuis_ui(
-    mut commands: Commands,
-    mut images: ResMut<Assets<Image>>,
-    mut fonts: ResMut<Assets<Font>>,
-    vuis_engine: Res<crate::common::ui::vuis::api::VuisEngine>,
+fn cleanup_duplicate_gltf_nodes(
+    _commands: Commands,
+    _player_visuals: Query<(Entity, &Children), With<PlayerVisualChild>>,
+    _name_query: Query<&Name>,
 ) {
-    let root = commands.spawn((
-        Node {
-            width: Val::Percent(100.0),
-            height: Val::Percent(100.0),
-            overflow: Overflow::visible(),
-            ..default()
-        },
-    )).id();
-
-    let path = "assets/content/game/ui/main.vuis";
-    let _ = vuis_engine.load(&mut commands, &mut images, &mut fonts, root, path);
 }
 
-fn cleanup_duplicate_gltf_nodes(
-    mut commands: Commands,
-    player_visuals: Query<(Entity, &Children), With<PlayerVisualChild>>,
-    name_query: Query<&Name>,
+fn sync_predicted_interpolated_transforms(
+    mut predicted_interpolated_query: Query<(&crate::common::net::components::Player, &mut Transform), Or<(With<Predicted>, With<Interpolated>)>>,
+    confirmed_query: Query<(&crate::common::net::components::Player, &Transform), (Without<Predicted>, Without<Interpolated>, Without<Replicate>)>,
 ) {
-    for (_visual_entity, children) in &player_visuals {
-        for child in children.iter() {
-            if let Ok(name) = name_query.get(child) {
-                let name_str = name.as_str();
-                if name_str.contains(".001") || name_str.contains(".002") || name_str.contains(".003") || name_str.contains(".004") {
-                    commands.entity(child).despawn();
+    for (player, mut transform) in &mut predicted_interpolated_query {
+        for (conf_player, conf_transform) in &confirmed_query {
+            if player.client_id == conf_player.client_id {
+                transform.translation = conf_transform.translation;
+                transform.rotation = conf_transform.rotation;
+                transform.scale = conf_transform.scale;
+                break;
+            }
+        }
+    }
+}
+
+fn sync_brick_color_to_material(
+    query: Query<(&crate::common::game::bricks::components::BrickColor, &MeshMaterial3d<ExtendedMaterial<StandardMaterial, StudsExtension>>), Changed<crate::common::game::bricks::components::BrickColor>>,
+    mut studs_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, StudsExtension>>>,
+) {
+    for (brick_color, material_handle) in &query {
+        if let Some(mut material) = studs_materials.get_mut(&material_handle.0) {
+            material.base.base_color = brick_color.color;
+        }
+    }
+}
+
+fn hide_confirmed_player_visuals(
+    predicted_query: Query<&crate::common::net::components::Player, With<Predicted>>,
+    mut visuals_query: Query<(&PlayerVisualChild, &mut Visibility)>,
+    confirmed_query: Query<&crate::common::net::components::Player, (Without<Predicted>, Without<Interpolated>)>,
+) {
+    for predicted_player in &predicted_query {
+        for (visual_child, mut visibility) in &mut visuals_query {
+            if let Ok(confirmed_player) = confirmed_query.get(visual_child.parent) {
+                if predicted_player.client_id == confirmed_player.client_id {
+                    if *visibility != Visibility::Hidden {
+                        *visibility = Visibility::Hidden;
+                    }
                 }
             }
         }
+    }
+}
+
+fn send_hello_message(
+    mut commands: Commands,
+    mut client_query: Query<(Entity, &mut MessageSender<crate::common::net::messages::HelloMessage>), (With<Connected>, Without<HelloSent>)>,
+    ukey_res: Option<Res<crate::client::ClientUkey>>,
+) {
+    let Some(ukey) = ukey_res else { return; };
+    if ukey.0.is_empty() { return; }
+    for (entity, mut sender) in &mut client_query {
+        info!("Sending HelloMessage with ukey to server...");
+        let _ = sender.send::<crate::common::net::messages::GameChannel>(crate::common::net::messages::HelloMessage {
+            ukey: ukey.0.clone(),
+        });
+        commands.entity(entity).insert(HelloSent);
+    }
+}
+
+fn handle_kick_message(
+    mut commands: Commands,
+    mut receivers: Query<(Entity, &mut MessageReceiver<crate::common::net::messages::KickMessage>)>,
+) {
+    for (entity, mut receiver) in &mut receivers {
+        for kick in receiver.receive() {
+            warn!("KICKED from server! Reason: {}", kick.reason);
+            commands.trigger(lightyear::prelude::client::Disconnect { entity });
+        }
+    }
+}
+
+fn handle_auth_success(
+    mut receivers: Query<&mut MessageReceiver<crate::common::net::messages::AuthSuccessMessage>>,
+) {
+    for mut receiver in &mut receivers {
+        for success in receiver.receive() {
+            info!("Successfully authenticated! User ID: {}, Username: {}", success.uid, success.username);
+        }
+    }
+}
+
+fn links_optimizer_system() {}
+
+pub fn optimize_brick_visibility(
+    _commands: Commands,
+    _meshes: ResMut<Assets<Mesh>>,
+    _materials: ResMut<Assets<StandardMaterial>>,
+    _studs_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
+    _studs_assets: Res<crate::common::game::bricks::studs::StudsAssets>,
+    _camera_query: Query<&Transform, With<Camera3d>>,
+    _bricks_query: Query<(
+        Entity,
+        &GlobalTransform,
+        &components::BrickShapeComponent,
+        &components::BrickColor,
+        &mut MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>,
+    )>,
+) {
+}
+
+fn debug_cameras(
+    query: Query<(Entity, &Camera, Option<&bevy::camera::RenderTarget>, Option<&Name>, Option<&bevy::camera_controller::free_camera::FreeCamera>, Option<&crate::client::player::PlayerCamera>)>,
+    mut last_log: Local<f32>,
+    time: Res<Time>,
+) {
+    let now = time.elapsed_secs();
+    if now - *last_log < 1.0 {
+        return;
+    }
+    *last_log = now;
+    for (entity, camera, target_opt, name_opt, free_opt, player_opt) in &query {
+        let name = name_opt.map(|n| n.as_str()).unwrap_or("No Name");
+        let camera_type = if free_opt.is_some() {
+            "FreeCamera"
+        } else if player_opt.is_some() {
+            "PlayerCamera"
+        } else {
+            "Other"
+        };
+        let has_egui = match target_opt {
+            Some(bevy::camera::RenderTarget::Window(bevy::window::WindowRef::Primary)) => "PrimaryWindow",
+            Some(_) => "OtherTarget",
+            None => "None",
+        };
+        info!("CAMERA_DEBUG: Entity {:?} ({}) - type={}, active={}, order={}, clear_color={:?}, target={}",
+            entity, name, camera_type, camera.is_active, camera.order, camera.clear_color, has_egui);
     }
 }

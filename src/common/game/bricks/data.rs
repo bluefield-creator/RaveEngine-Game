@@ -113,7 +113,9 @@ pub fn spawn_from_data(
     }
     let new_entity = spawned.id();
     if let Some(parent) = data.parent {
-        commands.entity(parent).add_child(new_entity);
+        if let Ok(mut p_cmd) = commands.get_entity(parent) {
+            p_cmd.add_child(new_entity);
+        }
     }
     new_entity
 }

@@ -27,6 +27,7 @@ fn main() {
 
     let mut ip = std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1));
     let mut port = 5000;
+    let mut ukey = "".to_string();
 
     let args: Vec<String> = std::env::args().collect();
     for i in 0..args.len() {
@@ -40,13 +41,15 @@ fn main() {
                 ip = ip_addr;
             }
         }
+        if args[i] == "--ukey" && i + 1 < args.len() {
+            ukey = args[i + 1].clone();
+        }
     }
 
     let mut app = App::new();
     app.add_plugins(DefaultPlugins.set(LogPlugin {
         level: bevy::log::Level::DEBUG,
         filter: "wgpu=error,bevy_render=error,bevy_ecs=warn,lightyear=debug,lightyear_udp=trace,lightyear_netcode=trace,naga=warn,wgpu_hal=warn,wgpu_core=warn,offset_allocator=off".to_string(),
-        custom_layer: RaveEngineLib::common::ui::vuis::logging::vuis_custom_layer,
         ..default()
     }).set(bevy::render::RenderPlugin {
         render_creation: bevy::render::settings::RenderCreation::Automatic(Box::new(
@@ -58,6 +61,7 @@ fn main() {
         ..default()
     }));
     app.insert_resource(ClientConnectSettings { ip, port });
+    app.insert_resource(RaveEngineLib::client::ClientUkey(ukey));
     app.add_plugins(client::ClientPlugins {
         tick_duration: core::time::Duration::from_secs_f64(1.0 / 60.0),
     });

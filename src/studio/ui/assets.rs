@@ -62,7 +62,30 @@ fn load_icon_image(path: &str, images: &mut Assets<Image>) -> Handle<Image> {
         ).ok();
     }
 
-    let final_image = image.unwrap_or_else(|| Image::default());
+    let mut final_image = image.unwrap_or_else(|| Image::default());
+
+    let format = final_image.texture_descriptor.format;
+    if format == bevy::render::render_resource::TextureFormat::Rgba8UnormSrgb 
+        || format == bevy::render::render_resource::TextureFormat::Rgba8Unorm 
+    {
+        if let Some(ref mut data) = final_image.data {
+            for chunk in data.chunks_exact_mut(4) {
+                let a = chunk[3] as f32 / 255.0;
+                chunk[0] = (chunk[0] as f32 * a) as u8;
+                chunk[1] = (chunk[1] as f32 * a) as u8;
+                chunk[2] = (chunk[2] as f32 * a) as u8;
+            }
+        }
+    }
+
+    final_image.sampler = ImageSampler::Descriptor(bevy::image::ImageSamplerDescriptor {
+        address_mode_u: bevy::image::ImageAddressMode::ClampToEdge,
+        address_mode_v: bevy::image::ImageAddressMode::ClampToEdge,
+        mag_filter: bevy::image::ImageFilterMode::Linear,
+        min_filter: bevy::image::ImageFilterMode::Linear,
+        ..default()
+    });
+
     images.add(final_image)
 }
 

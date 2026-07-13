@@ -14,6 +14,7 @@ pub fn update_camera(
     spatial_query: SpatialQuery,
     mut window_query: Query<&mut CursorOptions, With<bevy::window::PrimaryWindow>>,
     time: Res<Time>,
+    mut last_log: Local<f32>,
 ) {
     let Some((player_entity, mut player_transform, _children_opt)) = player_query.iter_mut().next() else {
         return;
@@ -61,7 +62,11 @@ pub fn update_camera(
 
     if !in_first_person {
         if let Ok(dir3) = Dir3::new(ray_dir) {
-            let filter = SpatialQueryFilter::default().with_excluded_entities([player_entity]);
+            let mut excluded = vec![player_entity];
+            if let Some(children) = _children_opt {
+                excluded.extend(children.iter());
+            }
+            let filter = SpatialQueryFilter::default().with_excluded_entities(excluded);
             if let Some(hit) = spatial_query.cast_ray(
                 target_translation,
                 dir3,
@@ -79,4 +84,11 @@ pub fn update_camera(
     let final_offset = rotation.mul_vec3(Vec3::new(0.0, 0.0, final_distance));
     camera_transform.translation = target_translation + final_offset;
     camera_transform.rotation = rotation;
+
+    let now = time.elapsed_secs();
+    if now - *last_log >= 1.0 {
+        *last_log = now;
+        info!("PLAYER_LOG: update_camera current_distance={}, final_distance={}, camera_translation={:?}, target_translation={:?}",
+            settings.current_distance, final_distance, camera_transform.translation, target_translation);
+    }
 }

@@ -128,7 +128,7 @@ pub fn spawn_player(
             Transform::from_xyz(0.0, 3.0, 0.0),
             GlobalTransform::default(),
             RigidBody::Dynamic,
-            Collider::cuboid(2.0 * 0.28, 5.0 * 0.28, 1.0 * 0.28),
+            Collider::capsule(1.0 * 0.28, 3.0 * 0.28),
             LockedAxes::ROTATION_LOCKED,
             Friction::new(0.0),
             Restitution::new(0.0),

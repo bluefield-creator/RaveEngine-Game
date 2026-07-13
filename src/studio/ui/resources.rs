@@ -21,3 +21,28 @@ pub struct HierarchyDraggedEntity {
 pub struct SettingsWindow {
     pub open: bool,
 }
+
+#[derive(Resource, Default)]
+pub struct PlayInClientProcesses {
+    pub client_process: Option<std::process::Child>,
+}
+
+#[derive(Resource, Default)]
+pub struct PlaytestBackup {
+    pub bricks: Vec<crate::common::game::bricks::data::BrickData>,
+}
+
+#[derive(Component)]
+pub struct InEditorPlaytestClient;
+
+pub fn cleanup_play_processes_on_exit(
+    events: MessageReader<AppExit>,
+    mut play_processes: ResMut<PlayInClientProcesses>,
+) {
+    if !events.is_empty() {
+        crate::app::server::bootstrap::SHUTDOWN_SERVER.store(true, std::sync::atomic::Ordering::Relaxed);
+        if let Some(mut child) = play_processes.client_process.take() {
+            let _ = child.kill();
+        }
+    }
+}

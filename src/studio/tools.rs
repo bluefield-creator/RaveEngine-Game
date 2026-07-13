@@ -239,7 +239,7 @@ pub fn handle_undo_redo_action(
                             history.redo_stack.push(command);
                         }
                         UndoCommand::Spawn { entity, data: _ } => {
-                            commands.entity(entity).despawn();
+                            commands.entity(entity).try_despawn();
                             if selection.entity == Some(entity) {
                                 selection.entity = None;
                                 selection.entities.clear();
@@ -261,9 +261,15 @@ pub fn handle_undo_redo_action(
                                 *transform = old_transform;
                             }
                             if let Some(parent) = old_parent {
-                                commands.entity(parent).add_child(entity);
+                                if commands.get_entity(entity).is_ok() {
+                                    if let Ok(mut p_cmd) = commands.get_entity(parent) {
+                                        p_cmd.add_child(entity);
+                                    }
+                                }
                             } else {
-                                commands.entity(entity).remove::<ChildOf>();
+                                if let Ok(mut e_cmd) = commands.get_entity(entity) {
+                                    e_cmd.remove::<ChildOf>();
+                                }
                             }
                             history.redo_stack.push(command);
                         }
@@ -290,7 +296,7 @@ pub fn handle_undo_redo_action(
                             history.undo_stack.push(_updated_command);
                         }
                         UndoCommand::Delete { entity, data: _ } => {
-                            commands.entity(entity).despawn();
+                            commands.entity(entity).try_despawn();
                             if selection.entity == Some(entity) {
                                 selection.entity = None;
                                 selection.entities.clear();
@@ -302,9 +308,15 @@ pub fn handle_undo_redo_action(
                                 *transform = new_transform;
                             }
                             if let Some(parent) = new_parent {
-                                commands.entity(parent).add_child(entity);
+                                if commands.get_entity(entity).is_ok() {
+                                    if let Ok(mut p_cmd) = commands.get_entity(parent) {
+                                        p_cmd.add_child(entity);
+                                    }
+                                }
                             } else {
-                                commands.entity(entity).remove::<ChildOf>();
+                                if let Ok(mut e_cmd) = commands.get_entity(entity) {
+                                    e_cmd.remove::<ChildOf>();
+                                }
                             }
                             history.undo_stack.push(command);
                         }
@@ -815,7 +827,7 @@ pub fn update_cursor(
 }
 
 pub fn correct_child_transforms(
-    root_query: Query<(Entity, &GlobalTransform), Without<ChildOf>>,
+    root_query: Query<(Entity, &GlobalTransform), (Without<ChildOf>, With<crate::common::game::bricks::components::Brick>)>,
     child_query: Query<(&Transform, Option<&Children>)>,
     mut global_transform_query: Query<&mut GlobalTransform, With<ChildOf>>,
 ) {

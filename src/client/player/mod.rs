@@ -1,4 +1,4 @@
-pub mod camera;
+pub mod play_camera;
 pub mod controller;
 pub mod loader;
 pub mod animation;
@@ -36,14 +36,14 @@ impl Plugin for PlayerPlugin {
             .add_systems(
                 Update,
                 (
-                    camera::update_camera,
+                    crate::client::player::play_camera::update_camera,
                     animation::add_missing_animation_players,
                     animation::build_avatar_animation_graph,
                     animation::retarget_avatar_clips,
                     animation::init_player_animations,
                     animation::track_player_velocities,
                     animation::animate_player,
-                ),
+                ).run_if(crate::client::is_playtesting),
             );
     }
 }

@@ -65,6 +65,121 @@ fn is_descendant(
     false
 }
 
+fn get_flat_ordered_entities(
+    entities_query: &Query<(
+        Entity,
+        &mut Transform,
+        &mut Name,
+        Option<&ChildOf>,
+        Option<&Children>,
+        Option<&Brick>,
+        Option<&mut crate::common::game::bricks::components::BrickShapeComponent>,
+        &GlobalTransform,
+        Option<&Mesh3d>,
+        Option<&MeshMaterial3d<StandardMaterial>>,
+        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
+        Option<&mut crate::common::game::bricks::components::BrickPhysics>,
+    ), Without<Camera3d>>,
+) -> Vec<Entity> {
+    let mut flat = Vec::new();
+    let mut roots = Vec::new();
+    for (entity, _, name, parent_opt, _, _, _, _, _, _, _, _) in entities_query {
+        if is_managed_entity(entity, entities_query) {
+            let is_root = if let Some(parent_comp) = parent_opt {
+                !is_managed_entity(parent_comp.parent(), entities_query)
+            } else {
+                true
+            };
+            if is_root {
+                roots.push((entity, name.as_str().to_string()));
+            }
+        }
+    }
+
+    roots.sort_by(|a, b| {
+        if a.1 == "Baseplate" {
+            std::cmp::Ordering::Less
+        } else if b.1 == "Baseplate" {
+            std::cmp::Ordering::Greater
+        } else {
+            a.1.cmp(&b.1)
+        }
+    });
+
+    for (root_entity, _) in roots {
+        traverse_node_recursive(root_entity, entities_query, &mut flat);
+    }
+    flat
+}
+
+fn traverse_node_recursive(
+    entity: Entity,
+    entities_query: &Query<(
+        Entity,
+        &mut Transform,
+        &mut Name,
+        Option<&ChildOf>,
+        Option<&Children>,
+        Option<&Brick>,
+        Option<&mut crate::common::game::bricks::components::BrickShapeComponent>,
+        &GlobalTransform,
+        Option<&Mesh3d>,
+        Option<&MeshMaterial3d<StandardMaterial>>,
+        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
+        Option<&mut crate::common::game::bricks::components::BrickPhysics>,
+    ), Without<Camera3d>>,
+    flat: &mut Vec<Entity>,
+) {
+    flat.push(entity);
+    if let Ok((_, _, _, _, Some(children_comp), _, _, _, _, _, _, _)) = entities_query.get(entity) {
+        let mut sorted_children: Vec<Entity> = children_comp
+            .iter()
+            .filter(|&child| is_managed_entity(child, entities_query))
+            .collect();
+        sorted_children.sort_by(|&a, &b| {
+            let name_a = entities_query.get(a).map(|(_, _, n, _, _, _, _, _, _, _, _, _)| n.as_str()).unwrap_or("");
+            let name_b = entities_query.get(b).map(|(_, _, n, _, _, _, _, _, _, _, _, _)| n.as_str()).unwrap_or("");
+            name_a.cmp(name_b)
+        });
+        for child in sorted_children {
+            traverse_node_recursive(child, entities_query, flat);
+        }
+    }
+}
+
+fn perform_range_selection(
+    entity: Entity,
+    pool: &[Entity],
+    selection: &mut ResMut<Selection>,
+) {
+    if pool.is_empty() {
+        return;
+    }
+    let Some(target_idx) = pool.iter().position(|&e| e == entity) else {
+        return;
+    };
+    let start_idx = if let Some(active) = selection.entity {
+        pool.iter().position(|&e| e == active).unwrap_or(target_idx)
+    } else {
+        let mut found = None;
+        for &selected in selection.entities.iter().rev() {
+            if let Some(idx) = pool.iter().position(|&e| e == selected) {
+                found = Some(idx);
+                break;
+            }
+        }
+        found.unwrap_or(target_idx)
+    };
+
+    let min_idx = start_idx.min(target_idx);
+    let max_idx = start_idx.max(target_idx);
+
+    selection.workspace_selected = false;
+    selection.players_selected = false;
+    selection.entities = pool[min_idx..=max_idx].to_vec();
+    selection.entity = Some(entity);
+}
+
 fn draw_entity_node(
     ui: &mut egui::Ui,
     entity: Entity,
@@ -99,7 +214,7 @@ fn draw_entity_node(
         false
     };
 
-    let is_selected = selection.entity == Some(entity);
+    let is_selected = selection.entities.contains(&entity);
 
     if has_managed_children {
         let id = egui::Id::new(entity);
@@ -115,10 +230,29 @@ fn draw_entity_node(
                 let label_res = explorerlabel(ui, is_selected, &name_str, Some(brick_tex));
 
                 if label_res.clicked() {
-                    selection.entity = Some(entity);
-                    selection.entities = vec![entity];
-                    selection.workspace_selected = false;
-                    selection.players_selected = false;
+                    let ctrl_held = ui.input(|i| i.modifiers.command || i.modifiers.ctrl);
+                    let shift_held = ui.input(|i| i.modifiers.shift);
+                    if ctrl_held {
+                        selection.workspace_selected = false;
+                        selection.players_selected = false;
+                        if selection.entities.contains(&entity) {
+                            selection.entities.retain(|&e| e != entity);
+                            if selection.entity == Some(entity) {
+                                selection.entity = selection.entities.last().copied();
+                            }
+                        } else {
+                            selection.entities.push(entity);
+                            selection.entity = Some(entity);
+                        }
+                    } else if shift_held {
+                        let pool = get_flat_ordered_entities(entities_query);
+                        perform_range_selection(entity, &pool, selection);
+                    } else {
+                        selection.entity = Some(entity);
+                        selection.entities = vec![entity];
+                        selection.workspace_selected = false;
+                        selection.players_selected = false;
+                    }
                 }
 
                 if label_res.double_clicked() {
@@ -171,7 +305,9 @@ fn draw_entity_node(
                                     scale: local_scale,
                                 };
 
-                                commands.entity(dragged).insert(new_transform);
+                                if let Ok(mut d_cmd) = commands.get_entity(dragged) {
+                                    d_cmd.insert(new_transform);
+                                }
 
                                 history.push_command(crate::studio::tools::UndoCommand::ParentChange {
                                     entity: dragged,
@@ -181,7 +317,11 @@ fn draw_entity_node(
                                     new_transform,
                                 });
                             }
-                            commands.entity(entity).add_child(dragged);
+                            if commands.get_entity(dragged).is_ok() {
+                                if let Ok(mut p_cmd) = commands.get_entity(entity) {
+                                    p_cmd.add_child(dragged);
+                                }
+                            }
                             dragged_entity.entity = None;
                         }
                     }
@@ -227,10 +367,29 @@ fn draw_entity_node(
         }).inner;
 
         if label_res.clicked() {
-            selection.entity = Some(entity);
-            selection.entities = vec![entity];
-            selection.workspace_selected = false;
-            selection.players_selected = false;
+            let ctrl_held = ui.input(|i| i.modifiers.command || i.modifiers.ctrl);
+            let shift_held = ui.input(|i| i.modifiers.shift);
+            if ctrl_held {
+                selection.workspace_selected = false;
+                selection.players_selected = false;
+                if selection.entities.contains(&entity) {
+                    selection.entities.retain(|&e| e != entity);
+                    if selection.entity == Some(entity) {
+                        selection.entity = selection.entities.last().copied();
+                    }
+                } else {
+                    selection.entities.push(entity);
+                    selection.entity = Some(entity);
+                }
+            } else if shift_held {
+                let pool = get_flat_ordered_entities(entities_query);
+                perform_range_selection(entity, &pool, selection);
+            } else {
+                selection.entity = Some(entity);
+                selection.entities = vec![entity];
+                selection.workspace_selected = false;
+                selection.players_selected = false;
+            }
         }
 
         label_res.context_menu(|ui| {
@@ -279,7 +438,9 @@ fn draw_entity_node(
                             scale: local_scale,
                         };
 
-                        commands.entity(dragged).insert(new_transform);
+                        if let Ok(mut d_cmd) = commands.get_entity(dragged) {
+                            d_cmd.insert(new_transform);
+                        }
 
                         history.push_command(crate::studio::tools::UndoCommand::ParentChange {
                             entity: dragged,
@@ -289,7 +450,11 @@ fn draw_entity_node(
                             new_transform,
                         });
                     }
-                    commands.entity(entity).add_child(dragged);
+                    if commands.get_entity(dragged).is_ok() {
+                        if let Ok(mut p_cmd) = commands.get_entity(entity) {
+                            p_cmd.add_child(dragged);
+                        }
+                    }
                     dragged_entity.entity = None;
                 }
             }
@@ -319,7 +484,7 @@ fn draw_player_node(
 ) {
     let Ok((_, _, name, _, _, _, _, _, _, _, _, _)) = entities_query.get(entity) else { return };
     let name_str = name.as_str().to_string();
-    let is_selected = selection.entity == Some(entity);
+    let is_selected = selection.entities.contains(&entity);
 
     let id = egui::Id::new(entity);
     let label_res = ui.horizontal(|ui| {
@@ -330,10 +495,40 @@ fn draw_player_node(
     }).inner;
 
     if label_res.clicked() {
-        selection.entity = Some(entity);
-        selection.entities = vec![entity];
-        selection.workspace_selected = false;
-        selection.players_selected = false;
+        let ctrl_held = ui.input(|i| i.modifiers.command || i.modifiers.ctrl);
+        let shift_held = ui.input(|i| i.modifiers.shift);
+        if ctrl_held {
+            selection.workspace_selected = false;
+            selection.players_selected = false;
+            if selection.entities.contains(&entity) {
+                selection.entities.retain(|&e| e != entity);
+                if selection.entity == Some(entity) {
+                    selection.entity = selection.entities.last().copied();
+                }
+            } else {
+                selection.entities.push(entity);
+                selection.entity = Some(entity);
+            }
+        } else if shift_held {
+            let mut sorted_players = Vec::new();
+            for (player_entity, _, name, _, _, _, _, _, _, _, _, _) in entities_query {
+                let name_str = name.as_str();
+                if name_str == "Player" || name_str.starts_with("Player_") {
+                    sorted_players.push(player_entity);
+                }
+            }
+            sorted_players.sort_by(|&a, &b| {
+                let name_a = entities_query.get(a).map(|(_, _, n, _, _, _, _, _, _, _, _, _)| n.as_str()).unwrap_or("");
+                let name_b = entities_query.get(b).map(|(_, _, n, _, _, _, _, _, _, _, _, _)| n.as_str()).unwrap_or("");
+                name_a.cmp(name_b)
+            });
+            perform_range_selection(entity, &sorted_players, selection);
+        } else {
+            selection.entity = Some(entity);
+            selection.entities = vec![entity];
+            selection.workspace_selected = false;
+            selection.players_selected = false;
+        }
     }
 }
 
@@ -450,8 +645,10 @@ pub fn draw_explorer(
                     scale: child_global.scale(),
                 };
 
-                commands.entity(dragged).insert(new_transform);
-                commands.entity(dragged).remove::<ChildOf>();
+                if let Ok(mut d_cmd) = commands.get_entity(dragged) {
+                    d_cmd.insert(new_transform);
+                    d_cmd.remove::<ChildOf>();
+                }
 
                 history.push_command(crate::studio::tools::UndoCommand::ParentChange {
                     entity: dragged,

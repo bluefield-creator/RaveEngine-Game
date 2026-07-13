@@ -34,6 +34,8 @@ impl Plugin for StudioPlugin {
             .init_resource::<ui::CopiedEntityBuffer>()
             .init_resource::<ui::HierarchyDraggedEntity>()
             .init_resource::<ui::SettingsWindow>()
+            .init_resource::<ui::resources::PlayInClientProcesses>()
+            .init_resource::<ui::resources::PlaytestBackup>()
             .init_resource::<tools::SnapConfig>()
             .init_resource::<tools::UndoRedoHistory>()
             .init_resource::<tools::PlayersService>()
@@ -42,7 +44,7 @@ impl Plugin for StudioPlugin {
             .add_plugins(MeshPickingPlugin)
             .add_plugins(FreeCameraPlugin)
             .add_systems(Startup, (
-                camera::setup_studio.after(crate::common::game::bricks::studs::setup_studs),
+                crate::studio::camera::setup_studio.after(crate::common::game::bricks::studs::setup_studs),
                 ui::setup_ui_assets,
                 ui::configure_visuals,
             ))
@@ -67,11 +69,19 @@ impl Plugin for StudioPlugin {
                     ui::updatecameraspeedindicator,
                     ui::update_camera_fov
                         .before(bevy::camera_controller::free_camera::run_freecamera_controller),
-                    camera::disable_camera_on_ui_interaction
+                    crate::studio::camera::disable_camera_on_ui_interaction
                         .before(bevy::camera_controller::free_camera::run_freecamera_controller),
-                    camera::sync_gizmo_camera,
                 ),
             )
+            .add_systems(
+                Update,
+                (
+                    crate::studio::camera::sync_gizmo_camera,
+                    crate::studio::camera::toggle_editor_camera_active,
+                    crate::studio::camera::disable_cameras_on_minimization,
+                ),
+            )
+            .add_systems(Update, ui::resources::cleanup_play_processes_on_exit)
             .add_systems(
                 PostUpdate,
                 tools::correct_child_transforms.after(bevy::transform::TransformSystems::Propagate),

@@ -17,9 +17,12 @@ fn main() {
         std::env::set_var("RUST_LOG", new_rust_log);
     }
     App::new()
+        .insert_resource(bevy_egui::EguiGlobalSettings {
+            auto_create_primary_context: false,
+            ..default()
+        })
         .add_plugins(DefaultPlugins.set(LogPlugin {
             filter: "info,wgpu=warn,naga=warn,wgpu_hal=warn,wgpu_core=warn,offset_allocator=off".to_string(),
-            custom_layer: RaveEngineLib::common::ui::vuis::logging::vuis_custom_layer,
             ..default()
         }).set(bevy::render::RenderPlugin {
             render_creation: bevy::render::settings::RenderCreation::Automatic(Box::new(
@@ -30,7 +33,11 @@ fn main() {
             )),
             ..default()
         }))
+        .add_plugins(lightyear::prelude::client::ClientPlugins {
+            tick_duration: core::time::Duration::from_secs_f64(1.0 / 60.0),
+        })
         .add_plugins(CommonPlugin)
+        .add_plugins(RaveEngineLib::client::ClientPlugin)
         .add_plugins(StudioPlugin)
         .run();
 }

@@ -131,7 +131,9 @@ pub fn draw_entity_context_menu(
 
             let parent_entity = child_of_opt.map(|co| co.parent());
             if let Some(p) = parent_entity {
-                commands.entity(p).add_child(new_entity);
+                if let Ok(mut p_cmd) = commands.get_entity(p) {
+                    p_cmd.add_child(new_entity);
+                }
             }
 
             let data = crate::common::game::bricks::data::BrickData {
@@ -162,7 +164,7 @@ pub fn draw_entity_context_menu(
                 data,
             });
         }
-        commands.entity(entity).despawn();
+        commands.entity(entity).try_despawn();
         if selection.entity == Some(entity) {
             selection.entity = None;
             selection.entities.clear();

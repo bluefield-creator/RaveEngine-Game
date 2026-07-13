@@ -15,10 +15,19 @@ pub fn update_gizmos(
     selection: Res<Selection>,
     tool_state: Res<State<ToolState>>,
     physics_state: Res<crate::common::game::physics::PhysicsSimulationState>,
+    playtest: Option<Res<crate::client::PlaytestState>>,
     gizmos: Query<Entity, With<ToolGizmo>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    let playtesting_active = playtest.map_or(false, |p| p.active);
+    if playtesting_active {
+        for entity in &gizmos {
+            commands.entity(entity).despawn();
+        }
+        return;
+    }
+
     if !selection.is_changed() && !tool_state.is_changed() && !physics_state.is_changed() {
         return;
     }
@@ -193,10 +202,15 @@ fn draw_outline_recursive(
 pub fn draw_selection_outline(
     selection: Res<Selection>,
     physics_state: Res<crate::common::game::physics::PhysicsSimulationState>,
+    playtest: Option<Res<crate::client::PlaytestState>>,
     bricks: Query<(&GlobalTransform, Option<&crate::common::game::bricks::components::BrickShapeComponent>, Option<&Children>), With<Brick>>,
     mut gizmos: Gizmos,
 ) {
     if *physics_state == crate::common::game::physics::PhysicsSimulationState::Running {
+        return;
+    }
+    let playtesting_active = playtest.map_or(false, |p| p.active);
+    if playtesting_active {
         return;
     }
     for &selected_entity in &selection.entities {

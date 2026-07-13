@@ -56,6 +56,9 @@ pub struct UiStateResources<'w> {
     pub next_onboarding_state: ResMut<'w, NextState<crate::studio::tools::OnboardingState>>,
     pub onboarding_data: ResMut<'w, crate::studio::ui::panels::onboarding::OnboardingData>,
     pub marquee_state: Res<'w, crate::studio::tools::MarqueeState>,
+    pub play_processes: ResMut<'w, crate::studio::ui::resources::PlayInClientProcesses>,
+    pub playtest_state: ResMut<'w, crate::client::PlaytestState>,
+    pub playtest_backup: ResMut<'w, crate::studio::ui::resources::PlaytestBackup>,
 }
 
 #[derive(SystemParam)]
@@ -89,6 +92,10 @@ pub struct UiQueries<'w, 's> {
         ),
         Without<Camera3d>,
     >,
+    pub playtest_client_query: Query<'w, 's, Entity, With<crate::studio::ui::resources::InEditorPlaytestClient>>,
+    pub playtest_players: Query<'w, 's, Entity, With<crate::common::net::components::Player>>,
+    pub playtest_cameras: Query<'w, 's, Entity, With<crate::client::player::PlayerCamera>>,
+    pub playtest_visuals: Query<'w, 's, Entity, With<crate::client::PlayerVisualChild>>,
 }
 
 #[allow(deprecated)]
@@ -140,6 +147,85 @@ pub fn studio_ui(
     let Ok(ctx) = contexts.ctx_mut() else { return; };
     ctx.set_visuals(egui::Visuals::light());
 
+    if ui_state.playtest_state.active {
+        egui::Area::new(egui::Id::new("stop_playtest_overlay"))
+            .anchor(egui::Align2::CENTER_TOP, egui::vec2(0.0, 10.0))
+            .show(ctx, |ui| {
+                egui::Frame::none()
+                    .fill(egui::Color32::from_rgba_unmultiplied(61, 61, 61, 200))
+                    .corner_radius(4.0)
+                    .inner_margin(egui::Margin::symmetric(16, 8))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            let stop_btn = ui.add(
+                                egui::Button::new(
+                                    egui::RichText::new("Stop playtest")
+                                        .color(egui::Color32::WHITE)
+                                        .strong()
+                                        .size(14.0)
+                                )
+                                .fill(egui::Color32::from_rgb(190, 60, 60))
+                            );
+                            if stop_btn.clicked() {
+                                ui_state.playtest_state.active = false;
+
+                                crate::app::server::bootstrap::SHUTDOWN_SERVER.store(true, std::sync::atomic::Ordering::Relaxed);
+
+                                for e in queries.playtest_client_query.iter() {
+                                    ui_res.commands.trigger(lightyear::prelude::client::Disconnect { entity: e });
+                                    if let Ok(mut e_cmd) = ui_res.commands.get_entity(e) {
+                                        e_cmd.despawn();
+                                    }
+                                }
+
+                                for (entity, _, name, _, _, brick_opt, _, _, _, _, _, _) in queries.entities_query.iter() {
+                                    let name_str = name.as_str();
+                                    if brick_opt.is_some() || name_str == "Player" || name_str.starts_with("Player_") {
+                                        if let Ok(mut e) = ui_res.commands.get_entity(entity) {
+                                            e.despawn();
+                                        }
+                                    }
+                                }
+
+                                for camera_entity in queries.playtest_cameras.iter() {
+                                    if let Ok(mut e) = ui_res.commands.get_entity(camera_entity) {
+                                        e.despawn();
+                                    }
+                                }
+
+                                for visual_entity in queries.playtest_visuals.iter() {
+                                    if let Ok(mut e) = ui_res.commands.get_entity(visual_entity) {
+                                        e.despawn();
+                                    }
+                                }
+
+                                for player_entity in queries.playtest_players.iter() {
+                                    if let Ok(mut e) = ui_res.commands.get_entity(player_entity) {
+                                        e.despawn();
+                                    }
+                                }
+
+                                for (entity, _, name, child_of_opt, _, brick_opt, _, _, _, _, _, _) in queries.entities_query.iter() {
+                                    if child_of_opt.is_none() && brick_opt.is_none() {
+                                        let n = name.as_str();
+                                        if n.contains("Armature") || n == "LocalPlayer" || n.starts_with("Player_") {
+                                            if let Ok(mut e) = ui_res.commands.get_entity(entity) {
+                                                e.despawn();
+                                            }
+                                        }
+                                    }
+                                }
+
+                                for brick_data in ui_state.playtest_backup.bricks.drain(..) {
+                                    crate::common::game::bricks::data::spawn_from_data(&mut ui_res.commands, &brick_data);
+                                }
+                            }
+                        });
+                    });
+            });
+        return;
+    }
+
     let frame = egui::Frame::NONE
         .fill(egui::Color32::from_rgb(245, 246, 247))
         .inner_margin(egui::Margin::same(0));
@@ -179,6 +265,10 @@ pub fn studio_ui(
                 &mut queries.camera_transform_query,
                 &mut queries.entities_query,
                 &mut ui_state.onboarding_data,
+                &mut ui_state.play_processes,
+                &mut ui_state.playtest_state,
+                &mut ui_state.playtest_backup,
+                &queries.playtest_client_query,
             );
         });
 
@@ -354,8 +444,10 @@ pub fn studio_ui(
                     scale: child_global.scale(),
                 };
 
-                ui_res.commands.entity(dragged).insert(new_transform);
-                ui_res.commands.entity(dragged).remove::<ChildOf>();
+                if let Ok(mut d_cmd) = ui_res.commands.get_entity(dragged) {
+                    d_cmd.insert(new_transform);
+                    d_cmd.remove::<ChildOf>();
+                }
 
                 ui_res.history.push_command(crate::studio::tools::UndoCommand::ParentChange {
                     entity: dragged,

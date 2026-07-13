@@ -50,6 +50,10 @@ pub fn draw_top_bar(
         Option<&mut crate::common::game::bricks::components::BrickPhysics>,
     ), Without<Camera3d>>,
     onboarding_data: &mut crate::studio::ui::panels::onboarding::OnboardingData,
+    play_processes: &mut ResMut<crate::studio::ui::resources::PlayInClientProcesses>,
+    playtest_state: &mut ResMut<crate::client::PlaytestState>,
+    playtest_backup: &mut ResMut<crate::studio::ui::resources::PlaytestBackup>,
+    playtest_client_query: &Query<Entity, With<crate::studio::ui::resources::InEditorPlaytestClient>>,
 ) {
     ui.style_mut().interaction.selectable_labels = false;
 
@@ -512,7 +516,139 @@ pub fn draw_top_bar(
                     }
                 }
 
-                if ribbonbutton(ui, Some(playc_tex), "Play in Client", false).clicked() {
+                let playtesting_active = playtest_state.active;
+                let playc_btn_label = if playtesting_active { "Stop Playtest" } else { "Play in Studio" };
+                let playc_btn_tex = if playtesting_active { stopp_tex } else { playc_tex };
+
+                if ribbonbutton(ui, Some(playc_btn_tex), playc_btn_label, playtesting_active).clicked() {
+                    if playtesting_active {
+                        playtest_state.active = false;
+
+                        crate::app::server::bootstrap::SHUTDOWN_SERVER.store(true, std::sync::atomic::Ordering::Relaxed);
+
+                        if let Some(client_entity) = playtest_client_query.iter().next() {
+                            commands.trigger(lightyear::prelude::client::Disconnect { entity: client_entity });
+                            if let Ok(mut e) = commands.get_entity(client_entity) {
+                                e.despawn();
+                            }
+                        }
+
+                        for (entity, _, name, _, _, brick_opt, _, _, _, _, _, _) in entities_query.iter() {
+                            let name_str = name.as_str();
+                            if brick_opt.is_some() || name_str == "Player" || name_str.starts_with("Player_") {
+                                if let Ok(mut e) = commands.get_entity(entity) {
+                                    e.despawn();
+                                }
+                            }
+                        }
+
+                        for brick_data in playtest_backup.bricks.drain(..) {
+                            crate::common::game::bricks::data::spawn_from_data(commands, &brick_data);
+                        }
+                    } else {
+                        playtest_state.active = true;
+
+                        let mut backup_bricks = Vec::new();
+                        for (entity, _, _, _, _, brick_opt, _, _, _, _, _, _) in entities_query.iter() {
+                            if brick_opt.is_some() {
+                                if let Some(data) = crate::common::game::bricks::data::capture_brick_data(entity, entities_query) {
+                                    backup_bricks.push(data);
+                                }
+                                if let Ok(mut e) = commands.get_entity(entity) {
+                                    e.despawn();
+                                }
+                            }
+                        }
+                        playtest_backup.bricks = backup_bricks;
+
+                        let temp_map_path = "temp_play.vrtx".to_string();
+                        let state = crate::common::core::vrtx::VrtxFileState {
+                            version: 1,
+                            gravity: Vec3::new(0.0, -186.9 * 0.28, 0.0),
+                            settings: crate::common::core::vrtx::VrtxSettings {
+                                ssao: graphics_settings.ssao,
+                                contact_shadows: graphics_settings.contact_shadows,
+                                bloom: graphics_settings.bloom,
+                            },
+                            camera_transform: Transform::IDENTITY,
+                            bricks: playtest_backup.bricks.iter().map(|b| {
+                                let mut current_color = Color::Srgba(Srgba::new(0.84, 0.24, 0.16, 1.0));
+                                if let Some(ref studs_mat_handle) = b.studs_material {
+                                    if let Some(mat) = studs_materials.get(&studs_mat_handle.0) {
+                                        current_color = mat.base.base_color;
+                                    }
+                                } else if let Some(ref mat_handle) = b.standard_material {
+                                    if let Some(mat) = materials.get(&mat_handle.0) {
+                                        current_color = mat.base_color;
+                                    }
+                                }
+                                let (physics_enabled, bounciness) = if let Some(phys) = b.physics {
+                                    (phys.enabled, phys.bounciness)
+                                } else {
+                                    (true, 0.3)
+                                };
+                                crate::common::core::vrtx::VrtxBrick {
+                                    name: b.name.clone(),
+                                    transform: b.transform,
+                                    shape: b.shape,
+                                    color: current_color,
+                                    physics_enabled,
+                                    bounciness,
+                                }
+                            }).collect(),
+                        };
+
+                        if state.save_to_file(&temp_map_path).is_ok() {
+                            crate::app::server::bootstrap::SHUTDOWN_SERVER.store(false, std::sync::atomic::Ordering::Relaxed);
+
+                            let server_app = crate::app::server::bootstrap::RaveServerApp::new(
+                                crate::app::server::config::ServerAppConfig {
+                                    port: 5000,
+                                    map_path: temp_map_path,
+                                }
+                            );
+                            std::thread::spawn(move || {
+                                server_app.run();
+                            });
+
+                            std::thread::sleep(std::time::Duration::from_millis(100));
+
+                            let server_addr = std::net::SocketAddr::new(
+                                std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
+                                5000,
+                            );
+                            let client_id = rand::random::<u64>();
+
+                            commands.insert_resource(crate::client::LocalClientId(client_id));
+                            commands.insert_resource(crate::client::ClientUkey("studio_play_local_key".to_string()));
+
+                            let auth = lightyear::prelude::Authentication::Manual {
+                                server_addr,
+                                client_id,
+                                private_key: [0u8; 32],
+                                protocol_id: 0,
+                            };
+
+                            let netcode_config = lightyear::prelude::client::NetcodeConfig {
+                                client_timeout_secs: 15,
+                                ..default()
+                            };
+
+                            let client_entity = commands.spawn((
+                                lightyear::prelude::client::Client::default(),
+                                lightyear::prelude::UdpIo::default(),
+                                lightyear::prelude::client::NetcodeClient::new(auth, netcode_config).unwrap(),
+                                lightyear::prelude::LocalAddr(std::net::SocketAddr::new(
+                                    std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
+                                    0,
+                                )),
+                                lightyear::prelude::PeerAddr(server_addr),
+                                crate::studio::ui::resources::InEditorPlaytestClient,
+                            )).id();
+
+                            commands.trigger(lightyear::prelude::client::Connect { entity: client_entity });
+                        }
+                    }
                 }
             });
         });

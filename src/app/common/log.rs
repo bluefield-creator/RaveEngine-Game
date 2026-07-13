@@ -29,7 +29,6 @@ pub fn setup_app_logging(app_name: &str) -> LogPlugin {
     LogPlugin {
         level,
         filter: default_filter.to_string(),
-        custom_layer: crate::common::ui::vuis::logging::vuis_custom_layer,
         ..Default::default()
     }
 }
