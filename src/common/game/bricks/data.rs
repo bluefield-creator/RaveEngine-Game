@@ -125,7 +125,7 @@ pub fn capture_brick_data(
     query: &Query<(
         Entity,
         &mut Transform,
-        &mut Name,
+        &Name,
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,

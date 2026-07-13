@@ -14,7 +14,7 @@ pub fn draw_entity_context_menu(
     entities_query: &Query<(
         Entity,
         &mut Transform,
-        &mut Name,
+        &Name,
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,

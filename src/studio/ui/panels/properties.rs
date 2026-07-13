@@ -35,10 +35,11 @@ fn draw_coord_edit(
 pub fn draw_properties(
     ui: &mut egui::Ui,
     selected_entities: &[Entity],
+    commands: &mut Commands,
     properties_query: &mut Query<(
         Entity,
         &mut Transform,
-        &mut Name,
+        &Name,
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,
@@ -199,9 +200,7 @@ pub fn draw_properties(
                         if res.changed() {
                             ui.data_mut(|d| d.insert_temp(name_id, name_str.clone()));
                             for &entity in selected_entities {
-                                if let Ok((_, _, mut name, _, _, _, _, _, _, _, _, _)) = properties_query.get_mut(entity) {
-                                    *name = Name::new(name_str.clone());
-                                }
+                                commands.entity(entity).insert(Name::new(name_str.clone()));
                             }
                         } else if !res.has_focus() {
                             let current_expected = if all_names_same { first_name_str.clone() } else { "".to_string() };

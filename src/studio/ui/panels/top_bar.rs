@@ -38,7 +38,7 @@ pub fn draw_top_bar(
     entities_query: &mut Query<(
         Entity,
         &mut Transform,
-        &mut Name,
+        &Name,
         Option<&ChildOf>,
         Option<&Children>,
         Option<&crate::common::game::bricks::components::Brick>,
@@ -119,27 +119,27 @@ pub fn draw_top_bar(
                             }
                             let gravity_val = if let Some(g) = gravity.as_ref() {
                                 g.0
-                            } else {
-                                Vec3::new(0.0, -186.9 * 0.28, 0.0)
-                            };
-                            let cam_transform = if let Some(cam_t) = camera_transform_query.iter().next() {
-                                *cam_t
-                            } else {
-                                Transform::IDENTITY
-                            };
-                            let state = crate::common::core::vrtx::VrtxFileState {
-                                version: 1,
-                                gravity: gravity_val,
-                                settings: crate::common::core::vrtx::VrtxSettings {
-                                    ssao: graphics_settings.ssao,
-                                    contact_shadows: graphics_settings.contact_shadows,
-                                    bloom: graphics_settings.bloom,
-                                },
-                                camera_transform: cam_transform,
-                                bricks: bricks_data,
-                            };
-                            let _ = state.save_to_file(&onboarding_data.save_path);
-                            ui.close_menu();
+                    } else {
+                        Vec3::new(0.0, -186.9 * 0.28, 0.0)
+                    };
+                    let cam_transform = if let Some(cam_t) = camera_transform_query.iter().next() {
+                        *cam_t
+                    } else {
+                        Transform::IDENTITY
+                    };
+                    let state = crate::common::core::vrtx::VrtxFileState {
+                        version: 1,
+                        gravity: gravity_val,
+                        settings: crate::common::core::vrtx::VrtxSettings {
+                            ssao: graphics_settings.ssao,
+                            contact_shadows: graphics_settings.contact_shadows,
+                            bloom: graphics_settings.bloom,
+                        },
+                        camera_transform: cam_transform,
+                        bricks: bricks_data,
+                    };
+                    let _ = state.save_to_file(&onboarding_data.save_path);
+                    ui.close_menu();
                         }
                         if ui.button("Save As...").clicked() {
                             if let Some(path) = rfd::FileDialog::new()

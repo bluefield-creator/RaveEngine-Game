@@ -79,7 +79,7 @@ pub struct UiQueries<'w, 's> {
         (
             Entity,
             &'static mut Transform,
-            &'static mut Name,
+            &'static Name,
             Option<&'static ChildOf>,
             Option<&'static Children>,
             Option<&'static Brick>,
@@ -89,6 +89,18 @@ pub struct UiQueries<'w, 's> {
             Option<&'static MeshMaterial3d<StandardMaterial>>,
             Option<&'static MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
             Option<&'static mut crate::common::game::bricks::components::BrickPhysics>,
+        ),
+        Without<Camera3d>,
+    >,
+    pub explorer_query: Query<
+        'w,
+        's,
+        (
+            Entity,
+            &'static Name,
+            Option<&'static ChildOf>,
+            Option<&'static Children>,
+            Option<&'static Brick>,
         ),
         Without<Camera3d>,
     >,
@@ -308,6 +320,7 @@ pub fn studio_ui(
                                 ui,
                                 &mut ui_res.commands,
                                 &mut ui_state.selection,
+                                &queries.explorer_query,
                                 &queries.entities_query,
                                 &mut ui_state.copiedbuffer,
                                 &mut ui_state.dragged_entity,
@@ -353,6 +366,7 @@ pub fn studio_ui(
                         panels::draw_properties(
                             ui,
                             &selected_bricks,
+                            &mut ui_res.commands,
                             &mut queries.entities_query,
                             &mut ui_res.brick_colors,
                             &mut ui_res.materials,

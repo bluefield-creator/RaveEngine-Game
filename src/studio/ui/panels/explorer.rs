@@ -11,20 +11,13 @@ fn is_managed_entity(
     entity: Entity,
     query: &Query<(
         Entity,
-        &mut Transform,
-        &mut Name,
+        &Name,
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,
-        Option<&mut crate::common::game::bricks::components::BrickShapeComponent>,
-        &GlobalTransform,
-        Option<&Mesh3d>,
-        Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
-        Option<&mut crate::common::game::bricks::components::BrickPhysics>,
     ), Without<Camera3d>>,
 ) -> bool {
-    if let Ok((_, _, name, _, _, brick_opt, _, _, _, _, _, _)) = query.get(entity) {
+    if let Ok((_, name, _, _, brick_opt)) = query.get(entity) {
         name.as_str() == "Baseplate" || brick_opt.is_some()
     } else {
         false
@@ -36,27 +29,24 @@ fn is_descendant(
     parent: Entity,
     query: &Query<(
         Entity,
-        &mut Transform,
-        &mut Name,
+        &Name,
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,
-        Option<&mut crate::common::game::bricks::components::BrickShapeComponent>,
-        &GlobalTransform,
-        Option<&Mesh3d>,
-        Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
-        Option<&mut crate::common::game::bricks::components::BrickPhysics>,
     ), Without<Camera3d>>,
 ) -> bool {
     let mut current = child;
     let mut depth = 0;
-    while let Ok((_, _, _, Some(parent_comp), _, _, _, _, _, _, _, _)) = query.get(current) {
-        let parent_entity = parent_comp.parent();
-        if parent_entity == parent {
-            return true;
+    while let Ok((_, _, parent_opt, _, _)) = query.get(current) {
+        if let Some(parent_comp) = parent_opt {
+            let parent_entity = parent_comp.parent();
+            if parent_entity == parent {
+                return true;
+            }
+            current = parent_entity;
+        } else {
+            break;
         }
-        current = parent_entity;
         depth += 1;
         if depth > 1000 {
             break;
@@ -66,27 +56,26 @@ fn is_descendant(
 }
 
 fn get_flat_ordered_entities(
-    entities_query: &Query<(
+    explorer_query: &Query<(
         Entity,
-        &mut Transform,
-        &mut Name,
+        &Name,
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,
-        Option<&mut crate::common::game::bricks::components::BrickShapeComponent>,
-        &GlobalTransform,
-        Option<&Mesh3d>,
-        Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
-        Option<&mut crate::common::game::bricks::components::BrickPhysics>,
     ), Without<Camera3d>>,
 ) -> Vec<Entity> {
     let mut flat = Vec::new();
     let mut roots = Vec::new();
-    for (entity, _, name, parent_opt, _, _, _, _, _, _, _, _) in entities_query {
-        if is_managed_entity(entity, entities_query) {
+    for (entity, name, parent_opt, _, brick_opt) in explorer_query {
+        let is_managed = name.as_str() == "Baseplate" || brick_opt.is_some();
+        if is_managed {
             let is_root = if let Some(parent_comp) = parent_opt {
-                !is_managed_entity(parent_comp.parent(), entities_query)
+                let parent = parent_comp.parent();
+                if let Ok((_, p_name, _, _, p_brick_opt)) = explorer_query.get(parent) {
+                    !(p_name.as_str() == "Baseplate" || p_brick_opt.is_some())
+                } else {
+                    true
+                }
             } else {
                 true
             };
@@ -107,42 +96,35 @@ fn get_flat_ordered_entities(
     });
 
     for (root_entity, _) in roots {
-        traverse_node_recursive(root_entity, entities_query, &mut flat);
+        traverse_node_recursive(root_entity, explorer_query, &mut flat);
     }
     flat
 }
 
 fn traverse_node_recursive(
     entity: Entity,
-    entities_query: &Query<(
+    explorer_query: &Query<(
         Entity,
-        &mut Transform,
-        &mut Name,
+        &Name,
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,
-        Option<&mut crate::common::game::bricks::components::BrickShapeComponent>,
-        &GlobalTransform,
-        Option<&Mesh3d>,
-        Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
-        Option<&mut crate::common::game::bricks::components::BrickPhysics>,
     ), Without<Camera3d>>,
     flat: &mut Vec<Entity>,
 ) {
     flat.push(entity);
-    if let Ok((_, _, _, _, Some(children_comp), _, _, _, _, _, _, _)) = entities_query.get(entity) {
+    if let Ok((_, _, _, Some(children_comp), _)) = explorer_query.get(entity) {
         let mut sorted_children: Vec<Entity> = children_comp
             .iter()
-            .filter(|&child| is_managed_entity(child, entities_query))
+            .filter(|&child| is_managed_entity(child, explorer_query))
             .collect();
         sorted_children.sort_by(|&a, &b| {
-            let name_a = entities_query.get(a).map(|(_, _, n, _, _, _, _, _, _, _, _, _)| n.as_str()).unwrap_or("");
-            let name_b = entities_query.get(b).map(|(_, _, n, _, _, _, _, _, _, _, _, _)| n.as_str()).unwrap_or("");
+            let name_a = explorer_query.get(a).map(|(_, n, _, _, _)| n.as_str()).unwrap_or("");
+            let name_b = explorer_query.get(b).map(|(_, n, _, _, _)| n.as_str()).unwrap_or("");
             name_a.cmp(name_b)
         });
         for child in sorted_children {
-            traverse_node_recursive(child, entities_query, flat);
+            traverse_node_recursive(child, explorer_query, flat);
         }
     }
 }
@@ -185,10 +167,17 @@ fn draw_entity_node(
     entity: Entity,
     commands: &mut Commands,
     selection: &mut ResMut<Selection>,
+    explorer_query: &Query<(
+        Entity,
+        &Name,
+        Option<&ChildOf>,
+        Option<&Children>,
+        Option<&Brick>,
+    ), Without<Camera3d>>,
     entities_query: &Query<(
         Entity,
         &mut Transform,
-        &mut Name,
+        &Name,
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,
@@ -205,11 +194,11 @@ fn draw_entity_node(
     workspace_tex: egui::TextureId,
     brick_tex: egui::TextureId,
 ) {
-    let Ok((_, _, name, _, children_opt, _, _, _, _, _, _, _)) = entities_query.get(entity) else { return };
+    let Ok((_, name, _, children_opt, _)) = explorer_query.get(entity) else { return };
     let name_str = name.as_str().to_string();
 
     let has_managed_children = if let Some(children_comp) = children_opt {
-        children_comp.iter().any(|child| is_managed_entity(child, entities_query))
+        children_comp.iter().any(|child| is_managed_entity(child, explorer_query))
     } else {
         false
     };
@@ -245,7 +234,7 @@ fn draw_entity_node(
                             selection.entity = Some(entity);
                         }
                     } else if shift_held {
-                        let pool = get_flat_ordered_entities(entities_query);
+                        let pool = get_flat_ordered_entities(explorer_query);
                         perform_range_selection(entity, &pool, selection);
                     } else {
                         selection.entity = Some(entity);
@@ -276,7 +265,7 @@ fn draw_entity_node(
                 }
 
                 if let Some(dragged) = dragged_entity.entity {
-                    if dragged != entity && !is_descendant(entity, dragged, entities_query) {
+                    if dragged != entity && !is_descendant(entity, dragged, explorer_query) {
                         if label_res.hovered() {
                             ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
                         }
@@ -333,11 +322,11 @@ fn draw_entity_node(
             if let Some(children_comp) = children_opt {
                 let mut sorted_children: Vec<Entity> = children_comp
                     .iter()
-                    .filter(|&child| is_managed_entity(child, entities_query))
+                    .filter(|&child| is_managed_entity(child, explorer_query))
                     .collect();
                 sorted_children.sort_by(|&a, &b| {
-                    let name_a = entities_query.get(a).map(|(_, _, n, _, _, _, _, _, _, _, _, _)| n.as_str()).unwrap_or("");
-                    let name_b = entities_query.get(b).map(|(_, _, n, _, _, _, _, _, _, _, _, _)| n.as_str()).unwrap_or("");
+                    let name_a = explorer_query.get(a).map(|(_, n, _, _, _)| n.as_str()).unwrap_or("");
+                    let name_b = explorer_query.get(b).map(|(_, n, _, _, _)| n.as_str()).unwrap_or("");
                     name_a.cmp(name_b)
                 });
 
@@ -347,6 +336,7 @@ fn draw_entity_node(
                         child,
                         commands,
                         selection,
+                        explorer_query,
                         entities_query,
                         copiedbuffer,
                         dragged_entity,
@@ -382,7 +372,7 @@ fn draw_entity_node(
                     selection.entity = Some(entity);
                 }
             } else if shift_held {
-                let pool = get_flat_ordered_entities(entities_query);
+                let pool = get_flat_ordered_entities(explorer_query);
                 perform_range_selection(entity, &pool, selection);
             } else {
                 selection.entity = Some(entity);
@@ -409,7 +399,7 @@ fn draw_entity_node(
         }
 
         if let Some(dragged) = dragged_entity.entity {
-            if dragged != entity && !is_descendant(entity, dragged, entities_query) {
+            if dragged != entity && !is_descendant(entity, dragged, explorer_query) {
                 if label_res.hovered() {
                     ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
                 }
@@ -466,23 +456,16 @@ fn draw_player_node(
     ui: &mut egui::Ui,
     entity: Entity,
     selection: &mut ResMut<Selection>,
-    entities_query: &Query<(
+    explorer_query: &Query<(
         Entity,
-        &mut Transform,
-        &mut Name,
+        &Name,
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,
-        Option<&mut crate::common::game::bricks::components::BrickShapeComponent>,
-        &GlobalTransform,
-        Option<&Mesh3d>,
-        Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
-        Option<&mut crate::common::game::bricks::components::BrickPhysics>,
     ), Without<Camera3d>>,
     players_tex: egui::TextureId,
 ) {
-    let Ok((_, _, name, _, _, _, _, _, _, _, _, _)) = entities_query.get(entity) else { return };
+    let Ok((_, name, _, _, _)) = explorer_query.get(entity) else { return };
     let name_str = name.as_str().to_string();
     let is_selected = selection.entities.contains(&entity);
 
@@ -511,15 +494,15 @@ fn draw_player_node(
             }
         } else if shift_held {
             let mut sorted_players = Vec::new();
-            for (player_entity, _, name, _, _, _, _, _, _, _, _, _) in entities_query {
+            for (player_entity, name, _, _, _) in explorer_query {
                 let name_str = name.as_str();
                 if name_str == "Player" || name_str.starts_with("Player_") {
                     sorted_players.push(player_entity);
                 }
             }
             sorted_players.sort_by(|&a, &b| {
-                let name_a = entities_query.get(a).map(|(_, _, n, _, _, _, _, _, _, _, _, _)| n.as_str()).unwrap_or("");
-                let name_b = entities_query.get(b).map(|(_, _, n, _, _, _, _, _, _, _, _, _)| n.as_str()).unwrap_or("");
+                let name_a = explorer_query.get(a).map(|(_, n, _, _, _)| n.as_str()).unwrap_or("");
+                let name_b = explorer_query.get(b).map(|(_, n, _, _, _)| n.as_str()).unwrap_or("");
                 name_a.cmp(name_b)
             });
             perform_range_selection(entity, &sorted_players, selection);
@@ -536,10 +519,17 @@ pub fn draw_explorer(
     ui: &mut egui::Ui,
     commands: &mut Commands,
     selection: &mut ResMut<Selection>,
+    explorer_query: &Query<(
+        Entity,
+        &Name,
+        Option<&ChildOf>,
+        Option<&Children>,
+        Option<&Brick>,
+    ), Without<Camera3d>>,
     entities_query: &Query<(
         Entity,
         &mut Transform,
-        &mut Name,
+        &Name,
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,
@@ -567,10 +557,16 @@ pub fn draw_explorer(
     ui.add_space(8.0);
 
     let mut roots = Vec::new();
-    for (entity, _, name, parent_opt, _, _, _, _, _, _, _, _) in entities_query {
-        if is_managed_entity(entity, entities_query) {
+    for (entity, name, parent_opt, _, brick_opt) in explorer_query {
+        let is_managed = name.as_str() == "Baseplate" || brick_opt.is_some();
+        if is_managed {
             let is_root = if let Some(parent_comp) = parent_opt {
-                !is_managed_entity(parent_comp.parent(), entities_query)
+                let parent = parent_comp.parent();
+                if let Ok((_, p_name, _, _, p_brick_opt)) = explorer_query.get(parent) {
+                    !(p_name.as_str() == "Baseplate" || p_brick_opt.is_some())
+                } else {
+                    true
+                }
             } else {
                 true
             };
@@ -618,6 +614,7 @@ pub fn draw_explorer(
                 entity,
                 commands,
                 selection,
+                explorer_query,
                 entities_query,
                 copiedbuffer,
                 dragged_entity,
@@ -685,7 +682,7 @@ pub fn draw_explorer(
 
     players_res.body(|ui| {
         let mut sorted_players = Vec::new();
-        for (entity, _, name, _, _, _, _, _, _, _, _, _) in entities_query {
+        for (entity, name, _, _, _) in explorer_query {
             let name_str = name.as_str();
             if name_str == "Player" || name_str.starts_with("Player_") {
                 sorted_players.push(entity);
@@ -693,8 +690,8 @@ pub fn draw_explorer(
         }
 
         sorted_players.sort_by(|&a, &b| {
-            let name_a = entities_query.get(a).map(|(_, _, n, _, _, _, _, _, _, _, _, _)| n.as_str()).unwrap_or("");
-            let name_b = entities_query.get(b).map(|(_, _, n, _, _, _, _, _, _, _, _, _)| n.as_str()).unwrap_or("");
+            let name_a = explorer_query.get(a).map(|(_, n, _, _, _)| n.as_str()).unwrap_or("");
+            let name_b = explorer_query.get(b).map(|(_, n, _, _, _)| n.as_str()).unwrap_or("");
             name_a.cmp(name_b)
         });
 
@@ -703,7 +700,7 @@ pub fn draw_explorer(
                 ui,
                 child,
                 selection,
-                entities_query,
+                explorer_query,
                 players_tex,
             );
         }
@@ -730,6 +727,10 @@ fn explorerlabel(
 ) -> egui::Response {
     let size = egui::vec2(ui.available_width(), 20.0);
     let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click_and_drag());
+
+    if !ui.is_rect_visible(rect) {
+        return response;
+    }
 
     if selected {
         ui.painter().rect_filled(
