@@ -255,6 +255,7 @@ pub fn draw_top_bar(
                                                 enabled: brick.physics_enabled,
                                                 bounciness: brick.bounciness,
                                             },
+                                            crate::common::game::bricks::components::BrickColor { color: brick.color },
                                             Pickable::default(),
                                             Name::new(brick.name),
                                         ));

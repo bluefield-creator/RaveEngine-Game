@@ -258,6 +258,7 @@ pub fn draw_onboarding(
                                         enabled: false,
                                         bounciness: 0.3,
                                     },
+                                    crate::common::game::bricks::components::BrickColor { color: Color::srgb(0.28, 0.62, 0.32) },
                                     Pickable::default(),
                                     Name::new("Baseplate"),
                                 ));

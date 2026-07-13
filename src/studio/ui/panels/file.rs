@@ -163,6 +163,7 @@ pub fn draw_file_window(
                                         enabled: brick.physics_enabled,
                                         bounciness: brick.bounciness,
                                     },
+                                    crate::common::game::bricks::components::BrickColor { color: brick.color },
                                     Pickable::default(),
                                     Name::new(brick.name),
                                 ));

@@ -508,7 +508,7 @@ fn sync_predicted_interpolated_transforms(
 }
 
 fn sync_brick_color_to_material(
-    query: Query<(&crate::common::game::bricks::components::BrickColor, &MeshMaterial3d<ExtendedMaterial<StandardMaterial, StudsExtension>>), Changed<crate::common::game::bricks::components::BrickColor>>,
+    query: Query<(&crate::common::game::bricks::components::BrickColor, &MeshMaterial3d<ExtendedMaterial<StandardMaterial, StudsExtension>>), Or<(Changed<crate::common::game::bricks::components::BrickColor>, Added<MeshMaterial3d<ExtendedMaterial<StandardMaterial, StudsExtension>>>)>>,
     mut studs_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, StudsExtension>>>,
 ) {
     for (brick_color, material_handle) in &query {
