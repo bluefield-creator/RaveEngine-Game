@@ -11,6 +11,7 @@ pub struct StudioUiAssets {
     pub workspace_icon: Handle<Image>,
     pub brick_icon: Handle<Image>,
     pub players_icon: Handle<Image>,
+    pub lighting_icon: Handle<Image>,
     pub thumb_empty: Handle<Image>,
     pub thumb_baseplate: Handle<Image>,
     pub play_icon: Handle<Image>,
@@ -27,6 +28,7 @@ pub struct StudioUiTextureIds {
     pub workspace_tex: Option<bevy_egui::egui::TextureId>,
     pub brick_tex: Option<bevy_egui::egui::TextureId>,
     pub players_tex: Option<bevy_egui::egui::TextureId>,
+    pub lighting_tex: Option<bevy_egui::egui::TextureId>,
     pub thumb_empty_tex: Option<bevy_egui::egui::TextureId>,
     pub thumb_baseplate_tex: Option<bevy_egui::egui::TextureId>,
     pub play_tex: Option<bevy_egui::egui::TextureId>,
@@ -100,6 +102,7 @@ pub fn setup_ui_assets(
     let workspace_icon = load_icon_image("content/studio/icons/Items/workspace.png", &mut images);
     let brick_icon = load_icon_image("content/studio/icons/Items/brick.png", &mut images);
     let players_icon = load_icon_image("content/studio/icons/Items/players.png", &mut images);
+    let lighting_icon = load_icon_image("content/studio/icons/Items/lighting.png", &mut images);
     let thumb_empty = load_icon_image("content/studio/thumb/empty.png", &mut images);
     let thumb_baseplate = load_icon_image("content/studio/thumb/baseplate.png", &mut images);
     let play_icon = load_icon_image("content/studio/icons/Tools/play.png", &mut images);
@@ -114,6 +117,7 @@ pub fn setup_ui_assets(
         workspace_icon,
         brick_icon,
         players_icon,
+        lighting_icon,
         thumb_empty,
         thumb_baseplate,
         play_icon,

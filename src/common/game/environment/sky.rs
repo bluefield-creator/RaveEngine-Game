@@ -5,6 +5,12 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 #[derive(Component)]
 pub struct SkyDome;
 
+#[derive(Component)]
+pub struct SunDisk;
+
+#[derive(Component)]
+pub struct MoonDisk;
+
 pub fn generate_sky_gradient_image() -> Image {
     let width = 1;
     let height = 256;
@@ -43,7 +49,7 @@ pub fn generate_sky_gradient_image() -> Image {
         TextureDimension::D2,
         data,
         TextureFormat::Rgba8UnormSrgb,
-        RenderAssetUsages::RENDER_WORLD,
+        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
     )
 }
 
@@ -56,7 +62,7 @@ pub fn setup_sky(
     let sky_gradient_image = generate_sky_gradient_image();
     let sky_texture_handle = images.add(sky_gradient_image);
     
-    let sun_rotation = Quat::from_euler(EulerRot::XYZ, -0.32, 0.95, 0.0);
+    let sun_rotation = Quat::from_euler(EulerRot::XYZ, -1.2, 0.3, 0.0);
     let sun_dir = sun_rotation.mul_vec3(Vec3::Z);
     let sun_position = sun_dir * 450.0;
 
@@ -86,9 +92,25 @@ pub fn setup_sky(
         Transform::from_translation(sun_position),
         bevy::light::NotShadowCaster,
         bevy::light::NotShadowReceiver,
+        SunDisk,
+    )).id();
+
+    let moon_disk = commands.spawn((
+        Mesh3d(meshes.add(Sphere::new(10.0))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::srgb(3.0, 3.0, 4.0),
+            unlit: true,
+            fog_enabled: false,
+            ..default()
+        })),
+        Transform::from_translation(-sun_position),
+        bevy::light::NotShadowCaster,
+        bevy::light::NotShadowReceiver,
+        MoonDisk,
     )).id();
 
     commands.entity(sky_dome).add_child(sun_disk);
+    commands.entity(sky_dome).add_child(moon_disk);
 }
 
 pub fn sync_sky_dome(

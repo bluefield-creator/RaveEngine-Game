@@ -7,8 +7,10 @@ use bevy::pbr::{ExtendedMaterial, MaterialPlugin};
 
 #[derive(Resource, Default)]
 pub struct BrickMaterialCache {
-    pub studs_materials: std::collections::HashMap<Color, Handle<ExtendedMaterial<StandardMaterial, studs::StudsExtension>>>,
-    pub plain_materials: std::collections::HashMap<Color, Handle<StandardMaterial>>,
+    pub studs_materials: std::collections::HashMap<[u32; 4], Handle<ExtendedMaterial<StandardMaterial, studs::StudsExtension>>>,
+    pub plain_materials: std::collections::HashMap<[u32; 4], Handle<StandardMaterial>>,
+    pub block_mesh: Option<Handle<Mesh>>,
+    pub sphere_mesh: Option<Handle<Mesh>>,
 }
 
 pub struct BricksPlugin;
@@ -37,15 +39,22 @@ impl Plugin for BricksPlugin {
 pub fn update_brick_meshes_on_shape_change(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
+    mut cache: ResMut<BrickMaterialCache>,
     query: Query<(Entity, &components::BrickShapeComponent), Changed<components::BrickShapeComponent>>,
 ) {
     for (entity, brick_shape_comp) in &query {
         match brick_shape_comp.shape {
             components::BrickShape::Block => {
-                commands.entity(entity).insert(Mesh3d(meshes.add(Cuboid::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28))));
+                if cache.block_mesh.is_none() {
+                    cache.block_mesh = Some(meshes.add(Cuboid::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28)));
+                }
+                commands.entity(entity).insert(Mesh3d(cache.block_mesh.clone().unwrap()));
             }
             components::BrickShape::Sphere => {
-                commands.entity(entity).insert(Mesh3d(meshes.add(Sphere::new(1.0 * 0.28))));
+                if cache.sphere_mesh.is_none() {
+                    cache.sphere_mesh = Some(meshes.add(Sphere::new(1.0 * 0.28)));
+                }
+                commands.entity(entity).insert(Mesh3d(cache.sphere_mesh.clone().unwrap()));
             }
         }
     }

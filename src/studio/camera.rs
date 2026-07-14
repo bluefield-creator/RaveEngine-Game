@@ -19,8 +19,8 @@ pub fn setup_studio(
     egui_global_settings.auto_create_primary_context = false;
 
     if let Some(mut amb) = ambient {
-        amb.color = Color::srgb(0.85, 0.88, 1.0);
-        amb.brightness = 1000.0;
+        amb.color = Color::srgb(0.55, 0.75, 0.95);
+        amb.brightness = 600.0;
     }
     
     let mut camera = commands.spawn((
@@ -62,7 +62,7 @@ pub fn setup_studio(
         camera.insert(bloom);
     }
 
-    let mut gizmo_camera = commands.spawn((
+    commands.spawn((
         Camera3d::default(),
         Camera {
             order: 1,
@@ -75,25 +75,16 @@ pub fn setup_studio(
         bevy::camera::visibility::RenderLayers::layer(1),
         bevy_egui::PrimaryEguiContext,
         GizmoCamera,
-        DepthPrepass,
-        NormalPrepass,
-        MotionVectorPrepass,
-        bevy::render::occlusion_culling::OcclusionCulling,
     ));
-
-    if let Some(ssao) = ssao_val {
-        gizmo_camera.insert(ssao);
-    }
-    if let Some(contact) = contact_shadows_val {
-        gizmo_camera.insert(contact);
-    }
-    if let Some(bloom) = bloom_val {
-        gizmo_camera.insert(bloom);
-    }
 
     commands.spawn((
         Name::new("Players"),
         crate::common::net::components::PlayersServiceContainer,
+    ));
+
+    commands.spawn((
+        Name::new("Lighting"),
+        crate::common::net::components::LightingServiceContainer,
     ));
 }
 
@@ -104,16 +95,26 @@ pub fn disable_camera_on_ui_interaction(
     hover_state: Res<crate::studio::tools::HoverState>,
     onboarding_state: Res<State<crate::studio::tools::OnboardingState>>,
     playtest: Option<Res<crate::client::PlaytestState>>,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
 ) {
     let onboarding_active = *onboarding_state.get() != crate::studio::tools::OnboardingState::Inactive;
     let playtesting_active = playtest.map_or(false, |p| p.active);
+
+    let right_mouse_held = mouse_buttons.pressed(MouseButton::Right);
+    let movement_keys_held = keys.any_pressed([
+        KeyCode::KeyW, KeyCode::KeyA, KeyCode::KeyS, KeyCode::KeyD,
+        KeyCode::KeyQ, KeyCode::KeyE, KeyCode::ArrowUp, KeyCode::ArrowDown,
+        KeyCode::ArrowLeft, KeyCode::ArrowRight
+    ]);
+    let camera_moving = right_mouse_held || movement_keys_held;
 
     if let Ok(ctx) = contexts.ctx_mut() {
         let wants_input = ctx.egui_wants_pointer_input() || ctx.egui_wants_keyboard_input() || hover_state.is_hovering_ui || onboarding_active || playtesting_active;
         for mut state in &mut camera_query {
             state.enabled = !wants_input;
         }
-        picking_settings.is_enabled = !wants_input;
+        picking_settings.is_enabled = !wants_input && !camera_moving;
     }
 }
 

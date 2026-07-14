@@ -34,6 +34,7 @@ pub struct UiResources<'w, 's> {
     pub gravity: Option<ResMut<'w, avian3d::prelude::Gravity>>,
     pub brick_colors: Query<'w, 's, &'static mut crate::common::game::bricks::components::BrickColor>,
     pub players_service: Option<ResMut<'w, crate::studio::tools::PlayersService>>,
+    pub lighting_service: Option<ResMut<'w, crate::common::game::environment::lighting::LightingService>>,
 }
 
 #[derive(SystemParam)]
@@ -145,6 +146,9 @@ pub fn studio_ui(
     });
     let players_tex = *ui_state.texture_ids.players_tex.get_or_insert_with(|| {
         contexts.add_image(EguiTextureHandle::Strong(assets.players_icon.clone()))
+    });
+    let lighting_tex = *ui_state.texture_ids.lighting_tex.get_or_insert_with(|| {
+        contexts.add_image(EguiTextureHandle::Strong(assets.lighting_icon.clone()))
     });
     let play_tex = *ui_state.texture_ids.play_tex.get_or_insert_with(|| {
         contexts.add_image(EguiTextureHandle::Strong(assets.play_icon.clone()))
@@ -300,7 +304,7 @@ pub fn studio_ui(
                 }
             }
 
-            let has_selection = !selected_bricks.is_empty() || ui_state.selection.workspace_selected || ui_state.selection.players_selected;
+            let has_selection = !selected_bricks.is_empty() || ui_state.selection.workspace_selected || ui_state.selection.players_selected || ui_state.selection.lighting_selected;
             let mut explorer_height = if has_selection {
                 let id = ui.make_persistent_id("explorer_height_split");
                 ui.data_mut(|d| d.get_temp::<f32>(id).unwrap_or(180.0))
@@ -328,6 +332,7 @@ pub fn studio_ui(
                                 workspace_tex,
                                 brick_tex,
                                 players_tex,
+                                lighting_tex,
                             );
                         });
                 }
@@ -441,6 +446,41 @@ pub fn studio_ui(
                         panels::draw_players_properties(
                             ui,
                             &mut ui_res.players_service,
+                        );
+                    });
+            } else if ui_state.selection.lighting_selected {
+                let sep_height = 20.0;
+                let (rect, response) = ui.allocate_exact_size(
+                    egui::vec2(ui.available_width(), sep_height),
+                    egui::Sense::click_and_drag()
+                );
+
+                if response.hovered() || response.dragged() {
+                    ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
+                }
+
+                if response.dragged() {
+                    let delta_y = response.drag_delta().y;
+                    let max_limit = (total_height - 100.0).max(100.0);
+                    explorer_height = (explorer_height + delta_y).clamp(50.0, max_limit);
+                    let id = ui.make_persistent_id("explorer_height_split");
+                    ui.data_mut(|d| d.insert_temp(id, explorer_height));
+                }
+
+                let line_y = rect.center().y;
+                let line_rect = egui::Rect::from_x_y_ranges(
+                    rect.left()..=rect.right(),
+                    (line_y - 0.5)..=(line_y + 0.5)
+                );
+                ui.painter().rect_filled(line_rect, 0.0, egui::Color32::from_rgb(180, 180, 180));
+
+                egui::ScrollArea::vertical()
+                    .id_source("properties_scroll")
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        panels::draw_lighting_properties(
+                            ui,
+                            &mut ui_res.lighting_service,
                         );
                     });
             }

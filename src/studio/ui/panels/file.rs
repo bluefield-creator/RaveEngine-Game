@@ -122,7 +122,8 @@ pub fn draw_file_window(
                         .set_directory(std::env::current_dir().unwrap_or_default())
                         .pick_file() {
                         let open_path_str = path.display().to_string();
-                        if let Ok(state) = crate::common::core::vrtx::VrtxFileState::load_from_file(&open_path_str) {
+                        let loaded_state = crate::common::core::vrtx::VrtxFileState::load_from_file(&open_path_str).ok();
+                        if let Some(state) = loaded_state {
                             onboarding_data.save_path = open_path_str;
                             for (entity, _, _, _, _, brick_opt, _, _, _, _, _, _) in entities_query.iter() {
                                 if brick_opt.is_some() {
@@ -139,34 +140,12 @@ pub fn draw_file_window(
                                 *cam_t = state.camera_transform;
                             }
                             for brick in state.bricks {
-                                let mesh_handle = match brick.shape {
-                                    crate::common::game::bricks::components::BrickShape::Block => {
-                                        meshes.add(Cuboid::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28))
-                                    }
-                                    crate::common::game::bricks::components::BrickShape::Sphere => {
-                                        meshes.add(Sphere::new(1.0 * 0.28))
-                                    }
-                                };
                                 let layers = if brick.player_can_collide {
                                     CollisionLayers::from_bits(0b0001, 0xFFFF_FFFF)
                                 } else {
                                     CollisionLayers::from_bits(0b0100, 0xFFFF_FFFD)
                                 };
                                 commands.spawn((
-                                    Mesh3d(mesh_handle),
-                                    MeshMaterial3d(studs_materials.add(ExtendedMaterial {
-                                        base: StandardMaterial {
-                                            base_color: brick.color,
-                                            perceptual_roughness: 0.95,
-                                            reflectance: 0.1,
-                                            alpha_mode: if brick.color.alpha() < 1.0 { AlphaMode::Blend } else { AlphaMode::Opaque },
-                                            ..default()
-                                        },
-                                        extension: crate::common::game::bricks::studs::StudsExtension {
-                                            stud_texture: studs_assets.stud.clone(),
-                                            inlet_texture: studs_assets.inlet.clone(),
-                                        },
-                                    })),
                                     brick.transform,
                                     crate::common::game::bricks::components::Brick,
                                     crate::common::game::bricks::components::BrickShapeComponent { shape: brick.shape },

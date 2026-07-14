@@ -425,6 +425,7 @@ fn on_brick_added(
     name_query: Query<&Name>,
     shape_query: Query<&BrickShapeComponent>,
     color_query: Query<&crate::common::game::bricks::components::BrickColor>,
+    mut cache: ResMut<crate::common::game::bricks::BrickMaterialCache>,
 ) {
     let entity = trigger.entity;
     trace!("Brick added to scene: {:?}", entity);
@@ -432,10 +433,16 @@ fn on_brick_added(
 
     let mesh_handle = match shape {
         crate::common::game::bricks::components::BrickShape::Block => {
-            meshes.add(Cuboid::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28))
+            if cache.block_mesh.is_none() {
+                cache.block_mesh = Some(meshes.add(Cuboid::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28)));
+            }
+            cache.block_mesh.clone().unwrap()
         }
         crate::common::game::bricks::components::BrickShape::Sphere => {
-            meshes.add(Sphere::new(1.0 * 0.28))
+            if cache.sphere_mesh.is_none() {
+                cache.sphere_mesh = Some(meshes.add(Sphere::new(1.0 * 0.28)));
+            }
+            cache.sphere_mesh.clone().unwrap()
         }
     };
 
@@ -450,9 +457,18 @@ fn on_brick_added(
         }
     };
 
-    commands.entity(entity).insert((
-        Mesh3d(mesh_handle),
-        MeshMaterial3d(studs_materials.add(ExtendedMaterial {
+    let srgba = base_color.to_srgba();
+    let cache_key = [
+        srgba.red.to_bits(),
+        srgba.green.to_bits(),
+        srgba.blue.to_bits(),
+        srgba.alpha.to_bits(),
+    ];
+
+    let material_handle = if let Some(existing) = cache.studs_materials.get(&cache_key) {
+        existing.clone()
+    } else {
+        let new_mat = studs_materials.add(ExtendedMaterial {
             base: StandardMaterial {
                 base_color,
                 perceptual_roughness: 0.9,
@@ -463,7 +479,14 @@ fn on_brick_added(
                 stud_texture: studs_assets.stud.clone(),
                 inlet_texture: studs_assets.inlet.clone(),
             },
-        })),
+        });
+        cache.studs_materials.insert(cache_key, new_mat.clone());
+        new_mat
+    };
+
+    commands.entity(entity).insert((
+        Mesh3d(mesh_handle),
+        MeshMaterial3d(material_handle),
     ));
 }
 
@@ -509,14 +532,41 @@ fn sync_predicted_interpolated_transforms(
 }
 
 fn sync_brick_color_to_material(
-    query: Query<(&crate::common::game::bricks::components::BrickColor, &MeshMaterial3d<ExtendedMaterial<StandardMaterial, StudsExtension>>), Or<(Changed<crate::common::game::bricks::components::BrickColor>, Added<MeshMaterial3d<ExtendedMaterial<StandardMaterial, StudsExtension>>>)>>,
+    mut commands: Commands,
+    query: Query<(Entity, &crate::common::game::bricks::components::BrickColor), Changed<crate::common::game::bricks::components::BrickColor>>,
+    mut cache: ResMut<crate::common::game::bricks::BrickMaterialCache>,
     mut studs_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, StudsExtension>>>,
+    studs_assets: Res<StudsAssets>,
 ) {
-    for (brick_color, material_handle) in &query {
-        if let Some(mut material) = studs_materials.get_mut(&material_handle.0) {
-            material.base.base_color = brick_color.color;
-            material.base.alpha_mode = if brick_color.color.alpha() < 1.0 { AlphaMode::Blend } else { AlphaMode::Opaque };
-        }
+    for (entity, brick_color) in &query {
+        let base_color = brick_color.color;
+        let srgba = base_color.to_srgba();
+        let cache_key = [
+            srgba.red.to_bits(),
+            srgba.green.to_bits(),
+            srgba.blue.to_bits(),
+            srgba.alpha.to_bits(),
+        ];
+
+        let material_handle = if let Some(existing) = cache.studs_materials.get(&cache_key) {
+            existing.clone()
+        } else {
+            let new_mat = studs_materials.add(ExtendedMaterial {
+                base: StandardMaterial {
+                    base_color,
+                    perceptual_roughness: 0.9,
+                    alpha_mode: if base_color.alpha() < 1.0 { AlphaMode::Blend } else { AlphaMode::Opaque },
+                    ..default()
+                },
+                extension: StudsExtension {
+                    stud_texture: studs_assets.stud.clone(),
+                    inlet_texture: studs_assets.inlet.clone(),
+                },
+            });
+            cache.studs_materials.insert(cache_key, new_mat.clone());
+            new_mat
+        };
+        commands.entity(entity).insert(MeshMaterial3d(material_handle));
     }
 }
 

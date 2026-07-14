@@ -30,6 +30,7 @@ pub struct Selection {
     pub entities: Vec<Entity>,
     pub workspace_selected: bool,
     pub players_selected: bool,
+    pub lighting_selected: bool,
 }
 
 #[derive(Resource, Default)]
@@ -204,6 +205,8 @@ pub static SHARED_PLAYERS_SERVICE: RwLock<PlayersService> = RwLock::new(PlayersS
     friction: 0.0,
     bounciness: 0.0,
 });
+
+pub static SHARED_LIGHTING_SERVICE: RwLock<f32> = RwLock::new(12.0);
 
 pub fn handle_keyboard_shortcuts(
     keys: Res<ButtonInput<KeyCode>>,
@@ -759,7 +762,7 @@ pub fn handle_part_drag(
     if snap_config.enabled && snap_config.distance > 0.0 {
         let snap_interval = snap_config.distance * 0.28;
         target_world_translation.x = ((target_world_translation.x - world_half_extents.x) / snap_interval).round() * snap_interval + world_half_extents.x;
-        target_world_translation.z = ((target_world_translation.z - world_half_extents.z) / snap_interval).round() * snap_interval + world_half_extents.z;
+        target_world_translation.z = ((target_world_translation.z - world_half_extents.z) / snap_interval).round() * snap_interval + world_half_extents.x;
         target_world_translation.y = ((target_world_translation.y - world_half_extents.y) / snap_interval).round() * snap_interval + world_half_extents.y;
         if target_world_translation.y < world_half_extents.y {
             target_world_translation.y = world_half_extents.y;
@@ -950,6 +953,7 @@ pub fn handle_marquee_selection(
                     selection.entity = Some(selected_entities[0]);
                     selection.workspace_selected = false;
                     selection.players_selected = false;
+                    selection.lighting_selected = false;
                 } else {
                     selection.entities.clear();
                     selection.entity = None;

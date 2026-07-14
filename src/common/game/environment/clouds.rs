@@ -105,9 +105,9 @@ pub fn setup_clouds(
 
     let mut rng = rand::rng();
     for _ in 0..150 {
-        let x = rng.random_range(-1200.0..1200.0);
+        let x = rng.random_range(-2400.0..2400.0);
         let y = rng.random_range(110.0..140.0);
-        let z = rng.random_range(-1200.0..1200.0);
+        let z = rng.random_range(-2400.0..2400.0);
         let size_x = rng.random_range(150.0..250.0);
         let size_z = rng.random_range(100.0..160.0);
         let speed = rng.random_range(2.0..6.0);
@@ -140,16 +140,25 @@ pub fn animate_and_wrap_clouds(
         let to_camera = transform.translation - camera_pos;
         let dist_xz = Vec2::new(to_camera.x, to_camera.z).length();
         
-        if dist_xz > 1200.0 {
+        if dist_xz > 2400.0 {
             let offset_direction = -wind_direction;
-            let spawn_offset = offset_direction * 850.0;
+            let spawn_offset = offset_direction * 1800.0;
             
             let mut rng = rand::rng();
             let jitter_side = Vec3::new(-wind_direction.z, 0.0, wind_direction.x);
-            let jitter = jitter_side * rng.random_range(-600.0..600.0);
+            let jitter = jitter_side * rng.random_range(-1200.0..1200.0);
             
             transform.translation = camera_pos + spawn_offset + jitter;
             transform.translation.y = rng.random_range(110.0..140.0);
+        } else {
+            let scale_factor = if dist_xz > 1800.0 {
+                ((2400.0 - dist_xz) / 600.0).clamp(0.0, 1.0)
+            } else if dist_xz > 1400.0 {
+                ((1800.0 - dist_xz) / 400.0).clamp(0.0, 1.0)
+            } else {
+                1.0
+            };
+            transform.scale = Vec3::new(cloud.size_x * scale_factor, cloud.size_z * scale_factor, 1.0);
         }
     }
 }

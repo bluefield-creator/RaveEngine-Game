@@ -71,10 +71,10 @@ pub fn load_map(
 ) {
     let mut loaded = false;
     info!("Loading map: {}", settings.map_path);
-    if let Ok(state) = VrtxFileState::load_from_file(&settings.map_path) {
-        if state.version == 0 {
-            info!("Loaded legacy VRTX file format (version 0)");
-        }
+    
+    let loaded_state = VrtxFileState::load_from_file(&settings.map_path).ok();
+
+    if let Some(state) = loaded_state {
         for brick in state.bricks {
             spawn_brick_entity(&mut commands, brick);
         }

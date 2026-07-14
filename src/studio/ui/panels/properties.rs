@@ -28,7 +28,6 @@ fn draw_coord_edit(
     } else if !res.has_focus() {
         let expected = if all_same { format!("{:.2}", val) } else { "—".to_string() };
         if text != expected {
-            text = expected.clone();
             ui.data_mut(|d| d.insert_temp(id, expected));
         }
     }
@@ -715,18 +714,7 @@ pub fn draw_players_properties(
                         ui.label(egui::RichText::new("Players resource not found").color(egui::Color32::from_rgb(180, 60, 60)).size(13.0));
                     }
                     ui.end_row();
-                });
-        });
 
-    ui.add_space(8.0);
-
-    egui::CollapsingHeader::new(egui::RichText::new("Physics").color(egui::Color32::from_rgb(0, 0, 0)).strong().size(14.0))
-        .default_open(true)
-        .show(ui, |ui| {
-            egui::Grid::new("properties_players_physics_grid")
-                .num_columns(2)
-                .spacing([12.0, 8.0])
-                .show(ui, |ui| {
                     ui.label(egui::RichText::new("Player Gravity Scale").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
                     if let Some(service) = players_service {
                         if ui.add(egui::DragValue::new(&mut service.gravity_scale).speed(0.1).range(0.0..=10.0)).changed() {
@@ -764,4 +752,41 @@ pub fn draw_players_properties(
                     ui.end_row();
                 });
         });
+}
+
+pub fn draw_lighting_properties(
+    ui: &mut egui::Ui,
+    lighting_service: &mut Option<ResMut<'_, crate::common::game::environment::lighting::LightingService>>,
+) {
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new("Properties").color(egui::Color32::from_rgb(0, 0, 0)).strong().size(16.0));
+    });
+
+    ui.add_space(8.0);
+    let (sep_rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
+    ui.painter().rect_filled(sep_rect, 0.0, egui::Color32::from_rgb(212, 212, 212));
+    ui.add_space(8.0);
+
+    let Some(service) = lighting_service else {
+        ui.label(egui::RichText::new("Lighting service not available").color(egui::Color32::from_rgb(180, 60, 60)).size(13.0));
+        return;
+    };
+
+    let selection_salt = 99999;
+    ui.push_id(selection_salt, |ui| {
+        egui::Grid::new("properties_lighting_grid")
+            .num_columns(2)
+            .spacing([12.0, 8.0])
+            .show(ui, |ui| {
+                ui.label(egui::RichText::new("Time of Day").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
+                let mut tod = service.time_of_day;
+                if ui.add(egui::Slider::new(&mut tod, 0.0..=24.0).suffix("h")).changed() {
+                    service.time_of_day = tod;
+                    if let Ok(mut shared) = crate::studio::tools::SHARED_LIGHTING_SERVICE.write() {
+                        *shared = tod;
+                    }
+                }
+                ui.end_row();
+            });
+    });
 }

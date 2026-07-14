@@ -158,6 +158,7 @@ fn perform_range_selection(
 
     selection.workspace_selected = false;
     selection.players_selected = false;
+    selection.lighting_selected = false;
     selection.entities = pool[min_idx..=max_idx].to_vec();
     selection.entity = Some(entity);
 }
@@ -224,6 +225,7 @@ fn draw_entity_node(
                     if ctrl_held {
                         selection.workspace_selected = false;
                         selection.players_selected = false;
+                        selection.lighting_selected = false;
                         if selection.entities.contains(&entity) {
                             selection.entities.retain(|&e| e != entity);
                             if selection.entity == Some(entity) {
@@ -241,6 +243,7 @@ fn draw_entity_node(
                         selection.entities = vec![entity];
                         selection.workspace_selected = false;
                         selection.players_selected = false;
+                        selection.lighting_selected = false;
                     }
                 }
 
@@ -362,6 +365,7 @@ fn draw_entity_node(
             if ctrl_held {
                 selection.workspace_selected = false;
                 selection.players_selected = false;
+                selection.lighting_selected = false;
                 if selection.entities.contains(&entity) {
                     selection.entities.retain(|&e| e != entity);
                     if selection.entity == Some(entity) {
@@ -379,6 +383,7 @@ fn draw_entity_node(
                 selection.entities = vec![entity];
                 selection.workspace_selected = false;
                 selection.players_selected = false;
+                selection.lighting_selected = false;
             }
         }
 
@@ -483,6 +488,7 @@ fn draw_player_node(
         if ctrl_held {
             selection.workspace_selected = false;
             selection.players_selected = false;
+            selection.lighting_selected = false;
             if selection.entities.contains(&entity) {
                 selection.entities.retain(|&e| e != entity);
                 if selection.entity == Some(entity) {
@@ -511,6 +517,7 @@ fn draw_player_node(
             selection.entities = vec![entity];
             selection.workspace_selected = false;
             selection.players_selected = false;
+            selection.lighting_selected = false;
         }
     }
 }
@@ -546,6 +553,7 @@ pub fn draw_explorer(
     workspace_tex: egui::TextureId,
     brick_tex: egui::TextureId,
     players_tex: egui::TextureId,
+    lighting_tex: egui::TextureId,
 ) {
     ui.horizontal(|ui| {
         ui.label(egui::RichText::new("Explorer").color(egui::Color32::from_rgb(0, 0, 0)).strong().size(16.0));
@@ -601,6 +609,7 @@ pub fn draw_explorer(
             selection.entities.clear();
             selection.workspace_selected = true;
             selection.players_selected = false;
+            selection.lighting_selected = false;
         }
         if label_res.double_clicked() {
             ui.data_mut(|d| d.insert_temp(workspace_id.with("should_toggle"), true));
@@ -674,6 +683,7 @@ pub fn draw_explorer(
             selection.entities.clear();
             selection.workspace_selected = false;
             selection.players_selected = true;
+            selection.lighting_selected = false;
         }
         if label_res.double_clicked() {
             ui.data_mut(|d| d.insert_temp(players_id.with("should_toggle"), true));
@@ -705,6 +715,30 @@ pub fn draw_explorer(
             );
         }
     });
+
+    let lighting_id = ui.make_persistent_id("lighting_collapsing_header");
+    let mut lighting_state = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), lighting_id, true);
+    if ui.data_mut(|d| d.remove_temp::<bool>(lighting_id.with("should_toggle"))).unwrap_or(false) {
+        let open = lighting_state.is_open();
+        lighting_state.set_open(!open);
+        lighting_state.store(ui.ctx());
+    }
+
+    let lighting_res = lighting_state.show_header(ui, |ui| {
+        let label_res = explorerlabel(ui, selection.lighting_selected, "Lighting", Some(lighting_tex));
+        if label_res.clicked() {
+            selection.entity = None;
+            selection.entities.clear();
+            selection.workspace_selected = false;
+            selection.players_selected = false;
+            selection.lighting_selected = true;
+        }
+        if label_res.double_clicked() {
+            ui.data_mut(|d| d.insert_temp(lighting_id.with("should_toggle"), true));
+        }
+    });
+
+    lighting_res.body(|_| {});
 
     if ui.input(|i| i.pointer.any_released()) {
         dragged_entity.entity = None;

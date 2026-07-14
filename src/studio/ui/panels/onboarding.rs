@@ -246,20 +246,6 @@ pub fn draw_onboarding(
 
                             if onboarding_data.selected_template == SelectedTemplate::Baseplate {
                                 commands.spawn((
-                                    Mesh3d(meshes.add(Cuboid::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28))),
-                                    MeshMaterial3d(studs_materials.add(ExtendedMaterial {
-                                        base: StandardMaterial {
-                                            base_color: Color::srgb(0.28, 0.62, 0.32),
-                                            perceptual_roughness: 0.95,
-                                            reflectance: 0.08,
-                                            metallic: 0.0,
-                                            ..default()
-                                        },
-                                        extension: crate::common::game::bricks::studs::StudsExtension {
-                                            stud_texture: studs_assets.stud.clone(),
-                                            inlet_texture: studs_assets.inlet.clone(),
-                                        },
-                                    })),
                                     Transform::from_xyz(0.0, -0.14, 0.0).with_scale(Vec3::new(25.0, 1.0, 50.0)),
                                     crate::common::game::bricks::components::Brick,
                                     crate::common::game::bricks::components::BrickShapeComponent { shape: crate::common::game::bricks::components::BrickShape::Block },

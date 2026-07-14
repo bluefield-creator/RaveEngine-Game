@@ -39,8 +39,13 @@ impl Plugin for StudioPlugin {
             .init_resource::<tools::SnapConfig>()
             .init_resource::<tools::UndoRedoHistory>()
             .init_resource::<tools::PlayersService>()
+            .init_resource::<crate::common::game::environment::lighting::LightingService>()
             .init_resource::<ui::panels::onboarding::OnboardingData>()
             .add_message::<tools::UndoRedoAction>()
+            .insert_resource(bevy::picking::mesh_picking::MeshPickingSettings {
+                require_markers: false,
+                ..default()
+            })
             .add_plugins(MeshPickingPlugin)
             .add_plugins(FreeCameraPlugin)
             .add_systems(Startup, (

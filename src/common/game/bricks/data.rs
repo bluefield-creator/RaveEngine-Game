@@ -11,9 +11,9 @@ pub struct BrickSpawnerCount {
 
 pub fn spawn_brick(
     commands: &mut Commands,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<ExtendedMaterial<StandardMaterial, StudsExtension>>,
-    studs_assets: &StudsAssets,
+    _meshes: &mut Assets<Mesh>,
+    _materials: &mut Assets<ExtendedMaterial<StandardMaterial, StudsExtension>>,
+    _studs_assets: &StudsAssets,
     count: &mut BrickSpawnerCount,
     spawn_pos: Vec3,
     shape: BrickShape,
@@ -21,34 +21,12 @@ pub fn spawn_brick(
     let current_index = count.count;
     count.count += 1;
 
-    let mesh_handle = match shape {
-        BrickShape::Block => {
-            meshes.add(Cuboid::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28))
-        }
-        BrickShape::Sphere => {
-            meshes.add(Sphere::new(1.0 * 0.28))
-        }
-    };
-
     let name_prefix = match shape {
         BrickShape::Block => "Part",
         BrickShape::Sphere => "Sphere",
     };
 
     commands.spawn((
-        Mesh3d(mesh_handle),
-        MeshMaterial3d(materials.add(ExtendedMaterial {
-            base: StandardMaterial {
-                base_color: Color::srgb(0.84, 0.24, 0.16),
-                perceptual_roughness: 0.95,
-                reflectance: 0.1,
-                ..default()
-            },
-            extension: StudsExtension {
-                stud_texture: studs_assets.stud.clone(),
-                inlet_texture: studs_assets.inlet.clone(),
-            },
-        })),
         Transform::from_translation(spawn_pos),
         Brick,
         BrickShapeComponent { shape },
