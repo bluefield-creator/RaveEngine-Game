@@ -373,6 +373,9 @@ pub fn track_player_velocities(
     if dt <= 0.0 {
         return;
     }
+
+    let all_players: Vec<(Entity, Transform)> = query.iter().map(|(e, t, _)| (e, *t)).collect();
+
     for (entity, transform, tracker_opt) in &mut query {
         let player_pos = transform.translation;
         let mut is_grounded = false;
@@ -390,10 +393,13 @@ pub fn track_player_velocities(
                 }
             };
 
-            let brick_pos = brick_transform.translation;
-            let dx = (player_pos.x - brick_pos.x).abs();
-            let dz = (player_pos.z - brick_pos.z).abs();
-            let dy = player_pos.y - brick_pos.y;
+            let local_y_world = brick_transform.rotation.mul_vec3(Vec3::Y);
+            let is_top_up = local_y_world.y >= 0.0;
+            
+            let player_local_pos = brick_transform.rotation.inverse().mul_vec3(player_pos - brick_transform.translation);
+            let dx = player_local_pos.x.abs();
+            let dz = player_local_pos.z.abs();
+            let dy = if is_top_up { player_local_pos.y } else { -player_local_pos.y };
 
             let player_half_width = 2.0 * 0.28 * 0.5;
             let player_half_depth = 1.0 * 0.28 * 0.5;
@@ -403,6 +409,34 @@ pub fn track_player_velocities(
                 if dy >= 0.0 && dy <= (expected_y_dist + 0.15) {
                     is_grounded = true;
                     break;
+                }
+            }
+        }
+
+        if !is_grounded {
+            for &(other_entity, other_transform) in &all_players {
+                if other_entity == entity {
+                    continue;
+                }
+
+                let other_half_x = 1.0 * 0.28;
+                let other_half_y = 2.5 * 0.28;
+                let other_half_z = 0.5 * 0.28;
+
+                let player_local_pos = other_transform.rotation.inverse().mul_vec3(player_pos - other_transform.translation);
+                let dx = player_local_pos.x.abs();
+                let dz = player_local_pos.z.abs();
+                let dy = player_local_pos.y;
+
+                let player_half_width = 2.0 * 0.28 * 0.5;
+                let player_half_depth = 1.0 * 0.28 * 0.5;
+
+                if dx <= (other_half_x + player_half_width) && dz <= (other_half_z + player_half_depth) {
+                    let expected_y_dist = other_half_y + 2.5 * 0.28;
+                    if dy >= 0.0 && dy <= (expected_y_dist + 0.15) {
+                        is_grounded = true;
+                        break;
+                    }
                 }
             }
         }
@@ -435,7 +469,7 @@ pub fn animate_player(
         let velocity = tracker.velocity;
         let speed_xz = Vec2::new(velocity.x, velocity.z).length();
 
-        if player_anims.indices.len() < 4 {
+        if f32::is_nan(speed_xz) || player_anims.indices.len() < 4 {
             continue;
         }
 

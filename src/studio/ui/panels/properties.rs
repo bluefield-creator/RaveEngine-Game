@@ -715,7 +715,18 @@ pub fn draw_players_properties(
                         ui.label(egui::RichText::new("Players resource not found").color(egui::Color32::from_rgb(180, 60, 60)).size(13.0));
                     }
                     ui.end_row();
+                });
+        });
 
+    ui.add_space(8.0);
+
+    egui::CollapsingHeader::new(egui::RichText::new("Physics").color(egui::Color32::from_rgb(0, 0, 0)).strong().size(14.0))
+        .default_open(true)
+        .show(ui, |ui| {
+            egui::Grid::new("properties_players_physics_grid")
+                .num_columns(2)
+                .spacing([12.0, 8.0])
+                .show(ui, |ui| {
                     ui.label(egui::RichText::new("Player Gravity Scale").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
                     if let Some(service) = players_service {
                         if ui.add(egui::DragValue::new(&mut service.gravity_scale).speed(0.1).range(0.0..=10.0)).changed() {
