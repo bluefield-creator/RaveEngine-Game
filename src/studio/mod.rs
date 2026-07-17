@@ -34,8 +34,10 @@ impl Plugin for StudioPlugin {
             .init_resource::<ui::CopiedEntityBuffer>()
             .init_resource::<ui::HierarchyDraggedEntity>()
             .init_resource::<ui::SettingsWindow>()
+            .init_resource::<ui::resources::ActiveScriptEditor>()
             .init_resource::<ui::resources::PlayInClientProcesses>()
             .init_resource::<ui::resources::PlaytestBackup>()
+            .init_resource::<ui::resources::FileDialogState>()
             .init_resource::<tools::SnapConfig>()
             .init_resource::<tools::UndoRedoHistory>()
             .init_resource::<tools::PlayersService>()
@@ -71,6 +73,11 @@ impl Plugin for StudioPlugin {
                     tools::handle_keyboard_shortcuts,
                     tools::handle_undo_redo_action,
                     tools::handle_marquee_selection,
+                ).run_if(in_state(tools::OnboardingState::Inactive)),
+            )
+            .add_systems(
+                Update,
+                (
                     ui::updatecameraspeedindicator,
                     ui::update_camera_fov
                         .before(bevy::camera_controller::free_camera::run_freecamera_controller),
@@ -84,6 +91,7 @@ impl Plugin for StudioPlugin {
                     crate::studio::camera::sync_gizmo_camera,
                     crate::studio::camera::toggle_editor_camera_active,
                     crate::studio::camera::disable_cameras_on_minimization,
+                    ui::resources::handle_file_dialog_results,
                 ),
             )
             .add_systems(Update, ui::resources::cleanup_play_processes_on_exit)

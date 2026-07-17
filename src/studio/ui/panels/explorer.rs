@@ -5,6 +5,7 @@ use crate::common::game::bricks::components::Brick;
 use crate::studio::ui::CopiedEntityBuffer;
 use crate::studio::ui::HierarchyDraggedEntity;
 use crate::studio::ui::panels::context_menu::draw_entity_context_menu;
+use crate::studio::ui::resources::ActiveScriptEditor;
 use bevy::pbr::ExtendedMaterial;
 
 fn is_managed_entity(
@@ -15,10 +16,13 @@ fn is_managed_entity(
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,
+        Option<&crate::scripting::ecs::ServerScript>,
+        Option<&crate::scripting::ecs::LocalScript>,
+        Option<&crate::scripting::ecs::ModuleScript>,
     ), Without<Camera3d>>,
 ) -> bool {
-    if let Ok((_, name, _, _, brick_opt)) = query.get(entity) {
-        name.as_str() == "Baseplate" || brick_opt.is_some()
+    if let Ok((_, name, _, _, brick_opt, s_opt, l_opt, m_opt)) = query.get(entity) {
+        name.as_str() == "Baseplate" || brick_opt.is_some() || s_opt.is_some() || l_opt.is_some() || m_opt.is_some()
     } else {
         false
     }
@@ -33,11 +37,14 @@ fn is_descendant(
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,
+        Option<&crate::scripting::ecs::ServerScript>,
+        Option<&crate::scripting::ecs::LocalScript>,
+        Option<&crate::scripting::ecs::ModuleScript>,
     ), Without<Camera3d>>,
 ) -> bool {
     let mut current = child;
     let mut depth = 0;
-    while let Ok((_, _, parent_opt, _, _)) = query.get(current) {
+    while let Ok((_, _, parent_opt, _, _, _, _, _)) = query.get(current) {
         if let Some(parent_comp) = parent_opt {
             let parent_entity = parent_comp.parent();
             if parent_entity == parent {
@@ -62,17 +69,20 @@ fn get_flat_ordered_entities(
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,
+        Option<&crate::scripting::ecs::ServerScript>,
+        Option<&crate::scripting::ecs::LocalScript>,
+        Option<&crate::scripting::ecs::ModuleScript>,
     ), Without<Camera3d>>,
 ) -> Vec<Entity> {
     let mut flat = Vec::new();
     let mut roots = Vec::new();
-    for (entity, name, parent_opt, _, brick_opt) in explorer_query {
-        let is_managed = name.as_str() == "Baseplate" || brick_opt.is_some();
+    for (entity, name, parent_opt, _, brick_opt, s_opt, l_opt, m_opt) in explorer_query {
+        let is_managed = name.as_str() == "Baseplate" || brick_opt.is_some() || s_opt.is_some() || l_opt.is_some() || m_opt.is_some();
         if is_managed {
             let is_root = if let Some(parent_comp) = parent_opt {
                 let parent = parent_comp.parent();
-                if let Ok((_, p_name, _, _, p_brick_opt)) = explorer_query.get(parent) {
-                    !(p_name.as_str() == "Baseplate" || p_brick_opt.is_some())
+                if let Ok((_, p_name, _, _, p_brick_opt, ps_opt, pl_opt, pm_opt)) = explorer_query.get(parent) {
+                    !(p_name.as_str() == "Baseplate" || p_brick_opt.is_some() || ps_opt.is_some() || pl_opt.is_some() || pm_opt.is_some())
                 } else {
                     true
                 }
@@ -109,18 +119,21 @@ fn traverse_node_recursive(
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,
+        Option<&crate::scripting::ecs::ServerScript>,
+        Option<&crate::scripting::ecs::LocalScript>,
+        Option<&crate::scripting::ecs::ModuleScript>,
     ), Without<Camera3d>>,
     flat: &mut Vec<Entity>,
 ) {
     flat.push(entity);
-    if let Ok((_, _, _, Some(children_comp), _)) = explorer_query.get(entity) {
+    if let Ok((_, _, _, Some(children_comp), _, _, _, _)) = explorer_query.get(entity) {
         let mut sorted_children: Vec<Entity> = children_comp
             .iter()
             .filter(|&child| is_managed_entity(child, explorer_query))
             .collect();
         sorted_children.sort_by(|&a, &b| {
-            let name_a = explorer_query.get(a).map(|(_, n, _, _, _)| n.as_str()).unwrap_or("");
-            let name_b = explorer_query.get(b).map(|(_, n, _, _, _)| n.as_str()).unwrap_or("");
+            let name_a = explorer_query.get(a).map(|(_, n, _, _, _, _, _, _)| n.as_str()).unwrap_or("");
+            let name_b = explorer_query.get(b).map(|(_, n, _, _, _, _, _, _)| n.as_str()).unwrap_or("");
             name_a.cmp(name_b)
         });
         for child in sorted_children {
@@ -174,6 +187,9 @@ fn draw_entity_node(
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,
+        Option<&crate::scripting::ecs::ServerScript>,
+        Option<&crate::scripting::ecs::LocalScript>,
+        Option<&crate::scripting::ecs::ModuleScript>,
     ), Without<Camera3d>>,
     entities_query: &Query<(
         Entity,
@@ -192,10 +208,14 @@ fn draw_entity_node(
     copiedbuffer: &mut CopiedEntityBuffer,
     dragged_entity: &mut ResMut<HierarchyDraggedEntity>,
     history: &mut ResMut<crate::studio::tools::UndoRedoHistory>,
+    active_editor: &mut ResMut<ActiveScriptEditor>,
     workspace_tex: egui::TextureId,
     brick_tex: egui::TextureId,
+    script_tex: egui::TextureId,
+    localscript_tex: egui::TextureId,
+    modulescript_tex: egui::TextureId,
 ) {
-    let Ok((_, name, _, children_opt, _)) = explorer_query.get(entity) else { return };
+    let Ok((_, name, _, children_opt, _, s_opt, l_opt, m_opt)) = explorer_query.get(entity) else { return };
     let name_str = name.as_str().to_string();
 
     let has_managed_children = if let Some(children_comp) = children_opt {
@@ -205,6 +225,24 @@ fn draw_entity_node(
     };
 
     let is_selected = selection.entities.contains(&entity);
+
+    let icon_tex = if s_opt.is_some() {
+        Some(script_tex)
+    } else if l_opt.is_some() {
+        Some(localscript_tex)
+    } else if m_opt.is_some() {
+        Some(modulescript_tex)
+    } else {
+        Some(brick_tex)
+    };
+
+    let is_script_disabled = if let Some(ref s) = s_opt {
+        !s.enabled
+    } else if let Some(ref l) = l_opt {
+        !l.enabled
+    } else {
+        false
+    };
 
     if has_managed_children {
         let id = egui::Id::new(entity);
@@ -217,7 +255,7 @@ fn draw_entity_node(
 
         let header_res = collapsing_state.show_header(ui, |ui| {
             ui.push_id(id, |ui| {
-                let label_res = explorerlabel(ui, is_selected, &name_str, Some(brick_tex));
+                let label_res = explorerlabel(ui, is_selected, &name_str, icon_tex, is_script_disabled);
 
                 if label_res.clicked() {
                     let ctrl_held = ui.input(|i| i.modifiers.command || i.modifiers.ctrl);
@@ -248,7 +286,20 @@ fn draw_entity_node(
                 }
 
                 if label_res.double_clicked() {
-                    ui.data_mut(|d| d.insert_temp(id.with("should_toggle"), true));
+                    let mut is_script = false;
+                    if let Ok((_, _, _, _, _, s, l, m)) = explorer_query.get(entity) {
+                        if s.is_some() || l.is_some() || m.is_some() {
+                            is_script = true;
+                        }
+                    }
+                    if is_script {
+                        if !active_editor.open_entities.contains(&entity) {
+                            active_editor.open_entities.push(entity);
+                        }
+                        active_editor.entity = Some(entity);
+                    } else {
+                        ui.data_mut(|d| d.insert_temp(id.with("should_toggle"), true));
+                    }
                 }
 
                 label_res.context_menu(|ui| {
@@ -299,6 +350,7 @@ fn draw_entity_node(
 
                                 if let Ok(mut d_cmd) = commands.get_entity(dragged) {
                                     d_cmd.insert(new_transform);
+                                    d_cmd.remove::<ChildOf>();
                                 }
 
                                 history.push_command(crate::studio::tools::UndoCommand::ParentChange {
@@ -328,8 +380,8 @@ fn draw_entity_node(
                     .filter(|&child| is_managed_entity(child, explorer_query))
                     .collect();
                 sorted_children.sort_by(|&a, &b| {
-                    let name_a = explorer_query.get(a).map(|(_, n, _, _, _)| n.as_str()).unwrap_or("");
-                    let name_b = explorer_query.get(b).map(|(_, n, _, _, _)| n.as_str()).unwrap_or("");
+                    let name_a = explorer_query.get(a).map(|(_, n, _, _, _, _, _, _)| n.as_str()).unwrap_or("");
+                    let name_b = explorer_query.get(b).map(|(_, n, _, _, _, _, _, _)| n.as_str()).unwrap_or("");
                     name_a.cmp(name_b)
                 });
 
@@ -344,8 +396,12 @@ fn draw_entity_node(
                         copiedbuffer,
                         dragged_entity,
                         history,
+                        active_editor,
                         workspace_tex,
                         brick_tex,
+                        script_tex,
+                        localscript_tex,
+                        modulescript_tex,
                     );
                 }
             }
@@ -355,7 +411,7 @@ fn draw_entity_node(
         let label_res = ui.horizontal(|ui| {
             ui.add_space(12.0);
             ui.push_id(id, |ui| {
-                explorerlabel(ui, is_selected, &name_str, Some(brick_tex))
+                explorerlabel(ui, is_selected, &name_str, icon_tex, is_script_disabled)
             }).inner
         }).inner;
 
@@ -384,6 +440,21 @@ fn draw_entity_node(
                 selection.workspace_selected = false;
                 selection.players_selected = false;
                 selection.lighting_selected = false;
+            }
+        }
+
+        if label_res.double_clicked() {
+            let mut is_script = false;
+            if let Ok((_, _, _, _, _, s, l, m)) = explorer_query.get(entity) {
+                if s.is_some() || l.is_some() || m.is_some() {
+                    is_script = true;
+                }
+            }
+            if is_script {
+                if !active_editor.open_entities.contains(&entity) {
+                    active_editor.open_entities.push(entity);
+                }
+                active_editor.entity = Some(entity);
             }
         }
 
@@ -467,10 +538,13 @@ fn draw_player_node(
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,
+        Option<&crate::scripting::ecs::ServerScript>,
+        Option<&crate::scripting::ecs::LocalScript>,
+        Option<&crate::scripting::ecs::ModuleScript>,
     ), Without<Camera3d>>,
     players_tex: egui::TextureId,
 ) {
-    let Ok((_, name, _, _, _)) = explorer_query.get(entity) else { return };
+    let Ok((_, name, _, _, _, _, _, _)) = explorer_query.get(entity) else { return };
     let name_str = name.as_str().to_string();
     let is_selected = selection.entities.contains(&entity);
 
@@ -478,7 +552,7 @@ fn draw_player_node(
     let label_res = ui.horizontal(|ui| {
         ui.add_space(12.0);
         ui.push_id(id, |ui| {
-            explorerlabel(ui, is_selected, &name_str, Some(players_tex))
+            explorerlabel(ui, is_selected, &name_str, Some(players_tex), false)
         }).inner
     }).inner;
 
@@ -500,15 +574,15 @@ fn draw_player_node(
             }
         } else if shift_held {
             let mut sorted_players = Vec::new();
-            for (player_entity, name, _, _, _) in explorer_query {
+            for (player_entity, name, _, _, _, _, _, _) in explorer_query {
                 let name_str = name.as_str();
                 if name_str == "Player" || name_str.starts_with("Player_") {
                     sorted_players.push(player_entity);
                 }
             }
             sorted_players.sort_by(|&a, &b| {
-                let name_a = explorer_query.get(a).map(|(_, n, _, _, _)| n.as_str()).unwrap_or("");
-                let name_b = explorer_query.get(b).map(|(_, n, _, _, _)| n.as_str()).unwrap_or("");
+                let name_a = explorer_query.get(a).map(|(_, n, _, _, _, _, _, _)| n.as_str()).unwrap_or("");
+                let name_b = explorer_query.get(b).map(|(_, n, _, _, _, _, _, _)| n.as_str()).unwrap_or("");
                 name_a.cmp(name_b)
             });
             perform_range_selection(entity, &sorted_players, selection);
@@ -516,7 +590,7 @@ fn draw_player_node(
             selection.entity = Some(entity);
             selection.entities = vec![entity];
             selection.workspace_selected = false;
-            selection.players_selected = false;
+            selection.players_selected = true;
             selection.lighting_selected = false;
         }
     }
@@ -532,6 +606,9 @@ pub fn draw_explorer(
         Option<&ChildOf>,
         Option<&Children>,
         Option<&Brick>,
+        Option<&crate::scripting::ecs::ServerScript>,
+        Option<&crate::scripting::ecs::LocalScript>,
+        Option<&crate::scripting::ecs::ModuleScript>,
     ), Without<Camera3d>>,
     entities_query: &Query<(
         Entity,
@@ -550,10 +627,14 @@ pub fn draw_explorer(
     copiedbuffer: &mut CopiedEntityBuffer,
     dragged_entity: &mut ResMut<HierarchyDraggedEntity>,
     history: &mut ResMut<crate::studio::tools::UndoRedoHistory>,
+    active_editor: &mut ResMut<ActiveScriptEditor>,
     workspace_tex: egui::TextureId,
     brick_tex: egui::TextureId,
     players_tex: egui::TextureId,
     lighting_tex: egui::TextureId,
+    script_tex: egui::TextureId,
+    localscript_tex: egui::TextureId,
+    modulescript_tex: egui::TextureId,
 ) {
     ui.horizontal(|ui| {
         ui.label(egui::RichText::new("Explorer").color(egui::Color32::from_rgb(0, 0, 0)).strong().size(16.0));
@@ -565,13 +646,13 @@ pub fn draw_explorer(
     ui.add_space(8.0);
 
     let mut roots = Vec::new();
-    for (entity, name, parent_opt, _, brick_opt) in explorer_query {
-        let is_managed = name.as_str() == "Baseplate" || brick_opt.is_some();
+    for (entity, name, parent_opt, _, brick_opt, s_opt, l_opt, m_opt) in explorer_query {
+        let is_managed = name.as_str() == "Baseplate" || brick_opt.is_some() || s_opt.is_some() || l_opt.is_some() || m_opt.is_some();
         if is_managed {
             let is_root = if let Some(parent_comp) = parent_opt {
                 let parent = parent_comp.parent();
-                if let Ok((_, p_name, _, _, p_brick_opt)) = explorer_query.get(parent) {
-                    !(p_name.as_str() == "Baseplate" || p_brick_opt.is_some())
+                if let Ok((_, p_name, _, _, p_brick_opt, ps_opt, pl_opt, pm_opt)) = explorer_query.get(parent) {
+                    !(p_name.as_str() == "Baseplate" || p_brick_opt.is_some() || ps_opt.is_some() || pl_opt.is_some() || pm_opt.is_some())
                 } else {
                     true
                 }
@@ -603,7 +684,7 @@ pub fn draw_explorer(
     }
 
     let workspace_res = workspace_state.show_header(ui, |ui| {
-        let label_res = explorerlabel(ui, selection.workspace_selected, "Workspace", Some(workspace_tex));
+        let label_res = explorerlabel(ui, selection.workspace_selected, "Workspace", Some(workspace_tex), false);
         if label_res.clicked() {
             selection.entity = None;
             selection.entities.clear();
@@ -628,8 +709,12 @@ pub fn draw_explorer(
                 copiedbuffer,
                 dragged_entity,
                 history,
+                active_editor,
                 workspace_tex,
                 brick_tex,
+                script_tex,
+                localscript_tex,
+                modulescript_tex,
             );
         }
     });
@@ -677,7 +762,7 @@ pub fn draw_explorer(
     }
 
     let players_res = players_state.show_header(ui, |ui| {
-        let label_res = explorerlabel(ui, selection.players_selected, "Players", Some(players_tex));
+        let label_res = explorerlabel(ui, selection.players_selected, "Players", Some(players_tex), false);
         if label_res.clicked() {
             selection.entity = None;
             selection.entities.clear();
@@ -692,7 +777,7 @@ pub fn draw_explorer(
 
     players_res.body(|ui| {
         let mut sorted_players = Vec::new();
-        for (entity, name, _, _, _) in explorer_query {
+        for (entity, name, _, _, _, _, _, _) in explorer_query {
             let name_str = name.as_str();
             if name_str == "Player" || name_str.starts_with("Player_") {
                 sorted_players.push(entity);
@@ -700,8 +785,8 @@ pub fn draw_explorer(
         }
 
         sorted_players.sort_by(|&a, &b| {
-            let name_a = explorer_query.get(a).map(|(_, n, _, _, _)| n.as_str()).unwrap_or("");
-            let name_b = explorer_query.get(b).map(|(_, n, _, _, _)| n.as_str()).unwrap_or("");
+            let name_a = explorer_query.get(a).map(|(_, n, _, _, _, _, _, _)| n.as_str()).unwrap_or("");
+            let name_b = explorer_query.get(b).map(|(_, n, _, _, _, _, _, _)| n.as_str()).unwrap_or("");
             name_a.cmp(name_b)
         });
 
@@ -725,7 +810,7 @@ pub fn draw_explorer(
     }
 
     let lighting_res = lighting_state.show_header(ui, |ui| {
-        let label_res = explorerlabel(ui, selection.lighting_selected, "Lighting", Some(lighting_tex));
+        let label_res = explorerlabel(ui, selection.lighting_selected, "Lighting", Some(lighting_tex), false);
         if label_res.clicked() {
             selection.entity = None;
             selection.entities.clear();
@@ -758,6 +843,7 @@ fn explorerlabel(
     selected: bool,
     label: &str,
     icon: Option<egui::TextureId>,
+    disabled: bool,
 ) -> egui::Response {
     let size = egui::vec2(ui.available_width(), 20.0);
     let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click_and_drag());
@@ -792,7 +878,13 @@ fn explorerlabel(
         );
     }
 
-    let text_color = if selected {
+    let text_color = if disabled {
+        if selected {
+            egui::Color32::from_rgb(100, 100, 100)
+        } else {
+            egui::Color32::from_rgb(150, 150, 150)
+        }
+    } else if selected {
         egui::Color32::from_rgb(0, 0, 0)
     } else if response.hovered() {
         egui::Color32::from_rgb(20, 20, 20)
@@ -804,10 +896,18 @@ fn explorerlabel(
         ui.horizontal(|ui| {
             ui.add_space(4.0);
             if let Some(tex_id) = icon {
-                ui.add(egui::Image::new((tex_id, egui::vec2(14.0, 14.0))));
-                ui.add_space(2.0);
+                let mut img = egui::Image::new((tex_id, egui::vec2(16.0, 16.0)));
+                if disabled {
+                    img = img.tint(egui::Color32::from_rgba_unmultiplied(255, 255, 255, 128));
+                }
+                ui.add(img);
+                ui.add_space(4.0);
             }
-            ui.add(egui::Label::new(egui::RichText::new(label).color(text_color).size(13.5)).selectable(false));
+            let mut text_element = egui::RichText::new(label).color(text_color).size(13.5);
+            if disabled {
+                text_element = text_element.strikethrough();
+            }
+            ui.add(egui::Label::new(text_element).selectable(false));
         });
     });
 

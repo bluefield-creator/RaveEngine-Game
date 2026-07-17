@@ -36,7 +36,6 @@ impl Plugin for PlayerPlugin {
             .add_systems(
                 Update,
                 (
-                    crate::client::player::play_camera::update_camera,
                     animation::add_missing_animation_players,
                     animation::build_avatar_animation_graph,
                     animation::retarget_avatar_clips,
@@ -44,6 +43,12 @@ impl Plugin for PlayerPlugin {
                     animation::track_player_velocities,
                     animation::animate_player,
                 ).run_if(crate::client::is_playtesting),
+            )
+            .add_systems(
+                PostUpdate,
+                crate::client::player::play_camera::update_camera
+                    .before(bevy::transform::TransformSystems::Propagate)
+                    .run_if(crate::client::is_playtesting),
             );
     }
 }

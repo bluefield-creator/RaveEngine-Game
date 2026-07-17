@@ -16,7 +16,11 @@ impl Default for LightingService {
 
 pub fn sync_lighting_service(
     mut lighting_service: ResMut<LightingService>,
+    playtest: Option<Res<crate::client::PlaytestState>>,
 ) {
+    if !crate::client::is_playtesting(playtest) {
+        return;
+    }
     if let Ok(shared) = crate::studio::tools::SHARED_LIGHTING_SERVICE.read() {
         if (lighting_service.time_of_day - *shared).abs() > 0.001 {
             lighting_service.time_of_day = *shared;

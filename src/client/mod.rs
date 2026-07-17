@@ -90,6 +90,8 @@ impl Plugin for ClientPlugin {
                 handle_kick_message,
                 handle_auth_success,
                 debug_cameras,
+                debug_players,
+                debug_deep_hierarchy,
             ).run_if(is_playtesting))
             .add_systems(Update, cleanup_orphaned_visuals)
             .add_systems(bevy_egui::EguiPrimaryContextPass, (
@@ -118,6 +120,8 @@ fn setup_physics_initializer(
     egui_global_settings.auto_create_primary_context = false;
 
     commands.spawn(ClientPhysicsInitializer);
+    commands.insert_resource(crate::scripting::vm::client_vm::ClientScriptVM::new());
+
     commands.spawn((
         Camera3d::default(),
         Camera::default(),
@@ -265,13 +269,16 @@ fn on_client_connected(
 fn on_player_added(
     trigger: On<Add, crate::common::net::components::Player>,
     mut commands: Commands,
-    query: Query<Entity, Without<Replicate>>,
+    query: Query<(Option<&Predicted>, Option<&Interpolated>, Option<&Replicate>)>,
 ) {
     let entity = trigger.entity;
-    if query.get(entity).is_err() {
+    let (pred, interp, rep) = query.get(entity)
+        .map(|(p, i, r)| (p.is_some(), i.is_some(), r.is_some()))
+        .unwrap_or((false, false, false));
+    info!("PLAYER ADDED OBSERVER: {:?} (predicted={}, interpolated={}, replicated={})", entity, pred, interp, rep);
+    if rep {
         return;
     }
-    debug!("REMOTE PLAYER ADDED: {:?}", entity);
     commands.entity(entity).insert(NeedsCharacterVisuals);
 }
 
@@ -313,14 +320,15 @@ fn attach_character_visuals(
     let local_id = local_client_id.map(|id| id.0);
 
     for (entity, player_comp, local_player_opt) in &query {
-        debug!("ATTACHING CHARACTER VISUALS TO {:?}", entity);
         let is_local = (local_id == Some(player_comp.client_id)) || local_player_opt.is_some();
+        info!("ATTACHING CHARACTER VISUALS TO entity={:?}, client_id={}, is_local={}", entity, player_comp.client_id, is_local);
 
         let mut child_cmd = commands.spawn((
             WorldAssetRoot(assets.avatar_scene.clone()),
             Transform::from_translation(Vec3::new(0.0, -0.7, 0.0))
                 .with_scale(Vec3::splat(0.28)),
             GlobalTransform::default(),
+            Visibility::Inherited,
             PlayerVisualChild { parent: entity },
         ));
 
@@ -571,18 +579,22 @@ fn sync_brick_color_to_material(
 }
 
 fn hide_confirmed_player_visuals(
-    predicted_query: Query<&crate::common::net::components::Player, With<Predicted>>,
-    mut visuals_query: Query<(&PlayerVisualChild, &mut Visibility)>,
-    confirmed_query: Query<&crate::common::net::components::Player, (Without<Predicted>, Without<Interpolated>)>,
+    predicted_interpolated_query: Query<&crate::common::net::components::Player, Or<(With<Predicted>, With<Interpolated>)>>,
+    mut confirmed_query: Query<(&crate::common::net::components::Player, &mut Visibility), (Without<Predicted>, Without<Interpolated>, Without<Replicate>)>,
 ) {
-    for predicted_player in &predicted_query {
-        for (visual_child, mut visibility) in &mut visuals_query {
-            if let Ok(confirmed_player) = confirmed_query.get(visual_child.parent) {
-                if predicted_player.client_id == confirmed_player.client_id {
-                    if *visibility != Visibility::Hidden {
-                        *visibility = Visibility::Hidden;
-                    }
-                }
+    let active_client_ids: std::collections::HashSet<u64> = predicted_interpolated_query
+        .iter()
+        .map(|p| p.client_id)
+        .collect();
+
+    for (conf_player, mut visibility) in &mut confirmed_query {
+        if active_client_ids.contains(&conf_player.client_id) {
+            if *visibility != Visibility::Hidden {
+                *visibility = Visibility::Hidden;
+            }
+        } else {
+            if *visibility != Visibility::Inherited {
+                *visibility = Visibility::Inherited;
             }
         }
     }
@@ -671,5 +683,87 @@ fn debug_cameras(
         };
         info!("CAMERA_DEBUG: Entity {:?} ({}) - type={}, active={}, order={}, clear_color={:?}, target={}",
             entity, name, camera_type, camera.is_active, camera.order, camera.clear_color, has_egui);
+    }
+}
+
+fn debug_players(
+    query: Query<(
+        Entity,
+        Option<&Predicted>,
+        Option<&Interpolated>,
+        Option<&Replicate>,
+        Option<&LocalPlayer>,
+        &Transform,
+    ), With<crate::common::net::components::Player>>,
+    mut last_log: Local<f32>,
+    time: Res<Time>,
+) {
+    let now = time.elapsed_secs();
+    if now - *last_log < 1.0 {
+        return;
+    }
+    *last_log = now;
+    for (entity, pred, interp, rep, local, transform) in &query {
+        info!("DEBUG_PLAYERS: {:?}: pred={} interp={} repl={} local={} pos={:?}",
+            entity,
+            pred.is_some(),
+            interp.is_some(),
+            rep.is_some(),
+            local.is_some(),
+            transform.translation,
+        );
+    }
+}
+
+fn debug_deep_hierarchy(
+    world: &World,
+    mut last_log: Local<f32>,
+    time: Res<Time>,
+) {
+    let now = time.elapsed_secs();
+    if now - *last_log < 2.0 {
+        return;
+    }
+    *last_log = now;
+
+    info!("DEEP HIERARCHY INSPECTION:");
+    for archetype in world.archetypes().iter() {
+        for entity in archetype.entities() {
+            let entity = entity.id();
+            if world.get::<WorldAssetRoot>(entity).is_some() {
+                info!("Entity {:?} has WorldAssetRoot! parent={:?}, visibility={:?}",
+                    entity,
+                    world.get::<ChildOf>(entity).map(|co| co.parent()),
+                    world.get::<Visibility>(entity),
+                );
+                print_hierarchy_from_root(world, entity, 1);
+            }
+        }
+    }
+}
+
+fn print_hierarchy_from_root(world: &World, entity: Entity, depth: usize) {
+    let indent = "  ".repeat(depth);
+    let name = world.get::<Name>(entity).map(|n| n.as_str().to_string()).unwrap_or_else(|| "Instance".to_string());
+    let vis = world.get::<Visibility>(entity);
+    let transform = world.get::<Transform>(entity);
+    
+    let mut comp_names = Vec::new();
+    if let Ok(entity_ref) = world.get_entity(entity) {
+        let archetype = entity_ref.archetype();
+        for component_id in archetype.components() {
+            if let Some(info) = world.components().get_info(*component_id) {
+                comp_names.push(info.name().split("::").last().unwrap_or("").to_string());
+            }
+        }
+    }
+
+    info!("{}└─ Entity {:?} '{}': vis={:?}, transform={:?}, components={:?}",
+        indent, entity, name, vis, transform.map(|t| t.translation), comp_names);
+
+    if let Some(children) = world.get::<Children>(entity) {
+        for child in children.iter() {
+            print_hierarchy_from_root(world, child, depth + 1);
+        }
     }
 }

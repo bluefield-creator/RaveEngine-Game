@@ -45,6 +45,7 @@ pub fn draw_onboarding(
     count: &mut crate::common::game::bricks::data::BrickSpawnerCount,
     thumb_empty_tex: egui::TextureId,
     thumb_baseplate_tex: egui::TextureId,
+    file_dialog_state: &crate::studio::ui::resources::FileDialogState,
 ) {
     #[allow(deprecated)]
     let center = ctx.available_rect().center();
@@ -171,13 +172,20 @@ pub fn draw_onboarding(
                             ui.add_space(4.0);
                             ui.horizontal(|ui| {
                                 ui.add(egui::TextEdit::singleline(&mut onboarding_data.save_path).desired_width(column_width - 85.0));
-                                if ui.button("Browse...").clicked() {
-                                    if let Some(path) = rfd::FileDialog::new()
-                                        .add_filter("Rave Project", &["vrtx"])
-                                        .set_directory(std::env::current_dir().unwrap_or_default())
-                                        .save_file() {
-                                            onboarding_data.save_path = path.display().to_string();
+                                let is_open = file_dialog_state.is_open.load(std::sync::atomic::Ordering::Relaxed);
+                                if ui.add_enabled(!is_open, egui::Button::new("Browse...")).clicked() {
+                                    file_dialog_state.is_open.store(true, std::sync::atomic::Ordering::Relaxed);
+                                    let tx = file_dialog_state.tx.clone();
+                                    std::thread::spawn(move || {
+                                        if let Some(path) = rfd::FileDialog::new()
+                                            .add_filter("Rave Project", &["vrtx"])
+                                            .set_directory(std::env::current_dir().unwrap_or_default())
+                                            .save_file() {
+                                            let _ = tx.send(crate::studio::ui::resources::FileDialogResult::BrowseSavePath(path));
+                                        } else {
+                                            let _ = tx.send(crate::studio::ui::resources::FileDialogResult::Cancel);
                                         }
+                                    });
                                 }
                             });
                         });
@@ -231,7 +239,7 @@ pub fn draw_onboarding(
                             }
 
                             let state = crate::common::core::vrtx::VrtxFileState {
-                                version: 3,
+                                version: 5,
                                 gravity: Vec3::new(0.0, -186.9 * 0.28, 0.0),
                                 settings: crate::common::core::vrtx::VrtxSettings {
                                     ssao: false,
@@ -240,6 +248,7 @@ pub fn draw_onboarding(
                                 },
                                 camera_transform: Transform::from_xyz(-10.0, 10.0, -10.0).looking_at(Vec3::ZERO, Vec3::Y),
                                 bricks,
+                                scripts: Vec::new(),
                             };
 
                             let _ = state.save_to_file(&onboarding_data.save_path);

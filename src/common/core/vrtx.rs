@@ -17,6 +17,15 @@ pub struct VrtxBrick {
 }
 
 #[derive(Debug, Clone)]
+pub struct VrtxScript {
+    pub name: String,
+    pub script_type: u8,
+    pub code: String,
+    pub parent_name: Option<String>,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone)]
 pub struct VrtxSettings {
     pub ssao: bool,
     pub contact_shadows: bool,
@@ -30,6 +39,7 @@ pub struct VrtxFileState {
     pub settings: VrtxSettings,
     pub camera_transform: Transform,
     pub bricks: Vec<VrtxBrick>,
+    pub scripts: Vec<VrtxScript>,
 }
 
 #[derive(Debug, Clone)]
@@ -311,7 +321,7 @@ fn decompress_gcpf_file(data: &[u8]) -> std::io::Result<Vec<u8>> {
         return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "GCPF: Block size is zero"));
     }
 
-    let mut num_blocks = (uncompressed_size + block_size - 1) / block_size;
+    let num_blocks = (uncompressed_size + block_size - 1) / block_size;
     let header_size = 16 + num_blocks * 4;
     debug!("GCPF decompress: num_blocks={}, header_size={}", num_blocks, header_size);
 
@@ -558,6 +568,7 @@ fn parse_godot_vrtx(decompressed: &[u8]) -> std::io::Result<VrtxFileState> {
             settings,
             camera_transform,
             bricks,
+            scripts: Vec::new(),
         })
     } else {
         error!("Parsing failed: Root element is not a Godot dictionary");
@@ -635,6 +646,33 @@ impl VrtxFileState {
             writer.write_all(&brick.mass.to_le_bytes())?;
         }
 
+        if self.version >= 4 {
+            writer.write_all(&(self.scripts.len() as u32).to_le_bytes())?;
+            for script in &self.scripts {
+                let name_bytes = script.name.as_bytes();
+                writer.write_all(&(name_bytes.len() as u16).to_le_bytes())?;
+                writer.write_all(name_bytes)?;
+
+                writer.write_all(&[script.script_type])?;
+
+                let code_bytes = script.code.as_bytes();
+                writer.write_all(&(code_bytes.len() as u32).to_le_bytes())?;
+                writer.write_all(code_bytes)?;
+
+                if let Some(ref parent) = script.parent_name {
+                    let p_bytes = parent.as_bytes();
+                    writer.write_all(&(p_bytes.len() as u16).to_le_bytes())?;
+                    writer.write_all(p_bytes)?;
+                } else {
+                    writer.write_all(&0u16.to_le_bytes())?;
+                }
+
+                if self.version >= 5 {
+                    writer.write_all(&[if script.enabled { 1 } else { 0 }])?;
+                }
+            }
+        }
+
         writer.flush()?;
         Ok(())
     }
@@ -653,8 +691,8 @@ impl VrtxFileState {
             let version = u32::from_le_bytes(version_bytes);
             debug!("load_from_file: VRTX format version is {}", version);
 
-            let (gravity, settings, camera_transform, count) = if version == 3 || version == 2 || version == 1 {
-                debug!("load_from_file: Parsing version 1/2/3 header");
+            let (gravity, settings, camera_transform, count) = if version >= 1 {
+                debug!("load_from_file: Parsing version 1/2/3/4 header");
                 let mut gx = [0u8; 4]; reader.read_exact(&mut gx)?;
                 let mut gy = [0u8; 4]; reader.read_exact(&mut gy)?;
                 let mut gz = [0u8; 4]; reader.read_exact(&mut gz)?;
@@ -851,13 +889,68 @@ impl VrtxFileState {
                 });
             }
 
-            debug!("load_from_file: Successfully parsed {} bricks from standard VRTX file", bricks.len());
+            let mut scripts = Vec::new();
+            if version >= 4 {
+                let mut script_count_bytes = [0u8; 4];
+                if reader.read_exact(&mut script_count_bytes).is_ok() {
+                    let script_count = u32::from_le_bytes(script_count_bytes);
+                    for _ in 0..script_count {
+                        let mut name_len_bytes = [0u8; 2];
+                        reader.read_exact(&mut name_len_bytes)?;
+                        let name_len = u16::from_le_bytes(name_len_bytes) as usize;
+                        let mut name_bytes = vec![0u8; name_len];
+                        reader.read_exact(&mut name_bytes)?;
+                        let name = String::from_utf8(name_bytes).unwrap_or_default();
+
+                        let mut type_bytes = [0u8; 1];
+                        reader.read_exact(&mut type_bytes)?;
+                        let script_type = type_bytes[0];
+
+                        let mut code_len_bytes = [0u8; 4];
+                        reader.read_exact(&mut code_len_bytes)?;
+                        let code_len = u32::from_le_bytes(code_len_bytes) as usize;
+                        let mut code_bytes = vec![0u8; code_len];
+                        reader.read_exact(&mut code_bytes)?;
+                        let code = String::from_utf8(code_bytes).unwrap_or_default();
+
+                        let mut p_len_bytes = [0u8; 2];
+                        reader.read_exact(&mut p_len_bytes)?;
+                        let p_len = u16::from_le_bytes(p_len_bytes) as usize;
+                        let parent_name = if p_len > 0 {
+                            let mut p_bytes = vec![0u8; p_len];
+                            reader.read_exact(&mut p_bytes)?;
+                            Some(String::from_utf8(p_bytes).unwrap_or_default())
+                        } else {
+                            None
+                        };
+
+                        let enabled = if version >= 5 {
+                            let mut enabled_byte = [0u8; 1];
+                            reader.read_exact(&mut enabled_byte)?;
+                            enabled_byte[0] != 0
+                        } else {
+                            true
+                        };
+
+                        scripts.push(VrtxScript {
+                            name,
+                            script_type,
+                            code,
+                            parent_name,
+                            enabled,
+                        });
+                    }
+                }
+            }
+
+            debug!("load_from_file: Successfully parsed {} bricks and {} scripts from standard VRTX file", bricks.len(), scripts.len());
             Ok(Self {
                 version,
                 gravity,
                 settings,
                 camera_transform,
                 bricks,
+                scripts,
             })
         } else if data.len() >= 4 && &data[0..4] == b"GCPF" {
             debug!("load_from_file: Detected legacy GCPF (Godot) file format");

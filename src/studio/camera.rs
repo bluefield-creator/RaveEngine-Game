@@ -78,6 +78,10 @@ pub fn setup_studio(
     ));
 
     commands.spawn((
+        Name::new("Workspace"),
+    ));
+
+    commands.spawn((
         Name::new("Players"),
         crate::common::net::components::PlayersServiceContainer,
     ));

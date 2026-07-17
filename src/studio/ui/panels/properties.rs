@@ -55,8 +55,135 @@ pub fn draw_properties(
     brick_colors: &mut Query<&mut crate::common::game::bricks::components::BrickColor>,
     materials: &mut Assets<StandardMaterial>,
     studs_materials: &mut Assets<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>,
+    explorer_query: &Query<(
+        Entity,
+        &Name,
+        Option<&ChildOf>,
+        Option<&Children>,
+        Option<&Brick>,
+        Option<&crate::scripting::ecs::ServerScript>,
+        Option<&crate::scripting::ecs::LocalScript>,
+        Option<&crate::scripting::ecs::ModuleScript>,
+    ), Without<Camera3d>>,
+    active_editor: &mut ResMut<crate::studio::ui::resources::ActiveScriptEditor>,
 ) {
     if selected_entities.is_empty() {
+        return;
+    }
+
+    let mut script_entity = None;
+    let ent = selected_entities[0];
+    if let Ok((_, _, _, _, _, s, l, m)) = explorer_query.get(ent) {
+        if s.is_some() || l.is_some() || m.is_some() {
+            script_entity = Some(ent);
+        }
+    }
+
+    if let Some(entity) = script_entity {
+        let name_str = explorer_query.get(entity).map(|(_, n, _, _, _, _, _, _)| n.as_str().to_string()).unwrap_or_else(|_| "Script".to_string());
+        let (code, script_type, mut enabled) = if let Ok((_, _, _, _, _, s, l, m)) = explorer_query.get(entity) {
+            if let Some(ref script) = s {
+                (script.code.clone(), "Script", script.enabled)
+            } else if let Some(ref script) = l {
+                (script.code.clone(), "LocalScript", script.enabled)
+            } else if let Some(ref script) = m {
+                (script.code.clone(), "ModuleScript", true)
+            } else {
+                ("".to_string(), "Script", true)
+            }
+        } else {
+            ("".to_string(), "Script", true)
+        };
+
+        let parent_name_str = if let Ok((_, _, Some(child_of), _, _, _, _, _)) = explorer_query.get(entity) {
+            explorer_query.get(child_of.parent()).map(|(_, name, _, _, _, _, _, _)| name.as_str().to_string()).unwrap_or_else(|_| "None".to_string())
+        } else {
+            "Workspace".to_string()
+        };
+
+        ui.vertical(|ui| {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("Properties").color(egui::Color32::from_rgb(0, 0, 0)).strong().size(16.0));
+            });
+
+            ui.add_space(8.0);
+            let (sep_rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
+            ui.painter().rect_filled(sep_rect, 0.0, egui::Color32::from_rgb(212, 212, 212));
+            ui.add_space(8.0);
+
+            egui::CollapsingHeader::new(egui::RichText::new("Information").color(egui::Color32::from_rgb(0, 0, 0)).strong().size(14.0))
+                .default_open(true)
+                .show(ui, |ui| {
+                    egui::Grid::new("properties_script_info_grid")
+                        .num_columns(2)
+                        .spacing([12.0, 8.0])
+                        .show(ui, |ui| {
+                            ui.label(egui::RichText::new("Name").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
+                            let name_id = ui.make_persistent_id("properties_script_name_input");
+                            let mut name_edit = ui.data_mut(|d| d.get_temp::<String>(name_id).unwrap_or_else(|| name_str.clone()));
+                            let res = ui.add(egui::TextEdit::singleline(&mut name_edit));
+                            if res.changed() {
+                                ui.data_mut(|d| d.insert_temp(name_id, name_edit.clone()));
+                                commands.entity(entity).insert(Name::new(name_edit.clone()));
+                            } else if !res.has_focus() {
+                                if name_edit != name_str {
+                                    name_edit = name_str.clone();
+                                    ui.data_mut(|d| d.insert_temp(name_id, name_edit.clone()));
+                                }
+                            }
+                            ui.end_row();
+
+                            ui.label(egui::RichText::new("Class Name").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
+                            ui.label(egui::RichText::new(script_type).color(egui::Color32::BLACK).size(13.0));
+                            ui.end_row();
+
+                            if script_type != "ModuleScript" {
+                                ui.label(egui::RichText::new("Enabled").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
+                                if ui.checkbox(&mut enabled, "").changed() {
+                                    if let Ok((_, _, _, _, _, s, l, _)) = explorer_query.get(entity) {
+                                        if s.is_some() {
+                                            commands.entity(entity).insert(crate::scripting::ecs::ServerScript {
+                                                code: code.clone(),
+                                                enabled,
+                                                started: false,
+                                            });
+                                        } else if l.is_some() {
+                                            commands.entity(entity).insert(crate::scripting::ecs::LocalScript {
+                                                code: code.clone(),
+                                                enabled,
+                                                started: false,
+                                            });
+                                        }
+                                    }
+                                }
+                                ui.end_row();
+                            }
+
+                            ui.label(egui::RichText::new("Parent").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
+                            ui.label(egui::RichText::new(&parent_name_str).color(egui::Color32::BLACK).size(13.0));
+                            ui.end_row();
+
+                            ui.label(egui::RichText::new("Lines").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
+                            ui.label(egui::RichText::new(format!("{}", code.lines().count())).color(egui::Color32::BLACK).size(13.0));
+                            ui.end_row();
+
+                            ui.label(egui::RichText::new("Characters").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
+                            ui.label(egui::RichText::new(format!("{}", code.len())).color(egui::Color32::BLACK).size(13.0));
+                            ui.end_row();
+                        });
+                });
+
+            ui.add_space(12.0);
+
+            ui.vertical_centered_justified(|ui| {
+                if ui.button(egui::RichText::new("Open in Editor").strong()).clicked() {
+                    if !active_editor.open_entities.contains(&entity) {
+                        active_editor.open_entities.push(entity);
+                    }
+                    active_editor.entity = Some(entity);
+                }
+            });
+        });
         return;
     }
 

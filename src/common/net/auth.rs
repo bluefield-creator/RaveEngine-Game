@@ -2,7 +2,7 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::time::Duration;
 use serde::{Deserialize, Serialize};
-use bevy::log::{info, warn, debug, trace};
+use bevy::log::{warn, debug, trace};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ValidateResponse {

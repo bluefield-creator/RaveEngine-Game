@@ -1,11 +1,10 @@
 use bevy::prelude::*;
 use bevy_egui::egui;
-use crate::studio::tools::{ToolState, SnapConfig};
+use crate::studio::tools::{ToolState, SnapConfig, Selection};
 use crate::common::game::bricks::data::spawn_brick;
 use crate::common::game::bricks::studs::StudsAssets;
 use crate::common::game::bricks::data::BrickSpawnerCount;
 use bevy::pbr::ExtendedMaterial;
-use avian3d::prelude::CollisionLayers;
 
 #[allow(deprecated)]
 pub fn draw_top_bar(
@@ -55,6 +54,21 @@ pub fn draw_top_bar(
     playtest_state: &mut ResMut<crate::client::PlaytestState>,
     playtest_backup: &mut ResMut<crate::studio::ui::resources::PlaytestBackup>,
     playtest_client_query: &Query<Entity, With<crate::studio::ui::resources::InEditorPlaytestClient>>,
+    selection: &Selection,
+    explorer_query: &Query<(
+        Entity,
+        &Name,
+        Option<&ChildOf>,
+        Option<&Children>,
+        Option<&crate::common::game::bricks::components::Brick>,
+        Option<&crate::scripting::ecs::ServerScript>,
+        Option<&crate::scripting::ecs::LocalScript>,
+        Option<&crate::scripting::ecs::ModuleScript>,
+    ), Without<Camera3d>>,
+    onboarding_active: bool,
+    players_service: &mut Option<ResMut<crate::studio::tools::PlayersService>>,
+    lighting_service: &mut Option<ResMut<crate::common::game::environment::lighting::LightingService>>,
+    file_dialog_state: &crate::studio::ui::resources::FileDialogState,
 ) {
     ui.style_mut().interaction.selectable_labels = false;
 
@@ -122,145 +136,96 @@ pub fn draw_top_bar(
                                     });
                                 }
                             }
+
+                            let mut scripts_data = Vec::new();
+                            for (_entity, name, child_of_opt, _, _, s_opt, l_opt, m_opt) in explorer_query.iter() {
+                                let mut script_type_opt = None;
+                                let mut code = String::new();
+                                let mut enabled = true;
+                                if let Some(s) = s_opt {
+                                    script_type_opt = Some(0);
+                                    code = s.code.clone();
+                                    enabled = s.enabled;
+                                } else if let Some(l) = l_opt {
+                                    script_type_opt = Some(1);
+                                    code = l.code.clone();
+                                    enabled = l.enabled;
+                                } else if let Some(m) = m_opt {
+                                    script_type_opt = Some(2);
+                                    code = m.code.clone();
+                                }
+                                if let Some(script_type) = script_type_opt {
+                                    let mut parent_name = None;
+                                    if let Some(child_of) = child_of_opt {
+                                        if let Ok((_, p_name, _, _, _, _, _, _)) = explorer_query.get(child_of.parent()) {
+                                            parent_name = Some(p_name.to_string());
+                                        }
+                                    }
+                                    scripts_data.push(crate::common::core::vrtx::VrtxScript {
+                                        name: name.to_string(),
+                                        script_type,
+                                        code,
+                                        parent_name,
+                                        enabled,
+                                    });
+                                }
+                            }
+
                             let gravity_val = if let Some(g) = gravity.as_ref() {
                                 g.0
-                    } else {
-                        Vec3::new(0.0, -186.9 * 0.28, 0.0)
-                    };
-                    let cam_transform = if let Some(cam_t) = camera_transform_query.iter().next() {
-                        *cam_t
-                    } else {
-                        Transform::IDENTITY
-                    };
-                    let state = crate::common::core::vrtx::VrtxFileState {
-                        version: 3,
-                        gravity: gravity_val,
-                        settings: crate::common::core::vrtx::VrtxSettings {
-                            ssao: graphics_settings.ssao,
-                            contact_shadows: graphics_settings.contact_shadows,
-                            bloom: graphics_settings.bloom,
-                        },
-                        camera_transform: cam_transform,
-                        bricks: bricks_data,
-                    };
-                    let _ = state.save_to_file(&onboarding_data.save_path);
-                    ui.close_menu();
-                        }
-                        if ui.button("Save As...").clicked() {
-                            if let Some(path) = rfd::FileDialog::new()
-                                .add_filter("Rave Project", &["vrtx"])
-                                .set_directory(std::env::current_dir().unwrap_or_default())
-                                .save_file() {
-                                let save_path_str = path.display().to_string();
-                                onboarding_data.save_path = save_path_str.clone();
-
-                                let mut bricks_data = Vec::new();
-                                for (_, transform, name, _, _, brick_opt, shape_opt, _, _, mat_opt, studs_mat_opt, phys_opt) in entities_query.iter() {
-                                    if brick_opt.is_some() {
-                                        let shape = shape_opt.as_ref().map(|s| s.shape).unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
-                                        let mut current_color = Color::Srgba(Srgba::new(0.84, 0.24, 0.16, 1.0));
-                                        if let Some(studs_mat_handle) = studs_mat_opt {
-                                            if let Some(mat) = studs_materials.get(&studs_mat_handle.0) {
-                                                current_color = mat.base.base_color;
-                                            }
-                                        } else if let Some(mat_handle) = mat_opt {
-                                            if let Some(mat) = materials.get(&mat_handle.0) {
-                                                current_color = mat.base_color;
-                                            }
-                                        }
-                                        let (physics_enabled, bounciness, player_can_collide, friction, gravity_scale, mass) = if let Some(phys) = phys_opt {
-                                            (phys.enabled, phys.bounciness, phys.player_can_collide, phys.friction, phys.gravity_scale, phys.mass)
-                                        } else {
-                                            (true, 0.3, true, 0.3, 1.0, 1.0)
-                                        };
-                                        bricks_data.push(crate::common::core::vrtx::VrtxBrick {
-                                            name: name.to_string(),
-                                            transform: *transform,
-                                            shape,
-                                            color: current_color,
-                                            physics_enabled,
-                                            bounciness,
-                                            player_can_collide,
-                                            friction,
-                                            gravity_scale,
-                                            mass,
-                                        });
-                                    }
-                                }
-                                let gravity_val = if let Some(g) = gravity.as_ref() {
-                                    g.0
-                                } else {
-                                    Vec3::new(0.0, -186.9 * 0.28, 0.0)
-                                };
-                                let cam_transform = if let Some(cam_t) = camera_transform_query.iter().next() {
-                                    *cam_t
-                                } else {
-                                    Transform::IDENTITY
-                                };
-                                let state = crate::common::core::vrtx::VrtxFileState {
-                                    version: 3,
-                                    gravity: gravity_val,
-                                    settings: crate::common::core::vrtx::VrtxSettings {
-                                        ssao: graphics_settings.ssao,
-                                        contact_shadows: graphics_settings.contact_shadows,
-                                        bloom: graphics_settings.bloom,
-                                    },
-                                    camera_transform: cam_transform,
-                                    bricks: bricks_data,
-                                };
-                                let _ = state.save_to_file(&save_path_str);
-                            }
+                            } else {
+                                Vec3::new(0.0, -186.9 * 0.28, 0.0)
+                            };
+                            let cam_transform = if let Some(cam_t) = camera_transform_query.iter().next() {
+                                *cam_t
+                            } else {
+                                Transform::IDENTITY
+                            };
+                            let state = crate::common::core::vrtx::VrtxFileState {
+                                version: 5,
+                                gravity: gravity_val,
+                                settings: crate::common::core::vrtx::VrtxSettings {
+                                    ssao: graphics_settings.ssao,
+                                    contact_shadows: graphics_settings.contact_shadows,
+                                    bloom: graphics_settings.bloom,
+                                },
+                                camera_transform: cam_transform,
+                                bricks: bricks_data,
+                                scripts: scripts_data,
+                            };
+                            let _ = state.save_to_file(&onboarding_data.save_path);
                             ui.close_menu();
                         }
-                        if ui.button("Open...").clicked() {
-                            if let Some(path) = rfd::FileDialog::new()
-                                .add_filter("Rave Project", &["vrtx"])
-                                .set_directory(std::env::current_dir().unwrap_or_default())
-                                .pick_file() {
-                                let open_path_str = path.display().to_string();
-                                let loaded_state = crate::common::core::vrtx::VrtxFileState::load_from_file(&open_path_str).ok();
-                                if let Some(state) = loaded_state {
-                                    onboarding_data.save_path = open_path_str;
-                                    for (entity, _, _, _, _, brick_opt, _, _, _, _, _, _) in entities_query.iter() {
-                                        if brick_opt.is_some() {
-                                            commands.entity(entity).despawn();
-                                        }
-                                    }
-                                    graphics_settings.ssao = state.settings.ssao;
-                                    graphics_settings.contact_shadows = state.settings.contact_shadows;
-                                    graphics_settings.bloom = state.settings.bloom;
-                                    if let Some(g) = gravity.as_mut() {
-                                        g.0 = state.gravity;
-                                    }
-                                    if let Some(mut cam_t) = camera_transform_query.iter_mut().next() {
-                                        *cam_t = state.camera_transform;
-                                    }
-                                    for brick in state.bricks {
-                                        let layers = if brick.player_can_collide {
-                                            CollisionLayers::from_bits(0b0001, 0xFFFF_FFFF)
-                                        } else {
-                                            CollisionLayers::from_bits(0b0100, 0xFFFF_FFFD)
-                                        };
-                                        commands.spawn((
-                                            brick.transform,
-                                            crate::common::game::bricks::components::Brick,
-                                            crate::common::game::bricks::components::BrickShapeComponent { shape: brick.shape },
-                                            crate::common::game::bricks::components::BrickPhysics {
-                                                enabled: brick.physics_enabled,
-                                                bounciness: brick.bounciness,
-                                                player_can_collide: brick.player_can_collide,
-                                                friction: brick.friction,
-                                                gravity_scale: brick.gravity_scale,
-                                                mass: brick.mass,
-                                            },
-                                            crate::common::game::bricks::components::BrickColor { color: brick.color },
-                                            layers,
-                                            Pickable::default(),
-                                            Name::new(brick.name),
-                                        ));
-                                    }
+                        
+                        let is_open = file_dialog_state.is_open.load(std::sync::atomic::Ordering::Relaxed);
+                        if ui.add_enabled(!is_open, egui::Button::new("Save As...")).clicked() {
+                            file_dialog_state.is_open.store(true, std::sync::atomic::Ordering::Relaxed);
+                            let tx = file_dialog_state.tx.clone();
+                            std::thread::spawn(move || {
+                                if let Some(path) = rfd::FileDialog::new()
+                                    .add_filter("Rave Project", &["vrtx"])
+                                    .set_directory(std::env::current_dir().unwrap_or_default())
+                                    .save_file() {
+                                    let _ = tx.send(crate::studio::ui::resources::FileDialogResult::SaveAs(path));
+                                } else {
+                                    let _ = tx.send(crate::studio::ui::resources::FileDialogResult::Cancel);
                                 }
-                            }
+                            });
+                            ui.close_menu();
+                        }
+                        if ui.add_enabled(!is_open, egui::Button::new("Open...")).clicked() {
+                            file_dialog_state.is_open.store(true, std::sync::atomic::Ordering::Relaxed);
+                            let tx = file_dialog_state.tx.clone();
+                            std::thread::spawn(move || {
+                                if let Some(path) = rfd::FileDialog::new()
+                                    .add_filter("Rave Project", &["vrtx"])
+                                    .set_directory(std::env::current_dir().unwrap_or_default())
+                                    .pick_file() {
+                                    let _ = tx.send(crate::studio::ui::resources::FileDialogResult::OpenFile(path));
+                                } else {
+                                    let _ = tx.send(crate::studio::ui::resources::FileDialogResult::Cancel);
+                                }
+                            });
                             ui.close_menu();
                         }
                     });
@@ -303,357 +268,512 @@ pub fn draw_top_bar(
             });
         });
 
-    let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
-    ui.painter().rect_filled(rect, 0.0, egui::Color32::from_rgb(212, 212, 212));
+    let (bottom_sep, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
+    ui.painter().rect_filled(bottom_sep, 0.0, egui::Color32::from_rgb(212, 212, 212));
 
     egui::Frame::NONE
         .inner_margin(egui::Margin::symmetric(12, 8))
         .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing = egui::vec2(4.0, 0.0);
+            ui.add_enabled_ui(!onboarding_active, |ui| {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing = egui::vec2(4.0, 0.0);
 
-                let is_move = *current_tool.get() == ToolState::Move;
-                if ribbonbutton(ui, Some(move_tex), "Move", is_move).clicked() {
-                    if is_move {
-                        next_tool.set(ToolState::None);
-                    } else {
-                        next_tool.set(ToolState::Move);
-                    }
-                }
-
-                let is_rotate = *current_tool.get() == ToolState::Rotate;
-                if ribbonbutton(ui, Some(rotate_tex), "Rotate", is_rotate).clicked() {
-                    if is_rotate {
-                        next_tool.set(ToolState::None);
-                    } else {
-                        next_tool.set(ToolState::Rotate);
-                    }
-                }
-
-                let is_scale = *current_tool.get() == ToolState::Size;
-                if ribbonbutton(ui, Some(scale_tex), "Scale", is_scale).clicked() {
-                    if is_scale {
-                        next_tool.set(ToolState::None);
-                    } else {
-                        next_tool.set(ToolState::Size);
-                    }
-                }
-
-                ui.add_space(8.0);
-                let (sep_rect_snap, _) = ui.allocate_exact_size(egui::vec2(1.0, 56.0), egui::Sense::hover());
-                ui.painter().rect_filled(sep_rect_snap, 0.0, egui::Color32::from_rgb(212, 212, 212));
-                ui.add_space(8.0);
-
-                ui.vertical(|ui| {
-                    ui.add_space(6.0);
-                    let mut enabled = snap_config.enabled;
-                    if ui.checkbox(&mut enabled, "Snap").changed() {
-                        snap_config.enabled = enabled;
-                        if enabled {
-                            snap_config.distance = 1.0;
+                    let is_move = *current_tool.get() == ToolState::Move;
+                    if ribbonbutton(ui, Some(move_tex), "Move", is_move).clicked() {
+                        if is_move {
+                            next_tool.set(ToolState::None);
+                        } else {
+                            next_tool.set(ToolState::Move);
                         }
                     }
-                    if snap_config.enabled {
-                        ui.add_space(2.0);
-                        ui.horizontal(|ui| {
-                            ui.add(egui::DragValue::new(&mut snap_config.distance)
-                                .speed(0.1)
-                                .range(0.01..=1000.0)
-                                .suffix(" stud")
-                            );
-                        });
+
+                    let is_rotate = *current_tool.get() == ToolState::Rotate;
+                    if ribbonbutton(ui, Some(rotate_tex), "Rotate", is_rotate).clicked() {
+                        if is_rotate {
+                            next_tool.set(ToolState::None);
+                        } else {
+                            next_tool.set(ToolState::Rotate);
+                        }
                     }
-                });
 
-                ui.add_space(8.0);
-                let (sep_rect, _) = ui.allocate_exact_size(egui::vec2(1.0, 56.0), egui::Sense::hover());
-                ui.painter().rect_filled(sep_rect, 0.0, egui::Color32::from_rgb(212, 212, 212));
-                ui.add_space(8.0);
+                    let is_scale = *current_tool.get() == ToolState::Size;
+                    if ribbonbutton(ui, Some(scale_tex), "Scale", is_scale).clicked() {
+                        if is_scale {
+                            next_tool.set(ToolState::None);
+                        } else {
+                            next_tool.set(ToolState::Size);
+                        }
+                    }
 
-                let add_btn = ribbonbutton(ui, Some(add_tex), "Add", false);
-                let popup_id = ui.make_persistent_id("add_part_popup");
-                if add_btn.clicked() {
-                    ui.memory_mut(|mem| mem.toggle_popup(popup_id));
-                }
+                    ui.add_space(8.0);
+                    let (sep_rect_snap, _) = ui.allocate_exact_size(egui::vec2(1.0, 56.0), egui::Sense::hover());
+                    ui.painter().rect_filled(sep_rect_snap, 0.0, egui::Color32::from_rgb(212, 212, 212));
+                    ui.add_space(8.0);
 
-                let mut search_query = ui.data_mut(|d| d.get_temp::<String>(popup_id).unwrap_or_default());
-
-                let original_window_fill = ui.visuals().window_fill;
-                let original_window_stroke = ui.visuals().window_stroke;
-
-                ui.visuals_mut().window_fill = egui::Color32::from_rgb(255, 255, 255);
-                ui.visuals_mut().window_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(212, 212, 212));
-
-                let _: Option<()> = egui::popup_below_widget(
-                    ui,
-                    popup_id,
-                    &add_btn,
-                    egui::PopupCloseBehavior::CloseOnClickOutside,
-                    |ui: &mut egui::Ui| {
-                        ui.visuals_mut().widgets.hovered.bg_fill = egui::Color32::from_rgb(224, 238, 249);
-                        ui.visuals_mut().widgets.active.bg_fill = egui::Color32::from_rgb(204, 232, 255);
-                        ui.visuals_mut().widgets.inactive.bg_fill = egui::Color32::from_rgb(255, 255, 255);
-                        ui.visuals_mut().widgets.noninteractive.bg_fill = egui::Color32::from_rgb(255, 255, 255);
-
-                        ui.set_min_width(150.0);
-                        ui.horizontal(|ui| {
-                            ui.label("🔍"); 
-                            let text_edit_res = ui.text_edit_singleline(&mut search_query);
-                            if text_edit_res.changed() {
-                                ui.data_mut(|d| d.insert_temp(popup_id, search_query.clone()));
+                    ui.vertical(|ui| {
+                        ui.add_space(6.0);
+                        let mut enabled = snap_config.enabled;
+                        if ui.checkbox(&mut enabled, "Snap").changed() {
+                            snap_config.enabled = enabled;
+                            if enabled {
+                                snap_config.distance = 1.0;
                             }
-                        });
-                        ui.separator();
+                        }
+                        if snap_config.enabled {
+                            ui.add_space(2.0);
+                            ui.horizontal(|ui| {
+                                ui.add(egui::DragValue::new(&mut snap_config.distance)
+                                    .speed(0.1)
+                                    .range(0.01..=1000.0)
+                                    .suffix(" stud")
+                                );
+                            });
+                        }
+                    });
 
-                        let items = [
-                            ("Block", crate::common::game::bricks::components::BrickShape::Block),
-                            ("Sphere", crate::common::game::bricks::components::BrickShape::Sphere),
-                        ];
-                        for (item, shape) in items {
-                            if item.to_lowercase().contains(&search_query.to_lowercase()) {
-                                if ui.button(item).clicked() {
-                                    let mut spawn_pos = Vec3::new(0.0, 0.14, 0.0);
-                                    if let Some(cam_t) = camera_transform {
-                                        let camera_pos = cam_t.translation;
-                                        let camera_forward = cam_t.forward();
+                    ui.add_space(8.0);
+                    let (sep_rect, _) = ui.allocate_exact_size(egui::vec2(1.0, 56.0), egui::Sense::hover());
+                    ui.painter().rect_filled(sep_rect, 0.0, egui::Color32::from_rgb(212, 212, 212));
+                    ui.add_space(8.0);
 
-                                        let mut found_hit = false;
-                                        if camera_forward.y.abs() > 0.001 {
-                                            let resting_y = 0.5 * 0.28;
-                                            let t = (resting_y - camera_pos.y) / camera_forward.y;
-                                            if t > 0.0 && t < 100.0 {
-                                                let hit_pos = camera_pos + camera_forward * t;
-                                                if hit_pos.x.abs() <= 25.0 && hit_pos.z.abs() <= 25.0 {
-                                                    spawn_pos = hit_pos;
-                                                    found_hit = true;
+                    let add_btn = ribbonbutton(ui, Some(add_tex), "Add", false);
+                    let popup_id = ui.make_persistent_id("add_part_popup");
+                    if add_btn.clicked() {
+                        ui.memory_mut(|mem| mem.toggle_popup(popup_id));
+                    }
+
+                    let mut search_query = ui.data_mut(|d| d.get_temp::<String>(popup_id).unwrap_or_default());
+
+                    let original_window_fill = ui.visuals().window_fill;
+                    let original_window_stroke = ui.visuals().window_stroke;
+
+                    ui.visuals_mut().window_fill = egui::Color32::from_rgb(255, 255, 255);
+                    ui.visuals_mut().window_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(212, 212, 212));
+
+                    let _: Option<()> = egui::popup_below_widget(
+                        ui,
+                        popup_id,
+                        &add_btn,
+                        egui::PopupCloseBehavior::CloseOnClickOutside,
+                        |ui: &mut egui::Ui| {
+                            ui.visuals_mut().widgets.hovered.bg_fill = egui::Color32::from_rgb(224, 238, 249);
+                            ui.visuals_mut().widgets.active.bg_fill = egui::Color32::from_rgb(204, 232, 255);
+                            ui.visuals_mut().widgets.inactive.bg_fill = egui::Color32::from_rgb(255, 255, 255);
+                            ui.visuals_mut().widgets.noninteractive.bg_fill = egui::Color32::from_rgb(255, 255, 255);
+
+                            ui.set_min_width(150.0);
+                            ui.horizontal(|ui| {
+                                ui.label("🔍"); 
+                                let text_edit_res = ui.text_edit_singleline(&mut search_query);
+                                if text_edit_res.changed() {
+                                    ui.data_mut(|d| d.insert_temp(popup_id, search_query.clone()));
+                                }
+                            });
+                            ui.separator();
+
+                            let items = [
+                                ("Block", crate::common::game::bricks::components::BrickShape::Block),
+                                ("Sphere", crate::common::game::bricks::components::BrickShape::Sphere),
+                            ];
+                            for (item, shape) in items {
+                                if item.to_lowercase().contains(&search_query.to_lowercase()) {
+                                    if ui.button(item).clicked() {
+                                        let mut spawn_pos = Vec3::new(0.0, 0.14, 0.0);
+                                        if let Some(cam_t) = camera_transform {
+                                            let camera_pos = cam_t.translation;
+                                            let camera_forward = cam_t.forward();
+
+                                            let mut found_hit = false;
+                                            if camera_forward.y.abs() > 0.001 {
+                                                let resting_y = 0.5 * 0.28;
+                                                let t = (resting_y - camera_pos.y) / camera_forward.y;
+                                                if t > 0.0 && t < 100.0 {
+                                                    let hit_pos = camera_pos + camera_forward * t;
+                                                    if hit_pos.x.abs() <= 25.0 && hit_pos.z.abs() <= 25.0 {
+                                                        spawn_pos = hit_pos;
+                                                        found_hit = true;
+                                                    }
                                                 }
                                             }
+                                            if !found_hit {
+                                                spawn_pos = camera_pos + camera_forward * (10.0 * 0.28);
+                                            }
                                         }
-                                        if !found_hit {
-                                            spawn_pos = camera_pos + camera_forward * (10.0 * 0.28);
-                                        }
-                                    }
 
-                                    if snap_config.enabled && snap_config.distance > 0.0 {
-                                        let snap_interval = snap_config.distance * 0.28;
-                                        let half_ext = match shape {
-                                            crate::common::game::bricks::components::BrickShape::Block => Vec3::new(2.0 * 0.28, 0.5 * 0.28, 1.0 * 0.28),
-                                            crate::common::game::bricks::components::BrickShape::Sphere => Vec3::new(1.0 * 0.28, 1.0 * 0.28, 1.0 * 0.28),
+                                        if snap_config.enabled && snap_config.distance > 0.0 {
+                                            let snap_interval = snap_config.distance * 0.28;
+                                            let half_ext = match shape {
+                                                crate::common::game::bricks::components::BrickShape::Block => Vec3::new(2.0 * 0.28, 0.5 * 0.28, 1.0 * 0.28),
+                                                crate::common::game::bricks::components::BrickShape::Sphere => Vec3::new(1.0 * 0.28, 1.0 * 0.28, 1.0 * 0.28),
+                                            };
+                                            spawn_pos.x = ((spawn_pos.x - half_ext.x) / snap_interval).round() * snap_interval + half_ext.x;
+                                            spawn_pos.z = ((spawn_pos.z - half_ext.z) / snap_interval).round() * snap_interval + half_ext.x;
+                                            spawn_pos.y = ((spawn_pos.y - half_ext.y) / snap_interval).round() * snap_interval + half_ext.y;
+                                            if spawn_pos.y < half_ext.y {
+                                                spawn_pos.y = half_ext.y;
+                                            }
+                                        }
+
+                                        let new_entity = spawn_brick(commands, meshes, studs_materials, studs_assets, count, spawn_pos, shape);
+
+                                        let default_name = match shape {
+                                            crate::common::game::bricks::components::BrickShape::Block => format!("Part{}", count.count - 1),
+                                            crate::common::game::bricks::components::BrickShape::Sphere => format!("Sphere{}", count.count - 1),
                                         };
-                                        spawn_pos.x = ((spawn_pos.x - half_ext.x) / snap_interval).round() * snap_interval + half_ext.x;
-                                        spawn_pos.z = ((spawn_pos.z - half_ext.z) / snap_interval).round() * snap_interval + half_ext.x;
-                                        spawn_pos.y = ((spawn_pos.y - half_ext.y) / snap_interval).round() * snap_interval + half_ext.y;
-                                        if spawn_pos.y < half_ext.y {
-                                            spawn_pos.y = half_ext.y;
+
+                                        let default_mesh = match shape {
+                                            crate::common::game::bricks::components::BrickShape::Block => Some(Mesh3d(meshes.add(Cuboid::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28)))),
+                                            crate::common::game::bricks::components::BrickShape::Sphere => Some(Mesh3d(meshes.add(Sphere::new(1.0 * 0.28)))),
+                                        };
+
+                                        let data = crate::common::game::bricks::data::BrickData {
+                                            transform: Transform::from_translation(spawn_pos),
+                                            name: default_name,
+                                            is_brick: true,
+                                            shape,
+                                            mesh: default_mesh,
+                                            standard_material: None,
+                                            studs_material: Some(MeshMaterial3d(studs_materials.add(ExtendedMaterial {
+                                                base: StandardMaterial {
+                                                    base_color: Color::srgb(0.84, 0.24, 0.16),
+                                                    perceptual_roughness: 0.95,
+                                                    reflectance: 0.1,
+                                                    ..default()
+                                                },
+                                                extension: crate::common::game::bricks::studs::StudsExtension {
+                                                    stud_texture: studs_assets.stud.clone(),
+                                                    inlet_texture: studs_assets.inlet.clone(),
+                                                },
+                                            }))),
+                                            parent: None,
+                                            physics: Some(crate::common::game::bricks::components::BrickPhysics::default()),
+                                        };
+
+                                        history.push_command(crate::studio::tools::UndoCommand::Spawn {
+                                            entity: new_entity,
+                                            data,
+                                        });
+
+                                        ui.memory_mut(|mem| mem.close_popup(popup_id));
+                                    }
+                                }
+                            }
+
+                            let script_items = [
+                                ("Script", 0),
+                                ("LocalScript", 1),
+                                ("ModuleScript", 2),
+                            ];
+                            for (item, script_type) in script_items {
+                                if item.to_lowercase().contains(&search_query.to_lowercase()) {
+                                    if ui.button(item).clicked() {
+                                        let new_entity = match script_type {
+                                            0 => commands.spawn((
+                                                Name::new(item),
+                                                crate::scripting::ecs::ServerScript {
+                                                    code: "print(\"Hello World from Server!\")\n".to_string(),
+                                                    enabled: true,
+                                                    started: false,
+                                                },
+                                            )).id(),
+                                            1 => commands.spawn((
+                                                Name::new(item),
+                                                crate::scripting::ecs::LocalScript {
+                                                    code: "print(\"Hello World from Local!\")\n".to_string(),
+                                                    enabled: true,
+                                                    started: false,
+                                                },
+                                                lightyear::prelude::Replicate::default(),
+                                            )).id(),
+                                            _ => commands.spawn((
+                                                Name::new(item),
+                                                crate::scripting::ecs::ModuleScript {
+                                                    code: "local module = {}\nreturn module\n".to_string(),
+                                                },
+                                                lightyear::prelude::Replicate::default(),
+                                            )).id(),
+                                        };
+
+                                        if let Some(parent) = selection.entity {
+                                            commands.entity(parent).add_child(new_entity);
+                                        }
+
+                                        ui.memory_mut(|mem| mem.close_popup(popup_id));
+                                    }
+                                }
+                            }
+                        },
+                    );
+
+                    ui.add_space(8.0);
+                    ui.visuals_mut().window_fill = original_window_fill;
+                    ui.visuals_mut().window_stroke = original_window_stroke;
+
+                    ui.add_space(8.0);
+                    let (sep_rect_play, _) = ui.allocate_exact_size(egui::vec2(1.0, 56.0), egui::Sense::hover());
+                    ui.painter().rect_filled(sep_rect_play, 0.0, egui::Color32::from_rgb(212, 212, 212));
+                    ui.add_space(8.0);
+
+                    let is_playing = physics_state == crate::common::game::physics::PhysicsSimulationState::Running;
+                    let play_btn_tex = if is_playing { stopp_tex } else { play_tex };
+                    let play_btn_label = if is_playing { "Stop" } else { "Play" };
+
+                    if ribbonbutton(ui, Some(play_btn_tex), play_btn_label, is_playing).clicked() {
+                        if is_playing {
+                            physics_action_writer.write(crate::common::game::physics::PhysicsSimulationAction::Stop);
+                        } else {
+                            physics_action_writer.write(crate::common::game::physics::PhysicsSimulationAction::Play);
+                        }
+                    }
+
+                    let playtesting_active = playtest_state.active;
+                    let playc_btn_label = if playtesting_active { "Stop Playtest" } else { "Play in Studio" };
+                    let playc_btn_tex = if playtesting_active { stopp_tex } else { playc_tex };
+
+                    if ribbonbutton(ui, Some(playc_btn_tex), playc_btn_label, playtesting_active).clicked() {
+                        if playtesting_active {
+                            playtest_state.active = false;
+
+                            crate::app::server::bootstrap::SHUTDOWN_SERVER.store(true, std::sync::atomic::Ordering::Relaxed);
+
+                            if let Some(client_entity) = playtest_client_query.iter().next() {
+                                commands.trigger(lightyear::prelude::client::Disconnect { entity: client_entity });
+                                commands.entity(client_entity).despawn();
+                            }
+
+                            for (entity, _, _name, _, _, brick_opt, _, _, _, _, _, _) in entities_query.iter() {
+                                let name_str = _name.as_str();
+                                if brick_opt.is_some() || name_str == "Player" || name_str == "LocalPlayer" || name_str.starts_with("Player_") {
+                                    commands.entity(entity).despawn();
+                                }
+                            }
+
+                            let mut named_entities = std::collections::HashMap::new();
+                            for brick_data in playtest_backup.bricks.drain(..) {
+                                let name = brick_data.name.clone();
+                                let new_entity = crate::common::game::bricks::data::spawn_from_data(commands, &brick_data);
+                                named_entities.insert(name, new_entity);
+                            }
+
+                            for script_data in playtest_backup.scripts.drain(..) {
+                                let mut cmd = commands.spawn(Name::new(script_data.name));
+                                match script_data.script_type {
+                                    0 => {
+                                        cmd.insert(crate::scripting::ecs::ServerScript {
+                                            code: script_data.code,
+                                            enabled: script_data.enabled,
+                                            started: false,
+                                        });
+                                    }
+                                    1 => {
+                                        cmd.insert((
+                                            crate::scripting::ecs::LocalScript {
+                                                code: script_data.code,
+                                                enabled: script_data.enabled,
+                                                started: false,
+                                            },
+                                            lightyear::prelude::Replicate::default(),
+                                        ));
+                                    }
+                                    _ => {
+                                        cmd.insert((
+                                            crate::scripting::ecs::ModuleScript {
+                                                code: script_data.code,
+                                            },
+                                            lightyear::prelude::Replicate::default(),
+                                        ));
+                                    }
+                                }
+                                let new_script_entity = cmd.id();
+                                if let Some(ref p_name) = script_data.parent_name {
+                                    if let Some(&parent_entity) = named_entities.get(p_name) {
+                                        commands.entity(parent_entity).add_child(new_script_entity);
+                                    }
+                                }
+                            }
+
+                            if let Some(gravity_val) = playtest_backup.gravity.take() {
+                                if let Some(g) = gravity {
+                                    g.0 = gravity_val;
+                                }
+                            }
+                            if let Some(ps_val) = playtest_backup.players_service.take() {
+                                if let Some(ps) = players_service {
+                                    **ps = ps_val.clone();
+                                }
+                                if let Ok(mut shared) = crate::studio::tools::SHARED_PLAYERS_SERVICE.write() {
+                                    *shared = ps_val;
+                                }
+                            }
+                            if let Some(ls_val) = playtest_backup.lighting_service.take() {
+                                if let Some(ls) = lighting_service {
+                                    **ls = ls_val.clone();
+                                }
+                                if let Ok(mut shared) = crate::studio::tools::SHARED_LIGHTING_SERVICE.write() {
+                                    *shared = ls_val.time_of_day;
+                                }
+                            }
+                        } else {
+                            playtest_state.active = true;
+
+                            if let Some(g) = gravity.as_ref() {
+                                playtest_backup.gravity = Some(g.0);
+                            } else {
+                                playtest_backup.gravity = None;
+                            }
+                            if let Some(ps) = players_service.as_ref() {
+                                playtest_backup.players_service = Some((**ps).clone());
+                            } else {
+                                playtest_backup.players_service = None;
+                            }
+                            if let Some(ls) = lighting_service.as_ref() {
+                                playtest_backup.lighting_service = Some((**ls).clone());
+                            } else {
+                                playtest_backup.lighting_service = None;
+                            }
+
+                            let mut backup_bricks = Vec::new();
+                            for (entity, _, _name, _, _, brick_opt, _, _, _, _, _, _) in entities_query.iter() {
+                                if brick_opt.is_some() {
+                                    if let Some(data) = crate::common::game::bricks::data::capture_brick_data(entity, entities_query) {
+                                        backup_bricks.push(data);
+                                    }
+                                    commands.entity(entity).despawn();
+                                }
+                            }
+                            playtest_backup.bricks = backup_bricks;
+
+                            let mut backup_scripts = Vec::new();
+                            for (_entity, _name, child_of_opt, _, _, s_opt, l_opt, m_opt) in explorer_query.iter() {
+                                let mut script_type_opt = None;
+                                let mut code = String::new();
+                                let mut enabled = true;
+                                if let Some(s) = s_opt {
+                                    script_type_opt = Some(0);
+                                    code = s.code.clone();
+                                    enabled = s.enabled;
+                                } else if let Some(l) = l_opt {
+                                    script_type_opt = Some(1);
+                                    code = l.code.clone();
+                                    enabled = l.enabled;
+                                } else if let Some(m) = m_opt {
+                                    script_type_opt = Some(2);
+                                    code = m.code.clone();
+                                }
+                                if let Some(script_type) = script_type_opt {
+                                    let mut parent_name = None;
+                                    if let Some(child_of) = child_of_opt {
+                                        if let Ok((_, p_name, _, _, _, _, _, _)) = explorer_query.get(child_of.parent()) {
+                                            parent_name = Some(p_name.to_string());
                                         }
                                     }
-
-                                    let new_entity = spawn_brick(commands, meshes, studs_materials, studs_assets, count, spawn_pos, shape);
-
-                                    let default_name = match shape {
-                                        crate::common::game::bricks::components::BrickShape::Block => format!("Part{}", count.count - 1),
-                                        crate::common::game::bricks::components::BrickShape::Sphere => format!("Sphere{}", count.count - 1),
-                                    };
-
-                                    let default_mesh = match shape {
-                                        crate::common::game::bricks::components::BrickShape::Block => Some(Mesh3d(meshes.add(Cuboid::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28)))),
-                                        crate::common::game::bricks::components::BrickShape::Sphere => Some(Mesh3d(meshes.add(Sphere::new(1.0 * 0.28)))),
-                                    };
-
-                                    let data = crate::common::game::bricks::data::BrickData {
-                                        transform: Transform::from_translation(spawn_pos),
-                                        name: default_name,
-                                        is_brick: true,
-                                        shape,
-                                        mesh: default_mesh,
-                                        standard_material: None,
-                                        studs_material: Some(MeshMaterial3d(studs_materials.add(ExtendedMaterial {
-                                            base: StandardMaterial {
-                                                base_color: Color::srgb(0.84, 0.24, 0.16),
-                                                perceptual_roughness: 0.95,
-                                                reflectance: 0.1,
-                                                ..default()
-                                            },
-                                            extension: crate::common::game::bricks::studs::StudsExtension {
-                                                stud_texture: studs_assets.stud.clone(),
-                                                inlet_texture: studs_assets.inlet.clone(),
-                                            },
-                                        }))),
-                                        parent: None,
-                                        physics: Some(crate::common::game::bricks::components::BrickPhysics::default()),
-                                    };
-
-                                    history.push_command(crate::studio::tools::UndoCommand::Spawn {
-                                        entity: new_entity,
-                                        data,
+                                    backup_scripts.push(crate::common::core::vrtx::VrtxScript {
+                                        name: _name.to_string(),
+                                        script_type,
+                                        code,
+                                        parent_name,
+                                        enabled,
                                     });
-
-                                    ui.memory_mut(|mem| mem.close_popup(popup_id));
+                                    commands.entity(_entity).despawn();
                                 }
                             }
-                        }
-                    },
-                );
+                            playtest_backup.scripts = backup_scripts;
 
-                ui.add_space(8.0);
-                ui.visuals_mut().window_fill = original_window_fill;
-                ui.visuals_mut().window_stroke = original_window_stroke;
-
-                ui.add_space(8.0);
-                let (sep_rect_play, _) = ui.allocate_exact_size(egui::vec2(1.0, 56.0), egui::Sense::hover());
-                ui.painter().rect_filled(sep_rect_play, 0.0, egui::Color32::from_rgb(212, 212, 212));
-                ui.add_space(8.0);
-
-                let is_playing = physics_state == crate::common::game::physics::PhysicsSimulationState::Running;
-                let play_btn_tex = if is_playing { stopp_tex } else { play_tex };
-                let play_btn_label = if is_playing { "Stop" } else { "Play" };
-
-                if ribbonbutton(ui, Some(play_btn_tex), play_btn_label, is_playing).clicked() {
-                    if is_playing {
-                        physics_action_writer.write(crate::common::game::physics::PhysicsSimulationAction::Stop);
-                    } else {
-                        physics_action_writer.write(crate::common::game::physics::PhysicsSimulationAction::Play);
-                    }
-                }
-
-                let playtesting_active = playtest_state.active;
-                let playc_btn_label = if playtesting_active { "Stop Playtest" } else { "Play in Studio" };
-                let playc_btn_tex = if playtesting_active { stopp_tex } else { playc_tex };
-
-                if ribbonbutton(ui, Some(playc_btn_tex), playc_btn_label, playtesting_active).clicked() {
-                    if playtesting_active {
-                        playtest_state.active = false;
-
-                        crate::app::server::bootstrap::SHUTDOWN_SERVER.store(true, std::sync::atomic::Ordering::Relaxed);
-
-                        if let Some(client_entity) = playtest_client_query.iter().next() {
-                            commands.trigger(lightyear::prelude::client::Disconnect { entity: client_entity });
-                            if let Ok(mut e) = commands.get_entity(client_entity) {
-                                e.despawn();
-                            }
-                        }
-
-                        for (entity, _, name, _, _, brick_opt, _, _, _, _, _, _) in entities_query.iter() {
-                            let name_str = name.as_str();
-                            if brick_opt.is_some() || name_str == "Player" || name_str.starts_with("Player_") {
-                                if let Ok(mut e) = commands.get_entity(entity) {
-                                    e.despawn();
-                                }
-                            }
-                        }
-
-                        for brick_data in playtest_backup.bricks.drain(..) {
-                            crate::common::game::bricks::data::spawn_from_data(commands, &brick_data);
-                        }
-                    } else {
-                        playtest_state.active = true;
-
-                        let mut backup_bricks = Vec::new();
-                        for (entity, _, _, _, _, brick_opt, _, _, _, _, _, _) in entities_query.iter() {
-                            if brick_opt.is_some() {
-                                if let Some(data) = crate::common::game::bricks::data::capture_brick_data(entity, entities_query) {
-                                    backup_bricks.push(data);
-                                }
-                                if let Ok(mut e) = commands.get_entity(entity) {
-                                    e.despawn();
-                                }
-                            }
-                        }
-                        playtest_backup.bricks = backup_bricks;
-
-                        let temp_map_path = "temp_play.vrtx".to_string();
-                        let state = crate::common::core::vrtx::VrtxFileState {
-                            version: 3,
-                            gravity: Vec3::new(0.0, -186.9 * 0.28, 0.0),
-                            settings: crate::common::core::vrtx::VrtxSettings {
-                                ssao: graphics_settings.ssao,
-                                contact_shadows: graphics_settings.contact_shadows,
-                                bloom: graphics_settings.bloom,
-                            },
-                            camera_transform: Transform::IDENTITY,
-                            bricks: playtest_backup.bricks.iter().map(|b| {
-                                let mut current_color = Color::Srgba(Srgba::new(0.84, 0.24, 0.16, 1.0));
-                                if let Some(ref studs_mat_handle) = b.studs_material {
-                                    if let Some(mat) = studs_materials.get(&studs_mat_handle.0) {
-                                        current_color = mat.base.base_color;
+                            let temp_map_path = "temp_play.vrtx".to_string();
+                            let state = crate::common::core::vrtx::VrtxFileState {
+                                version: 5,
+                                gravity: Vec3::new(0.0, -186.9 * 0.28, 0.0),
+                                settings: crate::common::core::vrtx::VrtxSettings {
+                                    ssao: graphics_settings.ssao,
+                                    contact_shadows: graphics_settings.contact_shadows,
+                                    bloom: graphics_settings.bloom,
+                                },
+                                camera_transform: Transform::IDENTITY,
+                                bricks: playtest_backup.bricks.iter().map(|b| {
+                                    let mut current_color = Color::Srgba(Srgba::new(0.84, 0.24, 0.16, 1.0));
+                                    if let Some(ref studs_material_handle) = b.studs_material {
+                                        if let Some(mat) = studs_materials.get(&studs_material_handle.0) {
+                                            current_color = mat.base.base_color;
+                                        }
+                                    } else if let Some(ref mat_handle) = b.standard_material {
+                                        if let Some(mat) = materials.get(&mat_handle.0) {
+                                            current_color = mat.base_color;
+                                        }
                                     }
-                                } else if let Some(ref mat_handle) = b.standard_material {
-                                    if let Some(mat) = materials.get(&mat_handle.0) {
-                                        current_color = mat.base_color;
+                                    let (physics_enabled, bounciness, player_can_collide, friction, gravity_scale, mass) = if let Some(phys) = b.physics {
+                                        (phys.enabled, phys.bounciness, phys.player_can_collide, phys.friction, phys.gravity_scale, phys.mass)
+                                    } else {
+                                        (true, 0.3, true, 0.3, 1.0, 1.0)
+                                    };
+                                    crate::common::core::vrtx::VrtxBrick {
+                                        name: b.name.clone(),
+                                        transform: b.transform,
+                                        shape: b.shape,
+                                        color: current_color,
+                                        physics_enabled,
+                                        bounciness,
+                                        player_can_collide,
+                                        friction,
+                                        gravity_scale,
+                                        mass,
                                     }
-                                }
-                                let (physics_enabled, bounciness, player_can_collide, friction, gravity_scale, mass) = if let Some(phys) = b.physics {
-                                    (phys.enabled, phys.bounciness, phys.player_can_collide, phys.friction, phys.gravity_scale, phys.mass)
-                                } else {
-                                    (true, 0.3, true, 0.3, 1.0, 1.0)
+                                }).collect(),
+                                scripts: playtest_backup.scripts.clone(),
+                            };
+
+                            if state.save_to_file(&temp_map_path).is_ok() {
+                                crate::app::server::bootstrap::SHUTDOWN_SERVER.store(false, std::sync::atomic::Ordering::Relaxed);
+
+                                let server_app = crate::app::server::bootstrap::RaveServerApp::new(
+                                    crate::app::server::config::ServerAppConfig {
+                                        port: 5000,
+                                        map_path: temp_map_path,
+                                    }
+                                );
+                                std::thread::spawn(move || {
+                                    server_app.run();
+                                });
+
+                                std::thread::sleep(std::time::Duration::from_millis(100));
+
+                                let server_addr = std::net::SocketAddr::new(
+                                    std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
+                                    5000,
+                                );
+                                let client_id = rand::random::<u64>();
+
+                                commands.insert_resource(crate::client::LocalClientId(client_id));
+                                commands.insert_resource(crate::client::ClientUkey("studio_play_local_key".to_string()));
+
+                                let auth = lightyear::prelude::Authentication::Manual {
+                                    server_addr,
+                                    client_id,
+                                    private_key: [0u8; 32],
+                                    protocol_id: 0,
                                 };
-                                crate::common::core::vrtx::VrtxBrick {
-                                    name: b.name.clone(),
-                                    transform: b.transform,
-                                    shape: b.shape,
-                                    color: current_color,
-                                    physics_enabled,
-                                    bounciness,
-                                    player_can_collide,
-                                    friction,
-                                    gravity_scale,
-                                    mass,
-                                }
-                            }).collect(),
-                        };
 
-                        if state.save_to_file(&temp_map_path).is_ok() {
-                            crate::app::server::bootstrap::SHUTDOWN_SERVER.store(false, std::sync::atomic::Ordering::Relaxed);
+                                let netcode_config = lightyear::prelude::client::NetcodeConfig {
+                                    client_timeout_secs: 15,
+                                    ..default()
+                                };
 
-                            let server_app = crate::app::server::bootstrap::RaveServerApp::new(
-                                crate::app::server::config::ServerAppConfig {
-                                    port: 5000,
-                                    map_path: temp_map_path,
-                                }
-                            );
-                            std::thread::spawn(move || {
-                                server_app.run();
-                            });
+                                let client_entity = commands.spawn((
+                                    lightyear::prelude::client::Client::default(),
+                                    lightyear::prelude::UdpIo::default(),
+                                    lightyear::prelude::client::NetcodeClient::new(auth, netcode_config).unwrap(),
+                                    lightyear::prelude::LocalAddr(std::net::SocketAddr::new(
+                                        std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
+                                        0,
+                                    )),
+                                    lightyear::prelude::PeerAddr(server_addr),
+                                    crate::studio::ui::resources::InEditorPlaytestClient,
+                                )).id();
 
-                            std::thread::sleep(std::time::Duration::from_millis(100));
-
-                            let server_addr = std::net::SocketAddr::new(
-                                std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
-                                5000,
-                            );
-                            let client_id = rand::random::<u64>();
-
-                            commands.insert_resource(crate::client::LocalClientId(client_id));
-                            commands.insert_resource(crate::client::ClientUkey("studio_play_local_key".to_string()));
-
-                            let auth = lightyear::prelude::Authentication::Manual {
-                                server_addr,
-                                client_id,
-                                private_key: [0u8; 32],
-                                protocol_id: 0,
-                            };
-
-                            let netcode_config = lightyear::prelude::client::NetcodeConfig {
-                                client_timeout_secs: 15,
-                                ..default()
-                            };
-
-                            let client_entity = commands.spawn((
-                                lightyear::prelude::client::Client::default(),
-                                lightyear::prelude::UdpIo::default(),
-                                lightyear::prelude::client::NetcodeClient::new(auth, netcode_config).unwrap(),
-                                lightyear::prelude::LocalAddr(std::net::SocketAddr::new(
-                                    std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
-                                    0,
-                                )),
-                                lightyear::prelude::PeerAddr(server_addr),
-                                crate::studio::ui::resources::InEditorPlaytestClient,
-                            )).id();
-
-                            commands.trigger(lightyear::prelude::client::Connect { entity: client_entity });
+                                commands.trigger(lightyear::prelude::client::Connect { entity: client_entity });
+                            }
                         }
                     }
-                }
+                });
             });
         });
 

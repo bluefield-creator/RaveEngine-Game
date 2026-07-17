@@ -147,6 +147,7 @@ pub fn spawn_player(
             Transform::from_translation(Vec3::new(0.0, -0.7, 0.0))
                 .with_scale(Vec3::splat(0.28)),
             GlobalTransform::default(),
+            Visibility::Inherited,
         ))
         .id();
     commands.entity(player_id).add_child(child_id);

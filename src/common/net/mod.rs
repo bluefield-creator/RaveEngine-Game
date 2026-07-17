@@ -52,6 +52,8 @@ pub fn register_protocol(app: &mut App) {
     app.component::<crate::common::game::bricks::components::BrickShapeComponent>().replicate();
     app.component::<crate::common::game::bricks::components::BrickPhysics>().replicate();
     app.component::<crate::common::game::bricks::components::BrickColor>().replicate();
+    app.component::<crate::scripting::ecs::LocalScript>().replicate();
+    app.component::<crate::scripting::ecs::ModuleScript>().replicate();
 
     app.register_message::<messages::PlayerInputMessage>()
         .add_direction(lightyear::prelude::NetworkDirection::ClientToServer);

@@ -5,3 +5,4 @@ pub mod client;
 pub mod common;
 pub mod studio;
 pub mod server;
+pub mod scripting;

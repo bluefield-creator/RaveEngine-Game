@@ -166,7 +166,7 @@ pub fn inspect_hierarchy_deep(
 
 fn print_entity_recursive(world: &World, entity: Entity, depth: usize) {
     let indent = "  ".repeat(depth);
-    let name = world.get::<Name>(entity).map(|n| n.as_str()).unwrap_or("No Name");
+    let name = world.get::<Name>(entity).map(|n| n.as_str().to_string()).unwrap_or_else(|| "Instance".to_string());
     let vis = world.get::<Visibility>(entity);
     
     let mut comp_names = Vec::new();

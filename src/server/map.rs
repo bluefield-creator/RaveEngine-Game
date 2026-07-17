@@ -75,8 +75,47 @@ pub fn load_map(
     let loaded_state = VrtxFileState::load_from_file(&settings.map_path).ok();
 
     if let Some(state) = loaded_state {
+        let mut named_entities = std::collections::HashMap::new();
         for brick in state.bricks {
-            spawn_brick_entity(&mut commands, brick);
+            let name = brick.name.clone();
+            let entity = spawn_brick_entity(&mut commands, brick);
+            named_entities.insert(name, entity);
+        }
+        for script in state.scripts {
+            let mut cmd = commands.spawn(Name::new(script.name));
+            match script.script_type {
+                0 => {
+                    cmd.insert(crate::scripting::ecs::ServerScript {
+                        code: script.code,
+                        enabled: script.enabled,
+                        started: false,
+                    });
+                }
+                1 => {
+                    cmd.insert((
+                        crate::scripting::ecs::LocalScript {
+                            code: script.code,
+                            enabled: script.enabled,
+                            started: false,
+                        },
+                        lightyear::prelude::Replicate::default(),
+                    ));
+                }
+                _ => {
+                    cmd.insert((
+                        crate::scripting::ecs::ModuleScript {
+                            code: script.code,
+                        },
+                        lightyear::prelude::Replicate::default(),
+                    ));
+                }
+            }
+            let new_script_entity = cmd.id();
+            if let Some(ref p_name) = script.parent_name {
+                if let Some(&parent_entity) = named_entities.get(p_name) {
+                    commands.entity(parent_entity).add_child(new_script_entity);
+                }
+            }
         }
         loaded = true;
         info!("Map loaded successfully");
@@ -88,7 +127,7 @@ pub fn load_map(
     }
 }
 
-pub fn spawn_brick_entity(commands: &mut Commands, brick: crate::common::core::vrtx::VrtxBrick) {
+pub fn spawn_brick_entity(commands: &mut Commands, brick: crate::common::core::vrtx::VrtxBrick) -> Entity {
     let collider = match brick.shape {
         BrickShape::Block => {
             Collider::cuboid(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28)
@@ -139,5 +178,5 @@ pub fn spawn_brick_entity(commands: &mut Commands, brick: crate::common::core::v
         Mass(brick.mass),
         SleepingDisabled,
         Replicate::default(),
-    ));
+    )).id()
 }

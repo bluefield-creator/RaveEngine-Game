@@ -17,6 +17,9 @@ pub struct StudioUiAssets {
     pub play_icon: Handle<Image>,
     pub playc_icon: Handle<Image>,
     pub stopp_icon: Handle<Image>,
+    pub script_icon: Handle<Image>,
+    pub localscript_icon: Handle<Image>,
+    pub modulescript_icon: Handle<Image>,
 }
 
 #[derive(Resource, Default)]
@@ -34,6 +37,9 @@ pub struct StudioUiTextureIds {
     pub play_tex: Option<bevy_egui::egui::TextureId>,
     pub playc_tex: Option<bevy_egui::egui::TextureId>,
     pub stopp_tex: Option<bevy_egui::egui::TextureId>,
+    pub script_tex: Option<bevy_egui::egui::TextureId>,
+    pub localscript_tex: Option<bevy_egui::egui::TextureId>,
+    pub modulescript_tex: Option<bevy_egui::egui::TextureId>,
 }
 
 fn load_icon_image(path: &str, images: &mut Assets<Image>) -> Handle<Image> {
@@ -108,6 +114,12 @@ pub fn setup_ui_assets(
     let play_icon = load_icon_image("content/studio/icons/Tools/play.png", &mut images);
     let playc_icon = load_icon_image("content/studio/icons/Tools/playc.png", &mut images);
     let stopp_icon = load_icon_image("content/studio/icons/Tools/stopp.png", &mut images);
+    let script_icon = load_icon_image("content/studio/icons/Items/script.png", &mut images);
+    let localscript_icon = load_icon_image("content/studio/icons/Items/localscript.png", &mut images);
+    let mut modulescript_icon = load_icon_image("content/studio/icons/Items/modulescript.png", &mut images);
+    if modulescript_icon == Handle::default() {
+        modulescript_icon = script_icon.clone();
+    }
 
     commands.insert_resource(StudioUiAssets {
         move_icon,
@@ -123,5 +135,8 @@ pub fn setup_ui_assets(
         play_icon,
         playc_icon,
         stopp_icon,
+        script_icon,
+        localscript_icon,
+        modulescript_icon,
     });
 }

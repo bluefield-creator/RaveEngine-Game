@@ -65,9 +65,21 @@ fn setup_server(
     commands.trigger(Start { entity: server_entity });
     info!("Server entity spawned and Start trigger dispatched");
 
+    commands.insert_resource(crate::scripting::vm::server_vm::ServerScriptVM::new());
+
+    commands.spawn((
+        Name::new("Workspace"),
+    ));
+
     commands.spawn((
         Name::new("Players"),
         crate::common::net::components::PlayersServiceContainer,
+        Replicate::default(),
+    ));
+
+    commands.spawn((
+        Name::new("Lighting"),
+        crate::common::net::components::LightingServiceContainer,
         Replicate::default(),
     ));
 }
