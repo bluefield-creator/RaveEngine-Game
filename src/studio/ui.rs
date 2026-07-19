@@ -710,18 +710,19 @@ pub fn studio_ui(
                 let current_time = ctx.input(|i| i.time);
 
                 let mut state = ctx.data_mut(|d| {
-                    d.get_temp::<(f64, String, Option<String>)>(last_change_id)
-                        .unwrap_or((-1.0, current_source.clone(), None))
+                    d.get_temp::<(f64, String, Option<String>, bool)>(last_change_id)
+                        .unwrap_or((-1.0, current_source.clone(), None, true))
                 });
 
                 if current_source != state.1 {
                     state.0 = current_time;
                     state.1 = current_source.clone();
+                    state.3 = true;
                 }
 
-                if current_time - state.0 >= 0.8 {
+                if state.3 && current_time - state.0 >= 0.8 {
                     let compiler = mlua::chunk::Compiler::default();
-                    state.2 = match compiler.compile(&current_source) {
+                    state.2 = match compiler.compile(&state.1) {
                         Ok(_) => None,
                         Err(e) => {
                             let err_msg = e.to_string();
@@ -738,6 +739,7 @@ pub fn studio_ui(
                             Some(clean_msg)
                         }
                     };
+                    state.3 = false;
                 }
 
                 ctx.data_mut(|d| d.insert_temp(last_change_id, state.clone()));
