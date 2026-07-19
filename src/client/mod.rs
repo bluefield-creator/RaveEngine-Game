@@ -49,6 +49,11 @@ pub struct PlaytestState {
     pub active: bool,
 }
 
+#[derive(Resource, Default)]
+struct StudioPlaytestPhysicsState {
+    previous: Option<(PhysicsSimulationState, bool)>,
+}
+
 #[derive(Component)]
 pub struct HelloSent;
 
@@ -69,13 +74,17 @@ impl Plugin for ClientPlugin {
 
         app.init_resource::<ui::ChatboxState>()
             .init_resource::<PlaytestState>()
+            .init_resource::<StudioPlaytestPhysicsState>()
             .add_plugins(player::PlayerPlugin)
             .add_plugins(crate::common::net::ProtocolPlugin)
             .add_systems(Startup, (
                 setup_physics_initializer,
                 setup_player_assets,
             ))
-            .add_systems(PreUpdate, initialize_client_physics)
+            .add_systems(PreUpdate, (
+                initialize_client_physics,
+                sync_studio_playtest_physics,
+            ))
             .add_systems(Update, (
                 sync_network_transforms_to_client,
                 sync_predicted_interpolated_transforms,
@@ -528,6 +537,45 @@ fn index_confirmed_transforms<'a>(
     }
 }
 
+fn update_studio_playtest_physics(
+    active: bool,
+    time_physics: &mut Time<Physics>,
+    state: &mut PhysicsSimulationState,
+    playtest_physics: &mut StudioPlaytestPhysicsState,
+) {
+    if active {
+        if playtest_physics.previous.is_none() {
+            playtest_physics.previous = Some((*state, time_physics.is_paused()));
+        }
+        *state = PhysicsSimulationState::Running;
+        time_physics.unpause();
+    } else if let Some((previous_state, was_paused)) = playtest_physics.previous.take() {
+        *state = previous_state;
+        if was_paused {
+            time_physics.pause();
+        } else {
+            time_physics.unpause();
+        }
+    }
+}
+
+fn sync_studio_playtest_physics(
+    playtest: Res<PlaytestState>,
+    mut time_physics: ResMut<Time<Physics>>,
+    mut state: ResMut<PhysicsSimulationState>,
+    mut playtest_physics: ResMut<StudioPlaytestPhysicsState>,
+) {
+    if std::env::var("VERTIGO_APP").unwrap_or_default() != "studio" {
+        return;
+    }
+    update_studio_playtest_physics(
+        playtest.active,
+        &mut time_physics,
+        &mut state,
+        &mut playtest_physics,
+    );
+}
+
 fn sync_predicted_interpolated_transforms(
     mut predicted_interpolated_query: Query<(&crate::common::net::components::Player, &mut Transform), Or<(With<Predicted>, With<Interpolated>)>>,
     confirmed_query: Query<(&crate::common::net::components::Player, &Transform), (Without<Predicted>, Without<Interpolated>, Without<Replicate>)>,
@@ -676,6 +724,57 @@ mod tests {
         index_confirmed_transforms(&mut index, players.iter().zip(transforms.iter()));
 
         assert_eq!(index.get(&1), Some(&transforms[0]));
+    }
+
+    #[test]
+    fn restores_studio_physics_after_playtest() {
+        let mut time_physics = Time::<Physics>::default();
+        time_physics.pause();
+        let mut state = PhysicsSimulationState::Stopped;
+        let mut playtest_physics = StudioPlaytestPhysicsState::default();
+
+        update_studio_playtest_physics(
+            true,
+            &mut time_physics,
+            &mut state,
+            &mut playtest_physics,
+        );
+
+        assert_eq!(state, PhysicsSimulationState::Running);
+        assert!(!time_physics.is_paused());
+
+        update_studio_playtest_physics(
+            false,
+            &mut time_physics,
+            &mut state,
+            &mut playtest_physics,
+        );
+
+        assert_eq!(state, PhysicsSimulationState::Stopped);
+        assert!(time_physics.is_paused());
+    }
+
+    #[test]
+    fn preserves_running_studio_physics_after_playtest() {
+        let mut time_physics = Time::<Physics>::default();
+        let mut state = PhysicsSimulationState::Running;
+        let mut playtest_physics = StudioPlaytestPhysicsState::default();
+
+        update_studio_playtest_physics(
+            true,
+            &mut time_physics,
+            &mut state,
+            &mut playtest_physics,
+        );
+        update_studio_playtest_physics(
+            false,
+            &mut time_physics,
+            &mut state,
+            &mut playtest_physics,
+        );
+
+        assert_eq!(state, PhysicsSimulationState::Running);
+        assert!(!time_physics.is_paused());
     }
 
     #[cfg(feature = "bench")]
