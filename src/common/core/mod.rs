@@ -13,10 +13,8 @@ impl Plugin for CorePlugin {
         #[cfg(feature = "bench")]
         {
             app.init_resource::<bench::BenchStats>();
-            app.add_systems(Update, (
-                bench::bench_frame_counter,
-                bench::bench_log_system,
-            ));
+            app.add_systems(First, bench::bench_begin_frame)
+                .add_systems(Last, bench::bench_finish_frame);
         }
     }
 }

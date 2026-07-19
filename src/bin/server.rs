@@ -6,8 +6,6 @@ use RaveEngineLib::common::CommonPlugin;
 #[cfg(feature = "bench")]
 use avian3d::prelude::*;
 #[cfg(feature = "bench")]
-use lightyear::prelude::Replicate;
-#[cfg(feature = "bench")]
 use RaveEngineLib::common::net::components::Player;
 #[cfg(feature = "bench")]
 use RaveEngineLib::common::net::components::NetworkTransform;
@@ -44,7 +42,6 @@ fn spawn_bench_players(mut commands: Commands) {
 #[cfg(feature = "bench")]
 fn bench_move_players(
     mut query: Query<(&mut Transform, &mut LinearVelocity, &Player)>,
-    time: Res<Time>,
     mut frame: Local<u64>,
 ) {
     *frame += 1;
@@ -85,6 +82,8 @@ fn main() {
     let mut bench_mode = false;
     #[cfg(feature = "bench")]
     let mut bench_frames: u64 = 500;
+    #[cfg(feature = "bench")]
+    let mut bench_warmup: u64 = 100;
 
     let args: Vec<String> = std::env::args().collect();
     for i in 0..args.len() {
@@ -104,6 +103,12 @@ fn main() {
         if args[i] == "--bench-frames" && i + 1 < args.len() {
             if let Ok(f) = args[i + 1].parse::<u64>() {
                 bench_frames = f;
+            }
+        }
+        #[cfg(feature = "bench")]
+        if args[i] == "--bench-warmup" && i + 1 < args.len() {
+            if let Ok(f) = args[i + 1].parse::<u64>() {
+                bench_warmup = f;
             }
         }
     }
@@ -127,19 +132,12 @@ fn main() {
 
     #[cfg(feature = "bench")]
     if bench_mode {
+        app.world_mut()
+            .resource_mut::<RaveEngineLib::common::core::bench::BenchStats>()
+            .configure("server", bench_warmup, bench_frames);
         app.add_systems(Startup, spawn_bench_players);
         app.add_systems(Update, bench_move_players);
-        info!("BENCH: Running headless benchmark for {} frames", bench_frames);
-
-        let target_frames = bench_frames;
-        app.add_systems(Update, move |stats: Option<Res<RaveEngineLib::common::core::bench::BenchStats>>| {
-            if let Some(s) = stats {
-                if s.total_frames >= target_frames {
-                    RaveEngineLib::common::core::bench::bench_dump_json(s);
-                    std::process::exit(0);
-                }
-            }
-        });
+        info!("BENCH: Running {} warmup and {} measured frames", bench_warmup, bench_frames);
     }
 
     app.run();

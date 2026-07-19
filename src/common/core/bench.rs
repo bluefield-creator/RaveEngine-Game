@@ -1,104 +1,121 @@
 use bevy::prelude::*;
 use std::time::Instant;
 
-#[derive(Resource, Clone)]
+#[derive(Resource, Default)]
 pub struct BenchStats {
-    pub find_service_calls: u64,
-    pub find_service_scan_calls: u64,
-    pub find_service_ns: u128,
-    pub event_dispatch_ns: u128,
-    pub collision_ns: u128,
-    pub scheduler_ns: u128,
-    pub player_velocity_ns: u128,
-    pub hide_visuals_ns: u128,
-    pub brick_material_ns: u128,
-    pub total_frames: u64,
-    pub start_time: Instant,
+    scenario: String,
+    warmup_frames: u64,
+    target_frames: u64,
+    seen_frames: u64,
+    frame_start: Option<Instant>,
+    frame_ns: Vec<u128>,
+    finished: bool,
 }
 
-impl Default for BenchStats {
-    fn default() -> Self {
-        Self {
-            find_service_calls: 0,
-            find_service_scan_calls: 0,
-            find_service_ns: 0,
-            event_dispatch_ns: 0,
-            collision_ns: 0,
-            scheduler_ns: 0,
-            player_velocity_ns: 0,
-            hide_visuals_ns: 0,
-            brick_material_ns: 0,
-            total_frames: 0,
-            start_time: Instant::now(),
+impl BenchStats {
+    pub fn configure(&mut self, scenario: impl Into<String>, warmup_frames: u64, target_frames: u64) {
+        assert!(target_frames > 0, "benchmark frames must be greater than zero");
+        self.scenario = scenario.into();
+        self.warmup_frames = warmup_frames;
+        self.target_frames = target_frames;
+        self.seen_frames = 0;
+        self.frame_start = None;
+        self.frame_ns.clear();
+        self.finished = false;
+    }
+
+    fn begin_frame(&mut self, now: Instant) {
+        if self.target_frames > 0 && self.seen_frames >= self.warmup_frames && !self.finished {
+            self.frame_start = Some(now);
         }
     }
-}
 
-#[macro_export]
-macro_rules! bench_time {
-    ($stats:expr, $field:ident, $block:expr) => {{
-        let _t = std::time::Instant::now();
-        let result = $block;
-        $stats.$field += _t.elapsed().as_nanos() as u128;
-        result
-    }};
-}
-
-pub fn bench_frame_counter(
-    mut stats: ResMut<BenchStats>,
-) {
-    stats.total_frames += 1;
-}
-
-pub fn bench_log_system(
-    stats: Res<BenchStats>,
-    mut last_log: Local<f32>,
-    time: Res<Time>,
-) {
-    let elapsed = time.elapsed_secs();
-    if elapsed - *last_log < 2.0 {
-        return;
+    fn finish_frame(&mut self, now: Instant) -> bool {
+        if self.target_frames == 0 || self.finished {
+            return false;
+        }
+        if let Some(start) = self.frame_start.take() {
+            self.frame_ns.push(now.duration_since(start).as_nanos());
+        }
+        self.seen_frames += 1;
+        self.finished = self.frame_ns.len() as u64 >= self.target_frames;
+        self.finished
     }
-    *last_log = elapsed;
 
-    let dt = elapsed - stats.start_time.elapsed().as_secs_f32().abs();
-    let _ = dt;
+    fn percentile(&self, percentile: f64) -> u128 {
+        percentile_ns(&self.frame_ns, percentile)
+    }
 
-    info!(
-        "BENCH frame={} svc_calls={} svc_scans={} svc_ns={} evt_ns={} col_ns={} sched_ns={} vel_ns={} vis_ns={} mat_ns={}",
-        stats.total_frames,
-        stats.find_service_calls,
-        stats.find_service_scan_calls,
-        stats.find_service_ns,
-        stats.event_dispatch_ns,
-        stats.collision_ns,
-        stats.scheduler_ns,
-        stats.player_velocity_ns,
-        stats.hide_visuals_ns,
-        stats.brick_material_ns,
-    );
+    fn dump_json(&self) {
+        let elapsed_ns: u128 = self.frame_ns.iter().sum();
+        let avg_frame_ns = elapsed_ns / self.frame_ns.len() as u128;
+        println!(
+            r#"{{"scenario":"{}","warmup_frames":{},"total_frames":{},"elapsed_ns":{},"avg_frame_ns":{},"median_frame_ns":{},"p95_frame_ns":{}}}"#,
+            self.scenario,
+            self.warmup_frames,
+            self.frame_ns.len(),
+            elapsed_ns,
+            avg_frame_ns,
+            self.percentile(0.5),
+            self.percentile(0.95),
+        );
+    }
 }
 
-pub fn bench_dump_json(stats: Res<BenchStats>) {
-    let total_ns = stats.start_time.elapsed().as_nanos() as u128;
-    let avg_frame_ns = if stats.total_frames > 0 {
-        total_ns / stats.total_frames as u128
-    } else {
-        0
-    };
-    println!(
-        r#"{{"total_frames":{},"total_ns":{},"avg_frame_ns":{},"find_service_calls":{},"find_service_scan_calls":{},"find_service_ns":{},"event_dispatch_ns":{},"collision_ns":{},"scheduler_ns":{},"player_velocity_ns":{},"hide_visuals_ns":{},"brick_material_ns":{}}}"#,
-        stats.total_frames,
-        total_ns,
-        avg_frame_ns,
-        stats.find_service_calls,
-        stats.find_service_scan_calls,
-        stats.find_service_ns,
-        stats.event_dispatch_ns,
-        stats.collision_ns,
-        stats.scheduler_ns,
-        stats.player_velocity_ns,
-        stats.hide_visuals_ns,
-        stats.brick_material_ns,
-    );
+fn percentile_ns(samples: &[u128], percentile: f64) -> u128 {
+    if samples.is_empty() {
+        return 0;
+    }
+    let mut sorted = samples.to_vec();
+    sorted.sort_unstable();
+    let index = ((sorted.len() - 1) as f64 * percentile).ceil() as usize;
+    sorted[index]
+}
+
+pub fn bench_begin_frame(mut stats: ResMut<BenchStats>) {
+    stats.begin_frame(Instant::now());
+}
+
+pub fn bench_finish_frame(mut stats: ResMut<BenchStats>, mut exit: MessageWriter<AppExit>) {
+    if stats.finish_frame(Instant::now()) {
+        stats.dump_json();
+        exit.write(AppExit::Success);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn calculates_percentiles() {
+        assert_eq!(percentile_ns(&[40, 10, 30, 20], 0.5), 30);
+        assert_eq!(percentile_ns(&[40, 10, 30, 20], 0.95), 40);
+        assert_eq!(percentile_ns(&[], 0.95), 0);
+    }
+
+    #[test]
+    fn excludes_warmup_frames() {
+        let mut stats = BenchStats::default();
+        stats.configure("server", 2, 2);
+        let start = Instant::now();
+
+        stats.begin_frame(start);
+        assert!(!stats.finish_frame(start + Duration::from_nanos(10)));
+        stats.begin_frame(start + Duration::from_nanos(20));
+        assert!(!stats.finish_frame(start + Duration::from_nanos(30)));
+        stats.begin_frame(start + Duration::from_nanos(40));
+        assert!(!stats.finish_frame(start + Duration::from_nanos(50)));
+        stats.begin_frame(start + Duration::from_nanos(60));
+        assert!(stats.finish_frame(start + Duration::from_nanos(80)));
+
+        assert_eq!(stats.frame_ns, vec![10, 20]);
+    }
+
+    #[test]
+    #[should_panic(expected = "benchmark frames must be greater than zero")]
+    fn rejects_zero_frames() {
+        BenchStats::default().configure("server", 0, 0);
+    }
 }

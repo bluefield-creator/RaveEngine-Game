@@ -2,7 +2,8 @@ param(
     [string]$BeforeCommit = "origin/main",
     [string]$AfterCommit = "HEAD",
     [string]$MapPath = "assets/maps/temp_playtest.vrtx",
-    [int]$Frames = 500
+    [int]$Frames = 500,
+    [int]$WarmupFrames = 100
 )
 
 $ErrorActionPreference = "Stop"
@@ -24,14 +25,18 @@ function Invoke-Native {
 
 function Add-BenchHarness {
     param([string]$Worktree)
-    if (Select-String -Path (Join-Path $Worktree "Cargo.toml") -Pattern '^bench\s*=\s*\[\]' -Quiet) {
+    $benchFile = Join-Path $Worktree "src/common/core/bench.rs"
+    if ((Test-Path -LiteralPath $benchFile) -and (Select-String -Path $benchFile -Pattern 'median_frame_ns' -Quiet)) {
         return
     }
+    $hasBenchFeature = Select-String -Path (Join-Path $Worktree "Cargo.toml") -Pattern '^bench\s*=\s*\[\]' -Quiet
     $coreDir = Join-Path $Worktree "src/common/core"
     Copy-Item -LiteralPath (Join-Path $repo "src/bin/server.rs") -Destination (Join-Path $Worktree "src/bin/server.rs")
     Copy-Item -LiteralPath (Join-Path $repo "src/common/core/mod.rs") -Destination (Join-Path $coreDir "mod.rs")
     Copy-Item -LiteralPath (Join-Path $repo "src/common/core/bench.rs") -Destination (Join-Path $coreDir "bench.rs")
-    Add-Content -LiteralPath (Join-Path $Worktree "Cargo.toml") -Value "`n[features]`nbench = []"
+    if (-not $hasBenchFeature) {
+        Add-Content -LiteralPath (Join-Path $Worktree "Cargo.toml") -Value "`n[features]`nbench = []"
+    }
 }
 
 function Run-Bench {
@@ -41,9 +46,9 @@ function Run-Bench {
     Push-Location $Worktree
     try {
         Invoke-Native { cargo build --release --features bench --bin RaveEngineServer } "Build failed for $Commit"
-        $result = & .\target\release\RaveEngineServer.exe --benchmark --bench-frames $Frames --map $MapPath 2>&1
+        $result = & .\target\release\RaveEngineServer.exe --benchmark --bench-frames $Frames --bench-warmup $WarmupFrames --map $MapPath 2>&1
         if ($LASTEXITCODE -ne 0) { throw "Benchmark failed for $Commit" }
-        $jsonLine = $result | Select-String '^\{"total_frames"' | Select-Object -Last 1
+        $jsonLine = $result | Select-String '^\{"scenario"' | Select-Object -Last 1
         if (-not $jsonLine) { throw "No JSON output from benchmark for $Commit" }
         $outFile = Join-Path $repo "bench_$Label.json"
         $jsonLine.Line | Out-File -Encoding utf8 $outFile
@@ -73,6 +78,8 @@ try {
     Write-Host "`n=== COMPARISON ===" -ForegroundColor Yellow
     Write-Host ("{0,-24} {1,16} {2,16} {3}" -f "Metric", "Before", "After", "Delta")
     Write-Host ("{0,-24} {1,16:N0} {2,16:N0} {3}" -f "avg_frame_ns", $before.avg_frame_ns, $after.avg_frame_ns, (Pct $before.avg_frame_ns $after.avg_frame_ns))
+    Write-Host ("{0,-24} {1,16:N0} {2,16:N0} {3}" -f "median_frame_ns", $before.median_frame_ns, $after.median_frame_ns, (Pct $before.median_frame_ns $after.median_frame_ns))
+    Write-Host ("{0,-24} {1,16:N0} {2,16:N0} {3}" -f "p95_frame_ns", $before.p95_frame_ns, $after.p95_frame_ns, (Pct $before.p95_frame_ns $after.p95_frame_ns))
 } finally {
     if (Test-Path -LiteralPath $beforeWorktree) { git -C $repo worktree remove --force $beforeWorktree | Out-Null }
     if (Test-Path -LiteralPath $afterWorktree) { git -C $repo worktree remove --force $afterWorktree | Out-Null }

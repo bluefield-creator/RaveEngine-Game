@@ -54,8 +54,6 @@ fn spawn_and_run_callback(
 }
 
 pub fn server_scheduler_system(world: &mut World) {
-    #[cfg(feature = "bench")]
-    let bench_t = std::time::Instant::now();
     if let Some(server_vm) = world.remove_resource::<ServerScriptVM>() {
         server_vm.lua.set_app_data(crate::scripting::vm::server_vm::WorldRef(world as *mut World));
         {
@@ -63,10 +61,6 @@ pub fn server_scheduler_system(world: &mut World) {
             scheduler.run_tick(&server_vm.lua);
         }
         world.insert_resource(server_vm);
-    }
-    #[cfg(feature = "bench")]
-    if let Some(mut stats) = world.get_resource_mut::<crate::common::core::bench::BenchStats>() {
-        stats.scheduler_ns += bench_t.elapsed().as_nanos() as u128;
     }
 }
 
@@ -226,8 +220,6 @@ pub fn discover_and_run_local_scripts(world: &mut World) {
 }
 
 pub fn detect_touched_collisions(world: &mut World) {
-    #[cfg(feature = "bench")]
-    let bench_t = std::time::Instant::now();
     let mut collisions = Vec::new();
     let mut query = world.query::<(Entity, &CollidingEntities)>();
     for (entity, colliding) in query.iter(world) {
@@ -237,17 +229,8 @@ pub fn detect_touched_collisions(world: &mut World) {
     }
 
     if collisions.is_empty() {
-        #[cfg(feature = "bench")]
-        if let Some(mut stats) = world.get_resource_mut::<crate::common::core::bench::BenchStats>() {
-            stats.collision_ns += bench_t.elapsed().as_nanos() as u128;
-        }
         return;
     }
-
-    #[cfg(feature = "bench")]
-    let evt_t = std::time::Instant::now();
-    #[cfg(feature = "bench")]
-    let mut did_dispatch = false;
 
     if let Some(server_vm) = world.remove_resource::<ServerScriptVM>() {
         server_vm.lua.set_app_data(crate::scripting::vm::server_vm::WorldRef(world as *mut World));
@@ -307,11 +290,6 @@ pub fn detect_touched_collisions(world: &mut World) {
         }
 
         world.insert_resource(client_vm);
-    }
-    #[cfg(feature = "bench")]
-    if let Some(mut stats) = world.get_resource_mut::<crate::common::core::bench::BenchStats>() {
-        stats.collision_ns += bench_t.elapsed().as_nanos() as u128 - evt_t.elapsed().as_nanos() as u128;
-        stats.event_dispatch_ns += evt_t.elapsed().as_nanos() as u128;
     }
 }
 
@@ -383,9 +361,6 @@ pub fn trigger_run_service_events(world: &mut World) {
         time.delta_secs()
     };
 
-    #[cfg(feature = "bench")]
-    let svc_t = std::time::Instant::now();
-
     if let Some(server_vm) = world.remove_resource::<ServerScriptVM>() {
         server_vm.lua.set_app_data(crate::scripting::vm::server_vm::WorldRef(world as *mut World));
 
@@ -438,11 +413,6 @@ pub fn trigger_run_service_events(world: &mut World) {
         }
 
         world.insert_resource(client_vm);
-    }
-    #[cfg(feature = "bench")]
-    if let Some(mut stats) = world.get_resource_mut::<crate::common::core::bench::BenchStats>() {
-        stats.find_service_ns += svc_t.elapsed().as_nanos() as u128;
-        stats.find_service_calls += 4;
     }
 }
 
