@@ -10,6 +10,32 @@ pub struct ToolGizmo {
     pub target: Entity,
 }
 
+pub struct GizmoAssets {
+    materials: [Handle<StandardMaterial>; 3],
+    move_mesh: Handle<Mesh>,
+    size_mesh: Handle<Mesh>,
+    rotate_mesh: Handle<Mesh>,
+    rotate_pick_mesh: Handle<Mesh>,
+}
+
+fn ensure_gizmo_assets<'a>(
+    cache: &'a mut Option<GizmoAssets>,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+) -> &'a GizmoAssets {
+    cache.get_or_insert_with(|| GizmoAssets {
+        materials: [
+            materials.add(StandardMaterial { base_color: Color::srgb(1.0, 0.0, 0.0), unlit: true, ..default() }),
+            materials.add(StandardMaterial { base_color: Color::srgb(0.0, 1.0, 0.0), unlit: true, ..default() }),
+            materials.add(StandardMaterial { base_color: Color::srgb(0.0, 0.0, 1.0), unlit: true, ..default() }),
+        ],
+        move_mesh: meshes.add(Cone { radius: 0.4, height: 1.0 }),
+        size_mesh: meshes.add(Sphere::new(0.4)),
+        rotate_mesh: meshes.add(Torus { minor_radius: 0.1, major_radius: 3.5 }),
+        rotate_pick_mesh: meshes.add(Torus { minor_radius: 0.4, major_radius: 3.5 }),
+    })
+}
+
 pub fn update_gizmos(
     mut commands: Commands,
     selection: Res<Selection>,
@@ -19,7 +45,7 @@ pub fn update_gizmos(
     gizmos: Query<Entity, With<ToolGizmo>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut gizmo_mats: Local<Option<[Handle<StandardMaterial>; 3]>>,
+    mut gizmo_assets: Local<Option<GizmoAssets>>,
 ) {
     let playtesting_active = playtest.map_or(false, |p| p.active);
     if playtesting_active {
@@ -46,14 +72,8 @@ pub fn update_gizmos(
 
     if tool == ToolState::None { return; }
 
-    if gizmo_mats.is_none() {
-        *gizmo_mats = Some([
-            materials.add(StandardMaterial { base_color: Color::srgb(1.0, 0.0, 0.0), unlit: true, ..default() }),
-            materials.add(StandardMaterial { base_color: Color::srgb(0.0, 1.0, 0.0), unlit: true, ..default() }),
-            materials.add(StandardMaterial { base_color: Color::srgb(0.0, 0.0, 1.0), unlit: true, ..default() }),
-        ]);
-    }
-    let [mat_x, mat_y, mat_z] = gizmo_mats.as_ref().unwrap();
+    let assets = ensure_gizmo_assets(&mut gizmo_assets, &mut meshes, &mut materials);
+    let [mat_x, mat_y, mat_z] = &assets.materials;
 
     let axes = [
         (Vec3::X, mat_x.clone()), (-Vec3::X, mat_x.clone()),
@@ -63,10 +83,9 @@ pub fn update_gizmos(
 
     match tool {
         ToolState::Move => {
-            let mesh = meshes.add(Cone { radius: 0.4, height: 1.0 });
             for (axis, mat) in axes {
                 commands.spawn((
-                    Mesh3d(mesh.clone()),
+                    Mesh3d(assets.move_mesh.clone()),
                     MeshMaterial3d(mat),
                     Transform::default(),
                     ToolGizmo { axis, tool, target: selected_entity },
@@ -76,10 +95,9 @@ pub fn update_gizmos(
             }
         }
         ToolState::Size => {
-            let mesh = meshes.add(Sphere::new(0.4));
             for (axis, mat) in axes {
                 commands.spawn((
-                    Mesh3d(mesh.clone()),
+                    Mesh3d(assets.size_mesh.clone()),
                     MeshMaterial3d(mat),
                     Transform::default(),
                     ToolGizmo { axis, tool, target: selected_entity },
@@ -89,13 +107,11 @@ pub fn update_gizmos(
             }
         }
         ToolState::Rotate => {
-            let mesh = meshes.add(Torus { minor_radius: 0.1, major_radius: 3.5 });
-            let picking_mesh = meshes.add(Torus { minor_radius: 0.4, major_radius: 3.5 });
             let rot_axes = [(Vec3::X, mat_x.clone()), (Vec3::Y, mat_y.clone()), (Vec3::Z, mat_z.clone())];
             for (axis, mat) in rot_axes {
                 commands.spawn((
-                    Mesh3d(mesh.clone()),
-                    SimplifiedMesh(picking_mesh.clone()),
+                    Mesh3d(assets.rotate_mesh.clone()),
+                    SimplifiedMesh(assets.rotate_pick_mesh.clone()),
                     MeshMaterial3d(mat),
                     Transform::default(),
                     ToolGizmo { axis, tool, target: selected_entity },
@@ -158,6 +174,28 @@ pub fn sync_gizmos(
 
             transform.scale = Vec3::splat(base_scale * state_multiplier);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reuses_gizmo_assets() {
+        let mut cache = None;
+        let mut meshes = Assets::<Mesh>::default();
+        let mut materials = Assets::<StandardMaterial>::default();
+
+        ensure_gizmo_assets(&mut cache, &mut meshes, &mut materials);
+        let mesh_count = meshes.len();
+        let material_count = materials.len();
+        ensure_gizmo_assets(&mut cache, &mut meshes, &mut materials);
+
+        assert_eq!(meshes.len(), mesh_count);
+        assert_eq!(materials.len(), material_count);
+        assert_eq!(mesh_count, 4);
+        assert_eq!(material_count, 3);
     }
 }
 
