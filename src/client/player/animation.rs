@@ -419,6 +419,10 @@ fn tracking_delta(delta_secs: f32) -> Option<f32> {
     (delta_secs > 0.0).then_some(delta_secs)
 }
 
+fn grounded_for_animation(tracker: &PlayerVelocityTracker) -> bool {
+    tracker.is_grounded || tracker.velocity.y.abs() < 0.2
+}
+
 pub fn track_player_velocities(
     mut commands: Commands,
     mut query: Query<(Entity, &Transform, Option<&mut PlayerVelocityTracker>), With<crate::common::net::components::Player>>,
@@ -476,7 +480,7 @@ pub fn animate_player(
 
         let is_jump_finished = player.animation(jump_index).map_or(false, |anim| anim.is_finished());
 
-        let mut active_index = if !tracker.is_grounded {
+        let mut active_index = if !grounded_for_animation(tracker) {
             if velocity.y > 0.0 {
                 jump_index
             } else {
@@ -613,5 +617,22 @@ mod tests {
         assert_eq!(tracking_delta(0.0), None);
         assert_eq!(tracking_delta(-0.1), None);
         assert_eq!(tracking_delta(0.1), Some(0.1));
+    }
+
+    #[test]
+    fn settles_animation_when_vertical_motion_stops() {
+        let mut tracker = PlayerVelocityTracker {
+            last_position: Vec3::ZERO,
+            velocity: Vec3::ZERO,
+            is_grounded: false,
+        };
+
+        assert!(grounded_for_animation(&tracker));
+        tracker.velocity.y = -0.3;
+        assert!(!grounded_for_animation(&tracker));
+        tracker.velocity.y = 0.3;
+        assert!(!grounded_for_animation(&tracker));
+        tracker.is_grounded = true;
+        assert!(grounded_for_animation(&tracker));
     }
 }
