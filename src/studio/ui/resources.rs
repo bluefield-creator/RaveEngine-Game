@@ -52,6 +52,7 @@ pub enum FileDialogResult {
     BrowseSavePath(std::path::PathBuf),
     OpenFile(std::path::PathBuf),
     SaveAs(std::path::PathBuf),
+    Save(std::path::PathBuf),
     Cancel,
 }
 
@@ -121,7 +122,7 @@ pub fn handle_file_dialog_results(
         Option<&crate::scripting::ecs::ModuleScript>,
     ), Without<Camera3d>>,
 ) {
-    let rx = file_dialog_state.rx.lock().unwrap();
+    let rx = file_dialog_state.rx.lock().expect("File dialog lock poisoned");
     while let Ok(result) = rx.try_recv() {
         match result {
             FileDialogResult::BrowseSavePath(path) => {

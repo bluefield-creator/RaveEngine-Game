@@ -24,7 +24,7 @@ pub fn setup_globals(lua: &Lua) -> Result<(), mlua::Error> {
 
     let defer_fn = lua.create_function(|lua, f: LuaFunction| {
         let scheduler_ref = lua.app_data_ref::<crate::scripting::vm::scheduler::SchedulerRef>().unwrap();
-        let mut scheduler = scheduler_ref.0.lock().unwrap();
+        let mut scheduler = scheduler_ref.0.lock().expect("Lua scheduler lock poisoned");
         let thread = lua.create_thread(f)?;
         let key = lua.create_registry_value(thread)?;
         scheduler.deferred.push_back(key);
@@ -34,7 +34,7 @@ pub fn setup_globals(lua: &Lua) -> Result<(), mlua::Error> {
 
     let delay_fn = lua.create_function(|lua, (seconds, f): (f32, LuaFunction)| {
         let scheduler_ref = lua.app_data_ref::<crate::scripting::vm::scheduler::SchedulerRef>().unwrap();
-        let mut scheduler = scheduler_ref.0.lock().unwrap();
+        let mut scheduler = scheduler_ref.0.lock().expect("Lua scheduler lock poisoned");
         let thread = lua.create_thread(f)?;
         let key = lua.create_registry_value(thread)?;
         scheduler.tasks.push(crate::scripting::vm::scheduler::LuaTask {

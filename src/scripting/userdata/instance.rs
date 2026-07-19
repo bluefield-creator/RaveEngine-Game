@@ -488,7 +488,7 @@ impl LuaUserData for RBXScriptSignal {
     fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("Connect", |lua, this, callback: LuaFunction| {
             let registry_ref = lua.app_data_ref::<ScriptRegistryRef>().unwrap();
-            let mut registry = registry_ref.0.lock().unwrap();
+            let mut registry = registry_ref.0.lock().expect("ScriptRegistry lock poisoned");
             let key = std::sync::Arc::new(lua.create_registry_value(callback)?);
             registry.connections.entry((this.entity, this.name))
                 .or_default()
@@ -500,7 +500,7 @@ impl LuaUserData for RBXScriptSignal {
             let name = this.name;
             let registry_ref_clone = (*registry_ref).clone();
             conn_table.set("Disconnect", lua.create_function(move |_, _: ()| {
-                let mut registry = registry_ref_clone.0.lock().unwrap();
+                let mut registry = registry_ref_clone.0.lock().expect("ScriptRegistry lock poisoned");
                 if let Some(conns) = registry.connections.get_mut(&(entity, name)) {
                     conns.retain(|k| k != &key_clone);
                 }
