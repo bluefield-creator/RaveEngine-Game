@@ -576,14 +576,15 @@ fn sync_brick_color_to_material(
 fn hide_confirmed_player_visuals(
     predicted_interpolated_query: Query<&crate::common::net::components::Player, Or<(With<Predicted>, With<Interpolated>)>>,
     mut confirmed_query: Query<(&crate::common::net::components::Player, &mut Visibility), (Without<Predicted>, Without<Interpolated>, Without<Replicate>)>,
+    mut cached_ids: Local<std::collections::HashSet<u64>>,
 ) {
-    let active_client_ids: std::collections::HashSet<u64> = predicted_interpolated_query
-        .iter()
-        .map(|p| p.client_id)
-        .collect();
+    cached_ids.clear();
+    for player in predicted_interpolated_query.iter() {
+        cached_ids.insert(player.client_id);
+    }
 
     for (conf_player, mut visibility) in &mut confirmed_query {
-        if active_client_ids.contains(&conf_player.client_id) {
+        if cached_ids.contains(&conf_player.client_id) {
             if *visibility != Visibility::Hidden {
                 *visibility = Visibility::Hidden;
             }
