@@ -18,6 +18,25 @@ pub struct GizmoAssets {
     rotate_pick_mesh: Handle<Mesh>,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) struct GizmoConfiguration {
+    selected_entity: Option<Entity>,
+    tool: ToolState,
+    physics_state: crate::common::game::physics::PhysicsSimulationState,
+    playtesting: bool,
+}
+
+fn configuration_changed(
+    previous: &mut Option<GizmoConfiguration>,
+    current: GizmoConfiguration,
+) -> bool {
+    if previous.as_ref() == Some(&current) {
+        return false;
+    }
+    *previous = Some(current);
+    true
+}
+
 fn ensure_gizmo_assets<'a>(
     cache: &'a mut Option<GizmoAssets>,
     meshes: &mut Assets<Mesh>,
@@ -36,7 +55,7 @@ fn ensure_gizmo_assets<'a>(
     })
 }
 
-pub fn update_gizmos(
+pub(crate) fn update_gizmos(
     mut commands: Commands,
     selection: Res<Selection>,
     tool_state: Res<State<ToolState>>,
@@ -46,16 +65,23 @@ pub fn update_gizmos(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut gizmo_assets: Local<Option<GizmoAssets>>,
+    mut previous_configuration: Local<Option<GizmoConfiguration>>,
 ) {
     let playtesting_active = playtest.map_or(false, |p| p.active);
+    let configuration = GizmoConfiguration {
+        selected_entity: selection.entity,
+        tool: *tool_state.get(),
+        physics_state: *physics_state,
+        playtesting: playtesting_active,
+    };
+    if !configuration_changed(&mut previous_configuration, configuration) {
+        return;
+    }
+
     if playtesting_active {
         for entity in &gizmos {
             commands.entity(entity).despawn();
         }
-        return;
-    }
-
-    if !selection.is_changed() && !tool_state.is_changed() && !physics_state.is_changed() {
         return;
     }
 
@@ -196,6 +222,27 @@ mod tests {
         assert_eq!(materials.len(), material_count);
         assert_eq!(mesh_count, 4);
         assert_eq!(material_count, 3);
+    }
+
+    #[test]
+    fn rebuilds_only_when_configuration_changes() {
+        let configuration = GizmoConfiguration {
+            selected_entity: Some(Entity::from_bits(1)),
+            tool: ToolState::Move,
+            physics_state: crate::common::game::physics::PhysicsSimulationState::Stopped,
+            playtesting: false,
+        };
+        let mut previous = None;
+
+        assert!(configuration_changed(&mut previous, configuration));
+        assert!(!configuration_changed(&mut previous, configuration));
+        assert!(configuration_changed(
+            &mut previous,
+            GizmoConfiguration {
+                tool: ToolState::Rotate,
+                ..configuration
+            },
+        ));
     }
 }
 
