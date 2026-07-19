@@ -259,9 +259,7 @@ fn send_player_inputs(
         in_first_person,
     };
 
-    if let Err(e) = sender.send::<crate::common::net::messages::GameChannel>(message) {
-        warn!("Failed to send PlayerInput: {e}");
-    }
+    let _ = sender.send::<crate::common::net::messages::GameChannel>(message);
 }
 
 fn on_client_connected(
@@ -662,11 +660,9 @@ fn send_hello_message(
     if ukey.0.is_empty() { return; }
     for (entity, mut sender) in &mut client_query {
         info!("Sending HelloMessage with ukey to server...");
-        if let Err(e) = sender.send::<crate::common::net::messages::GameChannel>(crate::common::net::messages::HelloMessage {
+        let _ = sender.send::<crate::common::net::messages::GameChannel>(crate::common::net::messages::HelloMessage {
             ukey: ukey.0.clone(),
-        }) {
-            warn!("Failed to send HelloMessage: {e}");
-        }
+        });
         commands.entity(entity).insert(HelloSent);
     }
 }
