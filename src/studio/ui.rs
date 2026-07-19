@@ -710,8 +710,8 @@ pub fn studio_ui(
                 let current_time = ctx.input(|i| i.time);
 
                 let mut state = ctx.data_mut(|d| {
-                    d.get_temp::<(f64, String, Option<String>, bool)>(last_change_id)
-                        .unwrap_or((-1.0, current_source.clone(), None, true))
+                    d.get_temp::<(f64, String, Option<String>, bool, Option<(usize, String)>)>(last_change_id)
+                        .unwrap_or((-1.0, current_source.clone(), None, true, None))
                 });
 
                 if current_source != state.1 {
@@ -952,11 +952,15 @@ pub fn studio_ui(
                                                 .show(ui, |ui| {
                                                     ui.horizontal_top(|ui| {
                                                         let total_lines = current_source.split('\n').count();
-                                                        let max_digit_width = total_lines.to_string().len();
-                                                        let mut line_numbers_text = String::new();
-                                                        for i in 1..=total_lines {
-                                                            line_numbers_text.push_str(&format!("{:>width$}\n", i, width = max_digit_width));
+                                                        if state.4.as_ref().map_or(true, |c| c.0 != total_lines) {
+                                                            let max_digit_width = total_lines.to_string().len();
+                                                            let mut line_numbers_text = String::with_capacity(total_lines * (max_digit_width + 1));
+                                                            for i in 1..=total_lines {
+                                                                line_numbers_text.push_str(&format!("{:>width$}\n", i, width = max_digit_width));
+                                                            }
+                                                            state.4 = Some((total_lines, line_numbers_text));
                                                         }
+                                                        let line_numbers_text = &state.4.as_ref().unwrap().1;
 
                                                         ui.add(
                                                             egui::Label::new(
