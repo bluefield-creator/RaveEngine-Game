@@ -81,10 +81,18 @@ pub fn initialize_client(
         ..default()
     };
 
+    let netcode_client = match NetcodeClient::new(auth, netcode_config) {
+        Ok(c) => c,
+        Err(e) => {
+            error!("Failed to create network client: {e}");
+            return;
+        }
+    };
+
     commands.spawn((
         Client::default(),
         UdpIo::default(),
-        NetcodeClient::new(auth, netcode_config).unwrap(),
+        netcode_client,
         LocalAddr(SocketAddr::new(
             IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
             0,

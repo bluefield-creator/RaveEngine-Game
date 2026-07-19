@@ -757,10 +757,18 @@ pub fn draw_top_bar(
                                     ..default()
                                 };
 
+                                let netcode_client = match lightyear::prelude::client::NetcodeClient::new(auth, netcode_config) {
+                                    Ok(c) => c,
+                                    Err(e) => {
+                                        error!("Failed to create playtest network client: {e}");
+                                        return;
+                                    }
+                                };
+
                                 let client_entity = commands.spawn((
                                     lightyear::prelude::client::Client::default(),
                                     lightyear::prelude::UdpIo::default(),
-                                    lightyear::prelude::client::NetcodeClient::new(auth, netcode_config).unwrap(),
+                                    netcode_client,
                                     lightyear::prelude::LocalAddr(std::net::SocketAddr::new(
                                         std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
                                         0,

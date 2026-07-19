@@ -90,10 +90,18 @@ fn setup_client(mut commands: Commands, settings: Res<ClientConnectSettings>) {
         ..default()
     };
 
+    let netcode_client = match NetcodeClient::new(auth, netcode_config) {
+        Ok(c) => c,
+        Err(e) => {
+            error!("Failed to create network client: {e}");
+            return;
+        }
+    };
+
     commands.spawn((
         Client::default(),
         UdpIo::default(),
-        NetcodeClient::new(auth, netcode_config).unwrap(),
+        netcode_client,
         LocalAddr(std::net::SocketAddr::new(
             std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
             0,
