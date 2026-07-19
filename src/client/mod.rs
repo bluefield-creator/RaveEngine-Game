@@ -84,16 +84,18 @@ impl Plugin for ClientPlugin {
                 sync_local_player,
                 attach_character_visuals.after(sync_local_player),
                 update_local_player_transparency,
-                cleanup_duplicate_gltf_nodes,
                 hide_confirmed_player_visuals.after(update_local_player_transparency),
                 send_hello_message,
                 handle_kick_message,
                 handle_auth_success,
+            ).run_if(is_playtesting))
+            .add_systems(Update, cleanup_orphaned_visuals)
+            #[cfg(debug_assertions)]
+            .add_systems(Update, (
                 debug_cameras,
                 debug_players,
                 debug_deep_hierarchy,
             ).run_if(is_playtesting))
-            .add_systems(Update, cleanup_orphaned_visuals)
             .add_systems(bevy_egui::EguiPrimaryContextPass, (
                 ui::configure_client_visuals,
                 ui::draw_scoreboard,
@@ -516,13 +518,6 @@ fn on_network_transform_added(
     ));
 }
 
-fn cleanup_duplicate_gltf_nodes(
-    _commands: Commands,
-    _player_visuals: Query<(Entity, &Children), With<PlayerVisualChild>>,
-    _name_query: Query<&Name>,
-) {
-}
-
 fn sync_predicted_interpolated_transforms(
     mut predicted_interpolated_query: Query<(&crate::common::net::components::Player, &mut Transform), Or<(With<Predicted>, With<Interpolated>)>>,
     confirmed_query: Query<(&crate::common::net::components::Player, &Transform), (Without<Predicted>, Without<Interpolated>, Without<Replicate>)>,
@@ -640,23 +635,7 @@ fn handle_auth_success(
 
 fn links_optimizer_system() {}
 
-pub fn optimize_brick_visibility(
-    _commands: Commands,
-    _meshes: ResMut<Assets<Mesh>>,
-    _materials: ResMut<Assets<StandardMaterial>>,
-    _studs_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
-    _studs_assets: Res<crate::common::game::bricks::studs::StudsAssets>,
-    _camera_query: Query<&Transform, With<Camera3d>>,
-    _bricks_query: Query<(
-        Entity,
-        &GlobalTransform,
-        &components::BrickShapeComponent,
-        &components::BrickColor,
-        &mut MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>,
-    )>,
-) {
-}
-
+#[cfg(debug_assertions)]
 fn debug_cameras(
     query: Query<(Entity, &Camera, Option<&bevy::camera::RenderTarget>, Option<&Name>, Option<&bevy::camera_controller::free_camera::FreeCamera>, Option<&crate::client::player::PlayerCamera>)>,
     mut last_log: Local<f32>,
@@ -686,6 +665,7 @@ fn debug_cameras(
     }
 }
 
+#[cfg(debug_assertions)]
 fn debug_players(
     query: Query<(
         Entity,
@@ -715,6 +695,7 @@ fn debug_players(
     }
 }
 
+#[cfg(debug_assertions)]
 fn debug_deep_hierarchy(
     world: &World,
     mut last_log: Local<f32>,
@@ -742,6 +723,7 @@ fn debug_deep_hierarchy(
     }
 }
 
+#[cfg(debug_assertions)]
 fn print_hierarchy_from_root(world: &World, entity: Entity, depth: usize) {
     let indent = "  ".repeat(depth);
     let name = world.get::<Name>(entity).map(|n| n.as_str().to_string()).unwrap_or_else(|| "Instance".to_string());
