@@ -34,12 +34,14 @@ pub fn handle_hello_messages(
             match crate::common::net::auth::validate_user_ukey(&_hello.ukey) {
                 Ok(response) => {
                     if let Ok(mut success_sender) = success_sender_query.get_mut(client_entity) {
-                        let _ = success_sender.send::<crate::common::net::messages::GameChannel>(
+                        if let Err(e) = success_sender.send::<crate::common::net::messages::GameChannel>(
                             crate::common::net::messages::AuthSuccessMessage {
                                 uid: response.uid,
                                 username: response.username.clone(),
                             }
-                        );
+                        ) {
+                            warn!("Failed to send AuthSuccess message: {e}");
+                        }
                     }
 
                     commands.entity(client_entity).insert(ReplicationSender);
@@ -86,11 +88,13 @@ pub fn handle_hello_messages(
                 Err(e) => {
                     warn!("Authentication failed for client {}: {}. Sending KickMessage...", client_id, e);
                     if let Ok(mut sender) = sender_query.get_mut(client_entity) {
-                        let _ = sender.send::<crate::common::net::messages::GameChannel>(
+                        if let Err(send_err) = sender.send::<crate::common::net::messages::GameChannel>(
                             crate::common::net::messages::KickMessage {
                                 reason: format!("Authentication failed: {}", e),
                             }
-                        );
+                        ) {
+                            warn!("Failed to send KickMessage: {send_err}");
+                        }
                     }
                 }
             }
