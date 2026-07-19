@@ -7,7 +7,8 @@ pub struct WorkspaceService;
 impl LuaUserData for WorkspaceService {
     fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
         methods.add_meta_method(LuaMetaMethod::Index, |lua, _, key: String| {
-            let world_ref = lua.app_data_ref::<crate::scripting::vm::server_vm::WorldRef>().unwrap();
+            let world_ref = lua.app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
+                .ok_or_else(|| mlua::Error::RuntimeError("WorldRef not set".into()))?;
             let world = unsafe { &mut *world_ref.0 };
 
             match key.as_str() {
@@ -32,7 +33,8 @@ impl LuaUserData for WorkspaceService {
         });
 
         methods.add_meta_method(LuaMetaMethod::NewIndex, |lua, _, (key, value): (String, LuaValue)| {
-            let world_ref = lua.app_data_ref::<crate::scripting::vm::server_vm::WorldRef>().unwrap();
+            let world_ref = lua.app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
+                .ok_or_else(|| mlua::Error::RuntimeError("WorldRef not set".into()))?;
             let world = unsafe { &mut *world_ref.0 };
 
             match key.as_str() {
