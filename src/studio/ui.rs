@@ -18,6 +18,18 @@ pub use visuals::configure_visuals;
 pub use resources::{CopiedEntityBuffer, HierarchyDraggedEntity, SettingsWindow, ActiveScriptEditor, FileDialogState};
 pub use crate::common::core::performance::GraphicsSettings;
 
+fn line_numbers(cache: &mut Option<(usize, String)>, total_lines: usize) -> &str {
+    if cache.as_ref().map_or(true, |cached| cached.0 != total_lines) {
+        let max_digit_width = total_lines.to_string().len();
+        let mut text = String::with_capacity(total_lines * (max_digit_width + 1));
+        for line in 1..=total_lines {
+            text.push_str(&format!("{:>width$}\n", line, width = max_digit_width));
+        }
+        *cache = Some((total_lines, text));
+    }
+    cache.as_ref().unwrap().1.as_str()
+}
+
 #[derive(SystemParam)]
 pub struct UiResources<'w, 's> {
     pub commands: Commands<'w, 's>,
@@ -742,8 +754,7 @@ pub fn studio_ui(
                     state.3 = false;
                 }
 
-                ctx.data_mut(|d| d.insert_temp(last_change_id, state.clone()));
-                let compile_error = state.2;
+                let compile_error = state.2.clone();
 
                 let panel_res = egui::CentralPanel::default()
                     .frame(egui::Frame::none()
@@ -952,15 +963,7 @@ pub fn studio_ui(
                                                 .show(ui, |ui| {
                                                     ui.horizontal_top(|ui| {
                                                         let total_lines = current_source.split('\n').count();
-                                                        if state.4.as_ref().map_or(true, |c| c.0 != total_lines) {
-                                                            let max_digit_width = total_lines.to_string().len();
-                                                            let mut line_numbers_text = String::with_capacity(total_lines * (max_digit_width + 1));
-                                                            for i in 1..=total_lines {
-                                                                line_numbers_text.push_str(&format!("{:>width$}\n", i, width = max_digit_width));
-                                                            }
-                                                            state.4 = Some((total_lines, line_numbers_text));
-                                                        }
-                                                        let line_numbers_text = state.4.as_ref().unwrap().1.as_str();
+                                                        let line_numbers_text = line_numbers(&mut state.4, total_lines);
 
                                                         ui.add(
                                                             egui::Label::new(
@@ -995,6 +998,7 @@ pub fn studio_ui(
                             });
                     });
 
+                ctx.data_mut(|d| d.insert_temp(last_change_id, state));
                 script_editor_rect = Some(panel_res.response.rect);
 
                 if let Some(entity_to_close) = should_close_tab {
@@ -1106,5 +1110,30 @@ pub fn studio_ui(
                     );
                 }
             });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::line_numbers;
+
+    #[test]
+    fn reuses_line_numbers_for_the_same_count() {
+        let mut cache = None;
+        let first_ptr = line_numbers(&mut cache, 12).as_ptr();
+        let second_ptr = line_numbers(&mut cache, 12).as_ptr();
+
+        assert_eq!(first_ptr, second_ptr);
+        assert_eq!(cache.as_ref().unwrap().1, " 1\n 2\n 3\n 4\n 5\n 6\n 7\n 8\n 9\n10\n11\n12\n");
+    }
+
+    #[test]
+    fn rebuilds_line_numbers_when_the_count_changes() {
+        let mut cache = None;
+        line_numbers(&mut cache, 2);
+        let text = line_numbers(&mut cache, 3);
+
+        assert_eq!(text, "1\n2\n3\n");
+        assert_eq!(cache.as_ref().unwrap().0, 3);
     }
 }
