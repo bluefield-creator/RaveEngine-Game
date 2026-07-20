@@ -145,7 +145,7 @@ impl Default for GraphicsSettings {
             shadow_quality: ShadowQuality::High,
             soft_shadows: true,
             anti_aliasing: AntiAliasing::Fxaa,
-            exposure_ev100: 9.7,
+            exposure_ev100: 13.5,
         }
     }
 }

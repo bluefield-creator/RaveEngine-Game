@@ -819,6 +819,7 @@ pub fn handle_drag_end(
 pub fn handle_part_drag_start(
     mut drags: MessageReader<Pointer<DragStart>>,
     bricks: Query<&Transform, With<Brick>>,
+    brick_physics: Query<&crate::common::game::bricks::components::BrickPhysics>,
     gizmos: Query<&ToolGizmo>,
     mut part_drag_state: ResMut<PartDragState>,
 ) {
@@ -828,6 +829,9 @@ pub fn handle_part_drag_start(
         }
         let target = drag.event_target();
         if gizmos.get(target).is_ok() {
+            continue;
+        }
+        if brick_physics.get(target).map_or(false, |p| p.locked) {
             continue;
         }
         if let Ok(transform) = bricks.get(target) {
@@ -1025,13 +1029,14 @@ pub fn handle_hover(
     mut outs: MessageReader<Pointer<Out>>,
     gizmos: Query<&ToolGizmo>,
     bricks: Query<Entity, With<Brick>>,
+    brick_physics: Query<&crate::common::game::bricks::components::BrickPhysics>,
     mut hover_state: ResMut<HoverState>,
 ) {
     for over in overs.read() {
         let target = over.event_target();
         if gizmos.get(target).is_ok() {
             hover_state.hovered_gizmo = Some(target);
-        } else if bricks.get(target).is_ok() {
+        } else if bricks.get(target).is_ok() && !brick_physics.get(target).map_or(false, |p| p.locked) {
             hover_state.hovered_brick = Some(target);
         }
     }
