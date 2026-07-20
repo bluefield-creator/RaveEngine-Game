@@ -1238,6 +1238,122 @@ pub fn draw_lighting_properties(
                     }
                 }
                 ui.end_row();
+
+                ui.label(
+                    egui::RichText::new("Sun Intensity")
+                        .color(egui::Color32::from_rgb(60, 60, 60))
+                        .size(13.0),
+                );
+                let mut sun_intensity = service.sun_intensity;
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut sun_intensity)
+                            .speed(0.05)
+                            .range(0.0..=4.0)
+                            .suffix("×"),
+                    )
+                    .changed()
+                {
+                    service.sun_intensity = sun_intensity;
+                }
+                ui.end_row();
+
+                ui.label(
+                    egui::RichText::new("Ambient Intensity")
+                        .color(egui::Color32::from_rgb(60, 60, 60))
+                        .size(13.0),
+                );
+                let mut ambient_intensity = service.ambient_intensity;
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut ambient_intensity)
+                            .speed(0.05)
+                            .range(0.0..=4.0)
+                            .suffix("×"),
+                    )
+                    .changed()
+                {
+                    service.ambient_intensity = ambient_intensity;
+                }
+                ui.end_row();
+
+                ui.label(
+                    egui::RichText::new("Sun Tint")
+                        .color(egui::Color32::from_rgb(60, 60, 60))
+                        .size(13.0),
+                );
+                let sun = service.sun_tint.to_srgba();
+                let mut sun_color = [sun.red, sun.green, sun.blue, sun.alpha];
+                if ui
+                    .color_edit_button_rgba_unmultiplied(&mut sun_color)
+                    .changed()
+                {
+                    service.sun_tint =
+                        Color::srgba(sun_color[0], sun_color[1], sun_color[2], sun_color[3]);
+                }
+                ui.end_row();
+
+                ui.label(
+                    egui::RichText::new("Ambient Tint")
+                        .color(egui::Color32::from_rgb(60, 60, 60))
+                        .size(13.0),
+                );
+                let ambient = service.ambient_tint.to_srgba();
+                let mut ambient_color = [ambient.red, ambient.green, ambient.blue, ambient.alpha];
+                if ui
+                    .color_edit_button_rgba_unmultiplied(&mut ambient_color)
+                    .changed()
+                {
+                    service.ambient_tint = Color::srgba(
+                        ambient_color[0],
+                        ambient_color[1],
+                        ambient_color[2],
+                        ambient_color[3],
+                    );
+                }
+                ui.end_row();
+
+                ui.label(
+                    egui::RichText::new("Cast Shadows")
+                        .color(egui::Color32::from_rgb(60, 60, 60))
+                        .size(13.0),
+                );
+                let mut shadows_enabled = service.shadows_enabled;
+                if ui.checkbox(&mut shadows_enabled, "").changed() {
+                    service.shadows_enabled = shadows_enabled;
+                }
+                ui.end_row();
+
+                ui.label(
+                    egui::RichText::new("Atmospheric Fog")
+                        .color(egui::Color32::from_rgb(60, 60, 60))
+                        .size(13.0),
+                );
+                let mut fog_enabled = service.fog_enabled;
+                if ui.checkbox(&mut fog_enabled, "").changed() {
+                    service.fog_enabled = fog_enabled;
+                }
+                ui.end_row();
+
+                ui.label(
+                    egui::RichText::new("Fog Density")
+                        .color(egui::Color32::from_rgb(60, 60, 60))
+                        .size(13.0),
+                );
+                let mut fog_density = service.fog_density;
+                if ui
+                    .add_enabled(
+                        service.fog_enabled,
+                        egui::DragValue::new(&mut fog_density)
+                            .speed(0.05)
+                            .range(0.0..=4.0)
+                            .suffix("×"),
+                    )
+                    .changed()
+                {
+                    service.fog_density = fog_density;
+                }
+                ui.end_row();
             });
     });
 }
