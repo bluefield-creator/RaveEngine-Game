@@ -1,5 +1,50 @@
 use bevy::prelude::*;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum InsertKind { Part, Sphere, ServerScript, LocalScript, ModuleScript }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EditorAction {
+    NewProject, Open, Save, SaveAs, Exit, Undo, Redo, Cut, Copy, Paste, Duplicate, Rename, Delete,
+    SelectAll, Insert(InsertKind, Option<Entity>), ToggleExplorer, ToggleProperties, ToggleScriptEditor,
+    FrameSelected, ResetCamera, ResetLayout, ToggleSimulation, TogglePlaytest, StopTesting,
+}
+
+#[derive(Resource, Default)]
+pub struct EditorActionQueue(pub Vec<EditorAction>);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PendingDocumentAction { NewProject, Open, Exit }
+
+#[derive(Resource, Default)]
+pub struct DocumentState {
+    pub dirty: bool,
+    pub pending: Option<PendingDocumentAction>,
+    pub error: Option<String>,
+}
+
+#[derive(Resource)]
+pub struct EditorLayoutState {
+    pub explorer_visible: bool,
+    pub properties_visible: bool,
+    pub script_editor_visible: bool,
+    pub dock_width: f32,
+    pub explorer_height: f32,
+}
+
+impl Default for EditorLayoutState {
+    fn default() -> Self {
+        Self { explorer_visible: true, properties_visible: true, script_editor_visible: true, dock_width: 220.0, explorer_height: 180.0 }
+    }
+}
+
+#[derive(Resource, Default)]
+pub struct ExplorerState {
+    pub search: String,
+    pub rename_entity: Option<Entity>,
+    pub rename_buffer: String,
+}
+
 #[derive(Resource, Default)]
 pub struct CopiedEntityBuffer {
     pub transform: Option<Transform>,
@@ -120,6 +165,7 @@ pub fn handle_file_dialog_results(
         Option<&crate::scripting::ecs::LocalScript>,
         Option<&crate::scripting::ecs::ModuleScript>,
     ), Without<Camera3d>>,
+    mut document: ResMut<DocumentState>,
 ) {
     let rx = file_dialog_state.rx.lock().unwrap();
     while let Ok(result) = rx.try_recv() {
@@ -131,6 +177,7 @@ pub fn handle_file_dialog_results(
             FileDialogResult::OpenFile(path) => {
                 let open_path_str = path.display().to_string();
                 if let Ok(state) = crate::common::core::vrtx::VrtxFileState::load_from_file(&open_path_str) {
+                    document.dirty = false;
                     onboarding_data.save_path = open_path_str;
                     for (entity, brick_opt) in &entities_query {
                         if brick_opt.is_some() {
@@ -330,7 +377,13 @@ pub fn handle_file_dialog_results(
                     bricks: bricks_data,
                     scripts: scripts_data,
                 };
-                let _ = state.save_to_file(&save_path_str);
+                match state.save_to_file(&save_path_str) {
+                    Ok(()) => document.dirty = false,
+                    Err(error) => {
+                        error!("Failed to save project to '{}': {}", save_path_str, error);
+                        document.error = Some(format!("Could not save project: {error}"));
+                    }
+                }
                 file_dialog_state.is_open.store(false, std::sync::atomic::Ordering::Relaxed);
             }
             FileDialogResult::Cancel => {
@@ -338,4 +391,15 @@ pub fn handle_file_dialog_results(
             }
         }
     }
+}
+
+pub fn update_studio_window_title(
+    document: Res<DocumentState>,
+    onboarding: Res<crate::studio::ui::panels::onboarding::OnboardingData>,
+    mut windows: Query<&mut Window, With<bevy::window::PrimaryWindow>>,
+) {
+    if !document.is_changed() && !onboarding.is_changed() { return; }
+    let name = std::path::Path::new(&onboarding.save_path).file_stem().and_then(|name| name.to_str()).unwrap_or("Untitled");
+    let dirty = if document.dirty { "*" } else { "" };
+    if let Some(mut window) = windows.iter_mut().next() { window.title = format!("{name}{dirty} — RaveEngine Studio"); }
 }

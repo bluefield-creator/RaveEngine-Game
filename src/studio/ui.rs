@@ -47,6 +47,7 @@ pub struct UiResources<'w, 's> {
     pub brick_colors: Query<'w, 's, &'static mut crate::common::game::bricks::components::BrickColor>,
     pub players_service: Option<ResMut<'w, crate::studio::tools::PlayersService>>,
     pub lighting_service: Option<ResMut<'w, crate::common::game::environment::lighting::LightingService>>,
+    pub app_exit_writer: MessageWriter<'w, AppExit>,
 }
 
 #[derive(SystemParam)]
@@ -74,6 +75,10 @@ pub struct UiStateResources<'w> {
     pub playtest_backup: ResMut<'w, crate::studio::ui::resources::PlaytestBackup>,
     pub active_editor: ResMut<'w, ActiveScriptEditor>,
     pub file_dialog_state: ResMut<'w, FileDialogState>,
+    pub document_state: ResMut<'w, resources::DocumentState>,
+    pub layout_state: ResMut<'w, resources::EditorLayoutState>,
+    pub action_queue: ResMut<'w, resources::EditorActionQueue>,
+    pub explorer_state: ResMut<'w, resources::ExplorerState>,
 }
 
 #[derive(SystemParam)]
@@ -190,6 +195,29 @@ pub fn studio_ui(
     ctx.set_visuals(egui::Visuals::light());
 
     let onboarding_active = *ui_state.onboarding_state.get() != crate::studio::tools::OnboardingState::Inactive;
+
+    if !ctx.wants_keyboard_input() && !onboarding_active {
+        ctx.input(|input| {
+            let command = input.modifiers.command;
+            let shift = input.modifiers.shift;
+            let action = if command && input.key_pressed(egui::Key::N) { Some(resources::EditorAction::NewProject) }
+            else if command && input.key_pressed(egui::Key::O) { Some(resources::EditorAction::Open) }
+            else if command && shift && input.key_pressed(egui::Key::S) { Some(resources::EditorAction::SaveAs) }
+            else if command && input.key_pressed(egui::Key::S) { Some(resources::EditorAction::Save) }
+            else if command && shift && input.key_pressed(egui::Key::Z) { Some(resources::EditorAction::Redo) }
+            else if command && input.key_pressed(egui::Key::Z) { Some(resources::EditorAction::Undo) }
+            else if command && input.key_pressed(egui::Key::Y) { Some(resources::EditorAction::Redo) }
+            else if command && input.key_pressed(egui::Key::D) { Some(resources::EditorAction::Duplicate) }
+            else if command && input.key_pressed(egui::Key::A) { Some(resources::EditorAction::SelectAll) }
+            else if input.key_pressed(egui::Key::F2) { Some(resources::EditorAction::Rename) }
+            else if input.key_pressed(egui::Key::Delete) { Some(resources::EditorAction::Delete) }
+            else if input.key_pressed(egui::Key::F) { Some(resources::EditorAction::FrameSelected) }
+            else if input.key_pressed(egui::Key::F6) { Some(resources::EditorAction::ToggleSimulation) }
+            else if input.key_pressed(egui::Key::F5) { Some(if shift { resources::EditorAction::StopTesting } else { resources::EditorAction::TogglePlaytest }) }
+            else { None };
+            if let Some(action) = action { ui_state.action_queue.0.push(action); }
+        });
+    }
 
     if ui_state.playtest_state.active {
         egui::Area::new(egui::Id::new("stop_playtest_overlay"))
@@ -389,15 +417,180 @@ pub fn studio_ui(
                 &mut ui_res.players_service,
                 &mut ui_res.lighting_service,
                 &ui_state.file_dialog_state,
+                &mut ui_state.action_queue,
+                &ui_state.layout_state,
+                &mut ui_state.document_state,
             );
         });
+
+    let queued_actions: Vec<_> = ui_state.action_queue.0.drain(..).collect();
+    for action in queued_actions {
+        use resources::{EditorAction, InsertKind, PendingDocumentAction};
+        match action {
+            EditorAction::Undo => { ui_res.action_writer.write(crate::studio::tools::UndoRedoAction::Undo); ui_state.document_state.dirty = true; }
+            EditorAction::Redo => { ui_res.action_writer.write(crate::studio::tools::UndoRedoAction::Redo); ui_state.document_state.dirty = true; }
+            EditorAction::Delete => {
+                let selected = ui_state.selection.entities.clone();
+                for entity in selected {
+                    if let Some(data) = crate::common::game::bricks::data::capture_brick_data(entity, &queries.entities_query) {
+                        ui_res.history.push_command(crate::studio::tools::UndoCommand::Delete { entity, data });
+                    }
+                    ui_res.commands.entity(entity).try_despawn();
+                }
+                ui_state.selection.entity = None;
+                ui_state.selection.entities.clear();
+                ui_state.document_state.dirty = true;
+            }
+            EditorAction::Duplicate => {
+                let mut spawned = Vec::new();
+                for entity in ui_state.selection.entities.clone() {
+                    if let Some(mut data) = crate::common::game::bricks::data::capture_brick_data(entity, &queries.entities_query) {
+                        data.name = format!("{} - Copy", data.name);
+                        data.transform.translation += Vec3::new(2.0 * 0.28, 0.0, 2.0 * 0.28);
+                        let new_entity = crate::common::game::bricks::data::spawn_from_data(&mut ui_res.commands, &data);
+                        ui_res.history.push_command(crate::studio::tools::UndoCommand::Spawn { entity: new_entity, data });
+                        spawned.push(new_entity);
+                    } else if let Ok((_, name, child_of, _, _, server, local, module)) = queries.explorer_query.get(entity) {
+                        let mut command = ui_res.commands.spawn(Name::new(format!("{} - Copy", name.as_str())));
+                        if let Some(script) = server { command.insert(crate::scripting::ecs::ServerScript { code: script.code.clone(), enabled: script.enabled, started: false }); }
+                        else if let Some(script) = local { command.insert((crate::scripting::ecs::LocalScript { code: script.code.clone(), enabled: script.enabled, started: false }, lightyear::prelude::Replicate::default())); }
+                        else if let Some(script) = module { command.insert((crate::scripting::ecs::ModuleScript { code: script.code.clone() }, lightyear::prelude::Replicate::default())); }
+                        let new_entity = command.id();
+                        if let Some(parent) = child_of { ui_res.commands.entity(parent.parent()).add_child(new_entity); }
+                        spawned.push(new_entity);
+                    }
+                }
+                if !spawned.is_empty() { ui_state.selection.entity = spawned.first().copied(); ui_state.selection.entities = spawned; ui_state.document_state.dirty = true; }
+            }
+            EditorAction::Rename => {
+                if let Some(entity) = ui_state.selection.entity {
+                    if let Ok((_, name, _, _, _, _, _, _)) = queries.explorer_query.get(entity) {
+                        ui_state.explorer_state.rename_entity = Some(entity);
+                        ui_state.explorer_state.rename_buffer = name.to_string();
+                    }
+                }
+            }
+            EditorAction::SelectAll => {
+                let entities: Vec<_> = queries.explorer_query.iter().filter_map(|(entity, _, _, _, brick, server, local, module)| (brick.is_some() || server.is_some() || local.is_some() || module.is_some()).then_some(entity)).collect();
+                ui_state.selection.entity = entities.first().copied();
+                ui_state.selection.entities = entities;
+            }
+            EditorAction::Insert(kind, parent) => {
+                let entity = match kind {
+                    InsertKind::Part | InsertKind::Sphere => {
+                        let shape = if kind == InsertKind::Sphere { crate::common::game::bricks::components::BrickShape::Sphere } else { crate::common::game::bricks::components::BrickShape::Block };
+                        let position = camera_transform_val.map(|camera| camera.translation + camera.forward() * (10.0 * 0.28)).unwrap_or(Vec3::ZERO);
+                        crate::common::game::bricks::data::spawn_brick(&mut ui_res.commands, &mut ui_res.meshes, &mut ui_res.studs_materials, &ui_res.studs_assets, &mut ui_res.count, position, shape)
+                    }
+                    InsertKind::ServerScript => ui_res.commands.spawn((Name::new("Script"), crate::scripting::ecs::ServerScript { code: "print(\"Hello World from Server!\")\n".into(), enabled: true, started: false })).id(),
+                    InsertKind::LocalScript => ui_res.commands.spawn((Name::new("LocalScript"), crate::scripting::ecs::LocalScript { code: "print(\"Hello World from Local!\")\n".into(), enabled: true, started: false }, lightyear::prelude::Replicate::default())).id(),
+                    InsertKind::ModuleScript => ui_res.commands.spawn((Name::new("ModuleScript"), crate::scripting::ecs::ModuleScript { code: "local module = {}\nreturn module\n".into() }, lightyear::prelude::Replicate::default())).id(),
+                };
+                if let Some(parent) = parent { ui_res.commands.entity(parent).add_child(entity); }
+                ui_state.selection.entity = Some(entity); ui_state.selection.entities = vec![entity]; ui_state.document_state.dirty = true;
+            }
+            EditorAction::ToggleExplorer => ui_state.layout_state.explorer_visible = !ui_state.layout_state.explorer_visible,
+            EditorAction::ToggleProperties => ui_state.layout_state.properties_visible = !ui_state.layout_state.properties_visible,
+            EditorAction::ToggleScriptEditor => ui_state.layout_state.script_editor_visible = !ui_state.layout_state.script_editor_visible,
+            EditorAction::ResetLayout => *ui_state.layout_state = resources::EditorLayoutState::default(),
+            EditorAction::FrameSelected => {
+                let positions: Vec<_> = ui_state.selection.entities.iter().filter_map(|entity| queries.entities_query.get(*entity).ok().map(|item| item.7.translation())).collect();
+                if !positions.is_empty() {
+                    let center = positions.iter().copied().sum::<Vec3>() / positions.len() as f32;
+                    let radius = positions.iter().map(|position| position.distance(center)).fold(1.5_f32, f32::max);
+                    if let Some(mut camera) = queries.camera_transform_query.iter_mut().next() { let forward = camera.forward(); camera.translation = center - forward * (radius * 2.5 + 3.0); camera.look_at(center, Vec3::Y); }
+                }
+            }
+            EditorAction::ResetCamera => if let Some(mut camera) = queries.camera_transform_query.iter_mut().next() { *camera = Transform::from_xyz(-10.0, 10.0, -10.0).looking_at(Vec3::ZERO, Vec3::Y); },
+            EditorAction::ToggleSimulation => { ctx.data_mut(|data| data.insert_temp(egui::Id::new("trigger_simulation"), true)); }
+            EditorAction::TogglePlaytest | EditorAction::StopTesting => { ctx.data_mut(|data| data.insert_temp(egui::Id::new("trigger_playtest"), true)); }
+            EditorAction::Save => {
+                if ui_state.onboarding_data.save_path.is_empty() { ui_state.action_queue.0.push(EditorAction::SaveAs); }
+                else { let _ = ui_state.file_dialog_state.tx.send(resources::FileDialogResult::SaveAs(std::path::PathBuf::from(&ui_state.onboarding_data.save_path))); }
+            }
+            EditorAction::SaveAs => {
+                if !ui_state.file_dialog_state.is_open.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                    let tx = ui_state.file_dialog_state.tx.clone();
+                    std::thread::spawn(move || { let result = rfd::FileDialog::new().add_filter("Rave Project", &["vrtx"]).save_file(); let _ = tx.send(result.map(resources::FileDialogResult::SaveAs).unwrap_or(resources::FileDialogResult::Cancel)); });
+                }
+            }
+            EditorAction::Open => {
+                if ui_state.document_state.dirty { ui_state.document_state.pending = Some(PendingDocumentAction::Open); }
+                else if !ui_state.file_dialog_state.is_open.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                    let tx = ui_state.file_dialog_state.tx.clone();
+                    std::thread::spawn(move || { let result = rfd::FileDialog::new().add_filter("Rave Project", &["vrtx"]).pick_file(); let _ = tx.send(result.map(resources::FileDialogResult::OpenFile).unwrap_or(resources::FileDialogResult::Cancel)); });
+                }
+            }
+            EditorAction::NewProject => { ui_state.document_state.pending = Some(PendingDocumentAction::NewProject); }
+            EditorAction::Exit => {
+                if ui_state.document_state.dirty { ui_state.document_state.pending = Some(PendingDocumentAction::Exit); }
+                else { ui_res.app_exit_writer.write(AppExit::Success); }
+            }
+            EditorAction::Cut | EditorAction::Copy | EditorAction::Paste => {}
+        }
+    }
+
+    if !ui_state.document_state.dirty {
+        if let Some(pending) = ui_state.document_state.pending.take() {
+            match pending {
+                resources::PendingDocumentAction::NewProject => {
+                    for (entity, _, _, _, brick, server, local, module) in queries.explorer_query.iter() {
+                        if brick.is_some() || server.is_some() || local.is_some() || module.is_some() { ui_res.commands.entity(entity).try_despawn(); }
+                    }
+                    *ui_state.selection = Selection::default();
+                    *ui_state.active_editor = ActiveScriptEditor::default();
+                    *ui_res.history = crate::studio::tools::UndoRedoHistory::default();
+                    ui_state.onboarding_data.save_path.clear();
+                    ui_state.next_onboarding_state.set(crate::studio::tools::OnboardingState::TemplateSelection);
+                }
+                resources::PendingDocumentAction::Open => {
+                    if !ui_state.file_dialog_state.is_open.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                        let tx = ui_state.file_dialog_state.tx.clone();
+                        std::thread::spawn(move || { let result = rfd::FileDialog::new().add_filter("Rave Project", &["vrtx"]).pick_file(); let _ = tx.send(result.map(resources::FileDialogResult::OpenFile).unwrap_or(resources::FileDialogResult::Cancel)); });
+                    }
+                }
+                resources::PendingDocumentAction::Exit => { ui_res.app_exit_writer.write(AppExit::Success); }
+            }
+        }
+    }
+
+    if ui_state.document_state.pending.is_some() {
+        egui::Window::new("Unsaved changes").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO).show(ctx, |ui| {
+            ui.label("Save your changes before continuing?");
+            ui.horizontal(|ui| {
+                if ui.button("Save").clicked() { ui_state.action_queue.0.push(resources::EditorAction::Save); }
+                if ui.button("Discard").clicked() { ui_state.document_state.dirty = false; }
+                if ui.button("Cancel").clicked() { ui_state.document_state.pending = None; }
+            });
+        });
+    }
+
+    if let Some(error) = ui_state.document_state.error.clone() {
+        egui::Window::new("Project error").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO).show(ctx, |ui| {
+            ui.label(error);
+            if ui.button("OK").clicked() { ui_state.document_state.error = None; }
+        });
+    }
+
+    if let Some(entity) = ui_state.explorer_state.rename_entity {
+        egui::Window::new("Rename item").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO).show(ctx, |ui| {
+            let response = ui.text_edit_singleline(&mut ui_state.explorer_state.rename_buffer);
+            response.request_focus();
+            if ui.button("Rename").clicked() && !ui_state.explorer_state.rename_buffer.trim().is_empty() {
+                ui_res.commands.entity(entity).insert(Name::new(ui_state.explorer_state.rename_buffer.trim().to_string()));
+                ui_state.explorer_state.rename_entity = None;
+                ui_state.document_state.dirty = true;
+            }
+            if ui.button("Cancel").clicked() { ui_state.explorer_state.rename_entity = None; }
+        });
+    }
 
     let panel_res = egui::SidePanel::left("explorer")
         .frame(egui::Frame::none()
             .fill(egui::Color32::from_rgb(245, 246, 247))
             .inner_margin(egui::Margin::symmetric(12, 12))
         )
-        .default_width(220.0)
+        .default_width(if ui_state.layout_state.explorer_visible || ui_state.layout_state.properties_visible { ui_state.layout_state.dock_width } else { 0.0 })
         .show(ctx, |ui| {
             ui.add_enabled_ui(!onboarding_active, |ui| {
                 let total_height = ui.available_height();
@@ -419,7 +612,9 @@ pub fn studio_ui(
                 }
 
                 let has_selection = !selected_bricks.is_empty() || !selected_scripts.is_empty() || ui_state.selection.workspace_selected || ui_state.selection.players_selected || ui_state.selection.lighting_selected;
-                let mut explorer_height = if has_selection {
+                let mut explorer_height = if !ui_state.layout_state.explorer_visible {
+                    0.0
+                } else if has_selection {
                     let id = ui.make_persistent_id("explorer_height_split");
                     ui.data_mut(|d| d.get_temp::<f32>(id).unwrap_or(180.0))
                 } else {
@@ -434,7 +629,7 @@ pub fn studio_ui(
                             .id_source("explorer_scroll")
                             .auto_shrink([false, false])
                             .show(ui, |ui| {
-                                panels::draw_explorer(
+                                if ui_state.layout_state.explorer_visible { panels::draw_explorer(
                                     ui,
                                     &mut ui_res.commands,
                                     &mut ui_state.selection,
@@ -451,12 +646,12 @@ pub fn studio_ui(
                                     script_tex,
                                     localscript_tex,
                                     modulescript_tex,
-                                );
+                                ); }
                             });
                     }
                 );
 
-                if !selected_bricks.is_empty() || !selected_scripts.is_empty() {
+                if ui_state.layout_state.properties_visible && (!selected_bricks.is_empty() || !selected_scripts.is_empty()) {
                     let sep_height = 20.0;
                     let (rect, response) = ui.allocate_exact_size(
                         egui::vec2(ui.available_width(), sep_height),
@@ -498,7 +693,7 @@ pub fn studio_ui(
                                 &mut ui_state.active_editor,
                             );
                         });
-                } else if ui_state.selection.workspace_selected {
+                } else if ui_state.layout_state.properties_visible && ui_state.selection.workspace_selected {
                     let sep_height = 20.0;
                     let (rect, response) = ui.allocate_exact_size(
                         egui::vec2(ui.available_width(), sep_height),
@@ -533,7 +728,7 @@ pub fn studio_ui(
                                 &mut ui_res.gravity,
                             );
                         });
-                } else if ui_state.selection.players_selected {
+                } else if ui_state.layout_state.properties_visible && ui_state.selection.players_selected {
                     let sep_height = 20.0;
                     let (rect, response) = ui.allocate_exact_size(
                         egui::vec2(ui.available_width(), sep_height),
@@ -568,7 +763,7 @@ pub fn studio_ui(
                                 &mut ui_res.players_service,
                             );
                         });
-                } else if ui_state.selection.lighting_selected {
+                } else if ui_state.layout_state.properties_visible && ui_state.selection.lighting_selected {
                     let sep_height = 20.0;
                     let (rect, response) = ui.allocate_exact_size(
                         egui::vec2(ui.available_width(), sep_height),
@@ -686,7 +881,7 @@ pub fn studio_ui(
     }
 
     let mut script_editor_rect = None;
-    if !ui_state.active_editor.open_entities.is_empty() {
+    if ui_state.layout_state.script_editor_visible && !ui_state.active_editor.open_entities.is_empty() {
         if ui_state.active_editor.entity.is_none() {
             ui_state.active_editor.entity = ui_state.active_editor.open_entities.first().copied();
         }

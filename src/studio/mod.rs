@@ -38,6 +38,10 @@ impl Plugin for StudioPlugin {
             .init_resource::<ui::resources::PlayInClientProcesses>()
             .init_resource::<ui::resources::PlaytestBackup>()
             .init_resource::<ui::resources::FileDialogState>()
+            .init_resource::<ui::resources::DocumentState>()
+            .init_resource::<ui::resources::EditorLayoutState>()
+            .init_resource::<ui::resources::EditorActionQueue>()
+            .init_resource::<ui::resources::ExplorerState>()
             .init_resource::<tools::SnapConfig>()
             .init_resource::<tools::UndoRedoHistory>()
             .init_resource::<tools::PlayersService>()
@@ -92,6 +96,7 @@ impl Plugin for StudioPlugin {
                     crate::studio::camera::toggle_editor_camera_active,
                     crate::studio::camera::disable_cameras_on_minimization,
                     ui::resources::handle_file_dialog_results,
+                    ui::resources::update_studio_window_title,
                 ),
             )
             .add_systems(Update, ui::resources::cleanup_play_processes_on_exit)

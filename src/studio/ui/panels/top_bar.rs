@@ -69,6 +69,9 @@ pub fn draw_top_bar(
     players_service: &mut Option<ResMut<crate::studio::tools::PlayersService>>,
     lighting_service: &mut Option<ResMut<crate::common::game::environment::lighting::LightingService>>,
     file_dialog_state: &crate::studio::ui::resources::FileDialogState,
+    actions: &mut crate::studio::ui::resources::EditorActionQueue,
+    layout: &crate::studio::ui::resources::EditorLayoutState,
+    document: &mut crate::studio::ui::resources::DocumentState,
 ) {
     ui.style_mut().interaction.selectable_labels = false;
 
@@ -101,8 +104,17 @@ pub fn draw_top_bar(
                     ui.style_mut().visuals.widgets.active.bg_stroke = egui::Stroke::NONE;
 
                     let file_button_res = egui::menu::menu_button(ui, egui::RichText::new("File").color(file_text_color).size(13.0), |ui| {
+                        if ui.button("New Project\tCtrl+N").clicked() {
+                            actions.0.push(crate::studio::ui::resources::EditorAction::NewProject);
+                            ui.close();
+                        }
+                        if ui.button("Open…\tCtrl+O").clicked() {
+                            actions.0.push(crate::studio::ui::resources::EditorAction::Open);
+                            ui.close();
+                        }
+                        ui.separator();
                         let save_enabled = !onboarding_data.save_path.is_empty();
-                        if ui.add_enabled(save_enabled, egui::Button::new("Save")).clicked() {
+                        if ui.add_enabled(save_enabled, egui::Button::new("Save\tCtrl+S")).clicked() {
                             let node_ids: std::collections::HashMap<Entity, u64> = explorer_query.iter()
                                 .filter(|(_, _, _, _, brick, server, local, module)| brick.is_some() || server.is_some() || local.is_some() || module.is_some())
                                 .enumerate().map(|(index, (entity, _, _, _, _, _, _, _))| (entity, index as u64)).collect();
@@ -200,12 +212,15 @@ pub fn draw_top_bar(
                                 bricks: bricks_data,
                                 scripts: scripts_data,
                             };
-                            let _ = state.save_to_file(&onboarding_data.save_path);
+                            match state.save_to_file(&onboarding_data.save_path) {
+                                Ok(()) => document.dirty = false,
+                                Err(error) => document.error = Some(format!("Could not save project: {error}")),
+                            }
                             ui.close_menu();
                         }
                         
                         let is_open = file_dialog_state.is_open.load(std::sync::atomic::Ordering::Relaxed);
-                        if ui.add_enabled(!is_open, egui::Button::new("Save As...")).clicked() {
+                        if ui.add_enabled(!is_open, egui::Button::new("Save As…\tCtrl+Shift+S")).clicked() {
                             file_dialog_state.is_open.store(true, std::sync::atomic::Ordering::Relaxed);
                             let tx = file_dialog_state.tx.clone();
                             std::thread::spawn(move || {
@@ -220,30 +235,51 @@ pub fn draw_top_bar(
                             });
                             ui.close_menu();
                         }
-                        if ui.add_enabled(!is_open, egui::Button::new("Open...")).clicked() {
-                            file_dialog_state.is_open.store(true, std::sync::atomic::Ordering::Relaxed);
-                            let tx = file_dialog_state.tx.clone();
-                            std::thread::spawn(move || {
-                                if let Some(path) = rfd::FileDialog::new()
-                                    .add_filter("Rave Project", &["vrtx"])
-                                    .set_directory(std::env::current_dir().unwrap_or_default())
-                                    .pick_file() {
-                                    let _ = tx.send(crate::studio::ui::resources::FileDialogResult::OpenFile(path));
-                                } else {
-                                    let _ = tx.send(crate::studio::ui::resources::FileDialogResult::Cancel);
-                                }
-                            });
-                            ui.close_menu();
+                        ui.separator();
+                        if ui.button("Exit").clicked() {
+                            actions.0.push(crate::studio::ui::resources::EditorAction::Exit);
+                            ui.close();
                         }
                     });
                     is_hovered = file_button_res.response.hovered();
                 });
                 ui.data_mut(|d| d.insert_temp(file_id, is_hovered));
 
-                ui.label(egui::RichText::new("Edit").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
-                ui.label(egui::RichText::new("Insert").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
-                ui.label(egui::RichText::new("View").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
-                ui.label(egui::RichText::new("Test").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
+                egui::menu::menu_button(ui, "Edit", |ui| {
+                    for (label, action, enabled) in [
+                        ("Undo\tCtrl+Z", crate::studio::ui::resources::EditorAction::Undo, !history.undo_stack.is_empty()),
+                        ("Redo\tCtrl+Y", crate::studio::ui::resources::EditorAction::Redo, !history.redo_stack.is_empty()),
+                        ("Cut\tCtrl+X", crate::studio::ui::resources::EditorAction::Cut, !selection.entities.is_empty()),
+                        ("Copy\tCtrl+C", crate::studio::ui::resources::EditorAction::Copy, !selection.entities.is_empty()),
+                        ("Paste\tCtrl+V", crate::studio::ui::resources::EditorAction::Paste, true),
+                        ("Duplicate\tCtrl+D", crate::studio::ui::resources::EditorAction::Duplicate, !selection.entities.is_empty()),
+                        ("Rename\tF2", crate::studio::ui::resources::EditorAction::Rename, selection.entities.len() == 1),
+                        ("Delete\tDelete", crate::studio::ui::resources::EditorAction::Delete, !selection.entities.is_empty()),
+                        ("Select All\tCtrl+A", crate::studio::ui::resources::EditorAction::SelectAll, true),
+                    ] {
+                        if ui.add_enabled(enabled, egui::Button::new(label)).clicked() { actions.0.push(action); ui.close(); }
+                    }
+                });
+                egui::menu::menu_button(ui, "Insert", |ui| {
+                    for (label, kind) in [("Part", crate::studio::ui::resources::InsertKind::Part), ("Sphere", crate::studio::ui::resources::InsertKind::Sphere), ("Script", crate::studio::ui::resources::InsertKind::ServerScript), ("LocalScript", crate::studio::ui::resources::InsertKind::LocalScript), ("ModuleScript", crate::studio::ui::resources::InsertKind::ModuleScript)] {
+                        if ui.button(label).clicked() { actions.0.push(crate::studio::ui::resources::EditorAction::Insert(kind, selection.entity)); ui.close(); }
+                    }
+                });
+                egui::menu::menu_button(ui, "View", |ui| {
+                    if ui.selectable_label(layout.explorer_visible, "Explorer").clicked() { actions.0.push(crate::studio::ui::resources::EditorAction::ToggleExplorer); }
+                    if ui.selectable_label(layout.properties_visible, "Properties").clicked() { actions.0.push(crate::studio::ui::resources::EditorAction::ToggleProperties); }
+                    if ui.selectable_label(layout.script_editor_visible, "Script Editor").clicked() { actions.0.push(crate::studio::ui::resources::EditorAction::ToggleScriptEditor); }
+                    ui.separator();
+                    if ui.add_enabled(!selection.entities.is_empty(), egui::Button::new("Frame Selected\tF")).clicked() { actions.0.push(crate::studio::ui::resources::EditorAction::FrameSelected); ui.close(); }
+                    if ui.button("Reset Camera").clicked() { actions.0.push(crate::studio::ui::resources::EditorAction::ResetCamera); ui.close(); }
+                    if ui.button("Reset Layout").clicked() { actions.0.push(crate::studio::ui::resources::EditorAction::ResetLayout); ui.close(); }
+                });
+                egui::menu::menu_button(ui, "Test", |ui| {
+                    let simulation = if physics_state == crate::common::game::physics::PhysicsSimulationState::Running { "Stop Simulation\tF6" } else { "Play Simulation\tF6" };
+                    if ui.button(simulation).clicked() { ui.data_mut(|data| data.insert_temp(egui::Id::new("trigger_simulation"), true)); ui.close(); }
+                    let playtest = if playtest_state.active { "Stop Playtest\tShift+F5" } else { "Play in Studio\tF5" };
+                    if ui.button(playtest).clicked() { ui.data_mut(|data| data.insert_temp(egui::Id::new("trigger_playtest"), true)); ui.close(); }
+                });
 
                 let settings_id = ui.make_persistent_id("settings_menu_btn");
                 let is_hovered_settings = ui.data(|d| d.get_temp::<bool>(settings_id)).unwrap_or(false);
@@ -525,7 +561,8 @@ pub fn draw_top_bar(
                     let play_btn_tex = if is_playing { stopp_tex } else { play_tex };
                     let play_btn_label = if is_playing { "Stop" } else { "Play" };
 
-                    if ribbonbutton(ui, Some(play_btn_tex), play_btn_label, is_playing).clicked() {
+                    let trigger_simulation = ui.data_mut(|data| data.remove_temp::<bool>(egui::Id::new("trigger_simulation"))).unwrap_or(false);
+                    if ribbonbutton(ui, Some(play_btn_tex), play_btn_label, is_playing).clicked() || trigger_simulation {
                         if is_playing {
                             physics_action_writer.write(crate::common::game::physics::PhysicsSimulationAction::Stop);
                         } else {
@@ -537,7 +574,8 @@ pub fn draw_top_bar(
                     let playc_btn_label = if playtesting_active { "Stop Playtest" } else { "Play in Studio" };
                     let playc_btn_tex = if playtesting_active { stopp_tex } else { playc_tex };
 
-                    if ribbonbutton(ui, Some(playc_btn_tex), playc_btn_label, playtesting_active).clicked() {
+                    let trigger_playtest = ui.data_mut(|data| data.remove_temp::<bool>(egui::Id::new("trigger_playtest"))).unwrap_or(false);
+                    if ribbonbutton(ui, Some(playc_btn_tex), playc_btn_label, playtesting_active).clicked() || trigger_playtest {
                         if playtesting_active {
                             playtest_state.active = false;
 
