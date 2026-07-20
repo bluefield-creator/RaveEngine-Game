@@ -30,7 +30,6 @@ impl Plugin for BricksPlugin {
                 .add_systems(Update, (
                     studs::configure_studs_samplers,
                     update_brick_meshes_on_shape_change,
-                    links_optimizer_system,
                 ));
         }
     }
@@ -60,22 +59,3 @@ pub fn update_brick_meshes_on_shape_change(
     }
 }
 
-fn links_optimizer_system() {} // dummy hook for common optimization module
-
-pub fn optimize_brick_visibility(
-    _commands: Commands,
-    _meshes: ResMut<Assets<Mesh>>,
-    _materials: ResMut<Assets<StandardMaterial>>,
-    _studs_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
-    _studs_assets: Res<crate::common::game::bricks::studs::StudsAssets>,
-    _camera_query: Query<&Transform, With<Camera3d>>,
-    _bricks_query: Query<(
-        Entity,
-        &GlobalTransform,
-        &components::BrickShapeComponent,
-        &components::BrickColor,
-        &mut MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>,
-    )>,
-) {
-    // keeping system optimized
-}

@@ -98,12 +98,7 @@ impl Plugin for ClientPlugin {
                 handle_auth_success,
             ).run_if(is_playtesting))
             .add_systems(Update, cleanup_orphaned_visuals);
-            #[cfg(debug_assertions)]
-            app.add_systems(Update, (
-                debug_cameras,
-                debug_players,
-                debug_deep_hierarchy,
-            ).run_if(is_playtesting));
+
             app.add_systems(bevy_egui::EguiPrimaryContextPass, (
                 ui::configure_client_visuals,
                 ui::draw_scoreboard,
@@ -792,120 +787,6 @@ mod tests {
     }
 }
 
-#[cfg(debug_assertions)]
-fn debug_cameras(
-    query: Query<(Entity, &Camera, Option<&bevy::camera::RenderTarget>, Option<&Name>, Option<&bevy::camera_controller::free_camera::FreeCamera>, Option<&crate::client::player::PlayerCamera>)>,
-    mut last_log: Local<f32>,
-    time: Res<Time>,
-) {
-    let now = time.elapsed_secs();
-    if now - *last_log < 1.0 {
-        return;
-    }
-    *last_log = now;
-    for (entity, camera, target_opt, name_opt, free_opt, player_opt) in &query {
-        let name = name_opt.map(|n| n.as_str()).unwrap_or("No Name");
-        let camera_type = if free_opt.is_some() {
-            "FreeCamera"
-        } else if player_opt.is_some() {
-            "PlayerCamera"
-        } else {
-            "Other"
-        };
-        let has_egui = match target_opt {
-            Some(bevy::camera::RenderTarget::Window(bevy::window::WindowRef::Primary)) => "PrimaryWindow",
-            Some(_) => "OtherTarget",
-            None => "None",
-        };
-        info!("CAMERA_DEBUG: Entity {:?} ({}) - type={}, active={}, order={}, clear_color={:?}, target={}",
-            entity, name, camera_type, camera.is_active, camera.order, camera.clear_color, has_egui);
-    }
-}
-
-#[cfg(debug_assertions)]
-fn debug_players(
-    query: Query<(
-        Entity,
-        Option<&Predicted>,
-        Option<&Interpolated>,
-        Option<&Replicate>,
-        Option<&LocalPlayer>,
-        &Transform,
-    ), With<crate::common::net::components::Player>>,
-    mut last_log: Local<f32>,
-    time: Res<Time>,
-) {
-    let now = time.elapsed_secs();
-    if now - *last_log < 1.0 {
-        return;
-    }
-    *last_log = now;
-    for (entity, pred, interp, rep, local, transform) in &query {
-        info!("DEBUG_PLAYERS: {:?}: pred={} interp={} repl={} local={} pos={:?}",
-            entity,
-            pred.is_some(),
-            interp.is_some(),
-            rep.is_some(),
-            local.is_some(),
-            transform.translation,
-        );
-    }
-}
-
-#[cfg(debug_assertions)]
-fn debug_deep_hierarchy(
-    world: &World,
-    mut last_log: Local<f32>,
-    time: Res<Time>,
-) {
-    let now = time.elapsed_secs();
-    if now - *last_log < 2.0 {
-        return;
-    }
-    *last_log = now;
-
-    info!("DEEP HIERARCHY INSPECTION:");
-    for archetype in world.archetypes().iter() {
-        for entity in archetype.entities() {
-            let entity = entity.id();
-            if world.get::<WorldAssetRoot>(entity).is_some() {
-                info!("Entity {:?} has WorldAssetRoot! parent={:?}, visibility={:?}",
-                    entity,
-                    world.get::<ChildOf>(entity).map(|co| co.parent()),
-                    world.get::<Visibility>(entity),
-                );
-                print_hierarchy_from_root(world, entity, 1);
-            }
-        }
-    }
-}
-
-#[cfg(debug_assertions)]
-fn print_hierarchy_from_root(world: &World, entity: Entity, depth: usize) {
-    let indent = "  ".repeat(depth);
-    let name = world.get::<Name>(entity).map(|n| n.as_str().to_string()).unwrap_or_else(|| "Instance".to_string());
-    let vis = world.get::<Visibility>(entity);
-    let transform = world.get::<Transform>(entity);
-    
-    let mut comp_names = Vec::new();
-    if let Ok(entity_ref) = world.get_entity(entity) {
-        let archetype = entity_ref.archetype();
-        for component_id in archetype.components() {
-            if let Some(info) = world.components().get_info(*component_id) {
-                comp_names.push(info.name().split("::").last().unwrap_or("").to_string());
-            }
-        }
-    }
-
-    info!("{}└─ Entity {:?} '{}': vis={:?}, transform={:?}, components={:?}",
-        indent, entity, name, vis, transform.map(|t| t.translation), comp_names);
-
-    if let Some(children) = world.get::<Children>(entity) {
-        for child in children.iter() {
-            print_hierarchy_from_root(world, child, depth + 1);
-        }
-    }
-}
 
 #[cfg(feature = "bench")]
 fn spawn_client_benchmark(mut commands: Commands) {

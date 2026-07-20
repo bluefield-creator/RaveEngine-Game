@@ -150,6 +150,7 @@ pub fn animate_and_wrap_clouds(
             
             transform.translation = camera_pos + spawn_offset + jitter;
             transform.translation.y = rng.random_range(110.0..140.0);
+            transform.scale = Vec3::new(cloud.size_x, cloud.size_z, 1.0);
         } else {
             let scale_factor = if dist_xz > 1800.0 {
                 ((2400.0 - dist_xz) / 600.0).clamp(0.0, 1.0)

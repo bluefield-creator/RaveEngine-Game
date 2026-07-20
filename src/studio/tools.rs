@@ -197,9 +197,14 @@ pub struct UndoRedoHistory {
 }
 
 impl UndoRedoHistory {
+    const MAX_UNDO_DEPTH: usize = 256;
+
     pub fn push_command(&mut self, command: UndoCommand) {
         self.undo_stack.push(command);
         self.redo_stack.clear();
+        while self.undo_stack.len() > Self::MAX_UNDO_DEPTH {
+            self.undo_stack.remove(0);
+        }
     }
 
     pub fn remap_entity(&mut self, old: Entity, new: Entity) {

@@ -11,12 +11,14 @@ pub mod replicon {
     pub use bevy_replicon::prelude::*;
 }
 
+#[allow(dead_code)]
 pub struct NetPlugin;
 
 impl Plugin for NetPlugin {
     fn build(&self, _app: &mut App) {}
 }
 
+#[allow(dead_code)]
 pub struct NetworkPlugin;
 
 impl Plugin for NetworkPlugin {

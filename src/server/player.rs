@@ -120,6 +120,12 @@ pub fn handle_player_inputs(
                     found_player = true;
                     let speed = player.speed;
 
+                    if !message.yaw.is_finite() {
+                        warn!("Non-finite yaw from client {}, ignoring input", client_id);
+                        found_player = false;
+                        continue;
+                    }
+
                     let mut move_direction = Vec3::ZERO;
                     let rotation = Quat::from_rotation_y(message.yaw);
                     let forward = rotation * Vec3::NEG_Z;
@@ -146,6 +152,9 @@ pub fn handle_player_inputs(
 
                     lin_vel.x = direction.x * speed;
                     lin_vel.z = direction.z * speed;
+
+                    if !lin_vel.x.is_finite() { lin_vel.x = 0.0; }
+                    if !lin_vel.z.is_finite() { lin_vel.z = 0.0; }
 
                     if direction.length_squared() > 0.001 {
                         let angles = [0.0, 35.0f32.to_radians(), -35.0f32.to_radians()];
