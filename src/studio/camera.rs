@@ -90,7 +90,7 @@ pub fn disable_camera_on_ui_interaction(
 ) {
     let onboarding_active =
         *onboarding_state.get() != crate::studio::tools::OnboardingState::Inactive;
-    let playtesting_active = playtest.map_or(false, |p| p.active);
+    let playtesting_active = playtest.is_some_and(|p| p.active);
 
     let right_mouse_held = mouse_buttons.pressed(MouseButton::Right);
     let movement_keys_held = keys.any_pressed([
@@ -108,8 +108,13 @@ pub fn disable_camera_on_ui_interaction(
     let camera_moving = right_mouse_held || movement_keys_held;
 
     if let Ok(ctx) = contexts.ctx_mut() {
-        let disable_camera = ctx.egui_wants_keyboard_input() || onboarding_active || playtesting_active;
-        let disable_picking = ctx.egui_wants_pointer_input() || ctx.egui_wants_keyboard_input() || hover_state.is_hovering_ui || onboarding_active || playtesting_active;
+        let disable_camera =
+            ctx.egui_wants_keyboard_input() || onboarding_active || playtesting_active;
+        let disable_picking = ctx.egui_wants_pointer_input()
+            || ctx.egui_wants_keyboard_input()
+            || hover_state.is_hovering_ui
+            || onboarding_active
+            || playtesting_active;
         for mut state in &mut camera_query {
             state.enabled = !disable_camera;
         }
@@ -135,7 +140,7 @@ pub fn sync_playtest_camera(
     >,
     mut saved_editor_view: Local<Option<(Transform, Projection)>>,
 ) {
-    let playtesting_active = playtest.map_or(false, |p| p.active);
+    let playtesting_active = playtest.is_some_and(|p| p.active);
     let Ok((mut editor_transform, mut editor_projection)) = editor_query.single_mut() else {
         return;
     };
@@ -174,10 +179,11 @@ pub fn disable_cameras_on_minimization(
         }
     } else {
         for (entity, mut camera) in &mut camera_query {
-            if let Some(&prev_state) = previous_active_states.get(&entity) {
-                if prev_state && !camera.is_active {
-                    camera.is_active = true;
-                }
+            if let Some(&prev_state) = previous_active_states.get(&entity)
+                && prev_state
+                && !camera.is_active
+            {
+                camera.is_active = true;
             }
         }
         previous_active_states.clear();

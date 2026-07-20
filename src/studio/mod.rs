@@ -69,7 +69,7 @@ impl Plugin for StudioPlugin {
                     gizmos::update_gizmos,
                     gizmos::sync_gizmos,
                     gizmos::draw_selection_outline,
-                gizmos::draw_hover_outline,
+                    gizmos::draw_hover_outline,
                     tools::select_brick,
                     tools::handle_drag_start,
                     tools::handle_drag,

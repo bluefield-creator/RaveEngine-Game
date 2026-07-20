@@ -1,7 +1,7 @@
-use bevy::prelude::*;
-use bevy::animation::{AnimatedBy, AnimationTargetId};
-use avian3d::prelude::{SpatialQuery, SpatialQueryFilter};
 use crate::client::player::model::PlayerGltfHandle;
+use avian3d::prelude::{SpatialQuery, SpatialQueryFilter};
+use bevy::animation::{AnimatedBy, AnimationTargetId};
+use bevy::prelude::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LimbPart {
@@ -75,7 +75,10 @@ pub fn add_missing_animation_players(
 
             if under_player {
                 commands.entity(entity).insert(AnimationPlayer::default());
-                info!("PLAYER_LOG: Manually attached AnimationPlayer to 'Armature' Entity {:?}", entity);
+                info!(
+                    "PLAYER_LOG: Manually attached AnimationPlayer to 'Armature' Entity {:?}",
+                    entity
+                );
             }
         }
     }
@@ -97,7 +100,10 @@ pub fn build_avatar_animation_graph(
         return;
     };
 
-    let find_clip_robust = |gltf: &bevy::gltf::Gltf, targets: &[&str], fallback_idx: usize| -> Option<Handle<AnimationClip>> {
+    let find_clip_robust = |gltf: &bevy::gltf::Gltf,
+                            targets: &[&str],
+                            fallback_idx: usize|
+     -> Option<Handle<AnimationClip>> {
         for &target in targets {
             if let Some(clip) = gltf.named_animations.get(target) {
                 return Some(clip.clone());
@@ -119,10 +125,10 @@ pub fn build_avatar_animation_graph(
         None
     };
 
-    let idle = find_clip_robust(&gltf, &["Scene.001", "Idle", "idle"], 0);
-    let walk = find_clip_robust(&gltf, &["Scene.002", "Walk", "walk"], 1);
-    let jump = find_clip_robust(&gltf, &["Scene.003", "Jump", "jump"], 2);
-    let fall = find_clip_robust(&gltf, &["Scene.004", "Falling", "fall", "falling"], 3);
+    let idle = find_clip_robust(gltf, &["Scene.001", "Idle", "idle"], 0);
+    let walk = find_clip_robust(gltf, &["Scene.002", "Walk", "walk"], 1);
+    let jump = find_clip_robust(gltf, &["Scene.003", "Jump", "jump"], 2);
+    let fall = find_clip_robust(gltf, &["Scene.004", "Falling", "fall", "falling"], 3);
 
     let Some(idle) = idle else {
         return;
@@ -187,15 +193,18 @@ pub fn retarget_avatar_clips(
             continue;
         }
         if let Some(mut clip) = clips.get_mut(clip_handle) {
-            retarget_clip_in_place(&mut *clip, &mappings);
+            retarget_clip_in_place(&mut clip, &mappings);
             retargeted.retargeted_clips.insert(clip_handle.clone());
             retargeted_any = true;
         }
     }
 
     if retargeted_any {
-        info!("PLAYER_LOG: Successfully retargeted {} animation clips in-place! Total retargeted: {}", 
-            retargeted.retargeted_clips.len(), gltf.animations.len());
+        info!(
+            "PLAYER_LOG: Successfully retargeted {} animation clips in-place! Total retargeted: {}",
+            retargeted.retargeted_clips.len(),
+            gltf.animations.len()
+        );
     }
 }
 
@@ -218,8 +227,25 @@ fn collect_bone_paths(
     if !current_path.is_empty() {
         let standard_id = AnimationTargetId::from_names(current_path.iter());
 
-        let alternative_roots = ["Armature", "Armature.001", "Armature.002", "Armature.003", "Armature.004", "armature"];
-        let intermediate_armatures = ["Armature", "Armature.001", "Armature.002", "Armature.003", "Armature.004", "Armature.005", "Armature.006", "Armature.007", "armature"];
+        let alternative_roots = [
+            "Armature",
+            "Armature.001",
+            "Armature.002",
+            "Armature.003",
+            "Armature.004",
+            "armature",
+        ];
+        let intermediate_armatures = [
+            "Armature",
+            "Armature.001",
+            "Armature.002",
+            "Armature.003",
+            "Armature.004",
+            "Armature.005",
+            "Armature.006",
+            "Armature.007",
+            "armature",
+        ];
 
         mappings.insert(standard_id, standard_id);
 
@@ -263,14 +289,20 @@ fn retarget_clip_in_place(
     let old_curves = std::mem::take(clip.curves_mut());
     let mut_curves = clip.curves_mut();
     for (old_target_id, curves) in old_curves {
-        let new_target_id = mappings.get(&old_target_id).copied().unwrap_or(old_target_id);
+        let new_target_id = mappings
+            .get(&old_target_id)
+            .copied()
+            .unwrap_or(old_target_id);
         mut_curves.insert(new_target_id, curves);
     }
 }
 
 pub fn init_player_animations(
     mut commands: Commands,
-    mut anim_players: Query<(Entity, &ChildOf), (With<AnimationPlayer>, Without<AnimationGraphHandle>)>,
+    mut anim_players: Query<
+        (Entity, &ChildOf),
+        (With<AnimationPlayer>, Without<AnimationGraphHandle>),
+    >,
     parent_query: Query<&ChildOf>,
     players: Query<Entity, With<crate::common::net::components::Player>>,
     player_anims: Res<PlayerAnimationGraphLoaded>,
@@ -301,9 +333,15 @@ pub fn init_player_animations(
             commands.entity(player_entity).insert((
                 AnimationGraphHandle(graph_handle.clone()),
                 AnimationTransitions::default(),
-                PlayerAnimationMarker { player_entity: p_entity, current_index: None },
+                PlayerAnimationMarker {
+                    player_entity: p_entity,
+                    current_index: None,
+                },
             ));
-            info!("PLAYER_LOG: Successfully linked unified AnimationPlayer {:?} to player {:?}.", player_entity, p_entity);
+            info!(
+                "PLAYER_LOG: Successfully linked unified AnimationPlayer {:?} to player {:?}.",
+                player_entity, p_entity
+            );
 
             let mut current_path = Vec::new();
             insert_animation_targets_recursive(
@@ -314,7 +352,10 @@ pub fn init_player_animations(
                 &children_query,
                 &names_query,
             );
-            info!("PLAYER_LOG: Successfully populated AnimationTargetId and AnimatedBy hierarchy under {:?}", player_entity);
+            info!(
+                "PLAYER_LOG: Successfully populated AnimationTargetId and AnimatedBy hierarchy under {:?}",
+                player_entity
+            );
         }
     }
 }
@@ -338,10 +379,9 @@ fn insert_animation_targets_recursive(
 
     if !current_path.is_empty() {
         let target_id = AnimationTargetId::from_names(current_path.iter());
-        commands.entity(entity).insert((
-            AnimatedBy(armature_entity),
-            target_id,
-        ));
+        commands
+            .entity(entity)
+            .insert((AnimatedBy(armature_entity), target_id));
     } else {
         commands.entity(entity).insert(AnimatedBy(armature_entity));
     }
@@ -373,7 +413,9 @@ fn grid_cell(position: Vec3) -> (i32, i32) {
 fn rebuild_player_grid(grid: &mut PlayerGrid, players: impl Iterator<Item = (Entity, Transform)>) {
     grid.clear();
     for (entity, transform) in players {
-        grid.entry(grid_cell(transform.translation)).or_default().push((entity, transform));
+        grid.entry(grid_cell(transform.translation))
+            .or_default()
+            .push((entity, transform));
     }
 }
 
@@ -381,13 +423,18 @@ fn supported_by_player(entity: Entity, transform: &Transform, grid: &PlayerGrid)
     let (cell_x, cell_z) = grid_cell(transform.translation);
     for x in (cell_x - 1)..=(cell_x + 1) {
         for z in (cell_z - 1)..=(cell_z + 1) {
-            let Some(players) = grid.get(&(x, z)) else { continue };
+            let Some(players) = grid.get(&(x, z)) else {
+                continue;
+            };
             for &(other_entity, other_transform) in players {
                 if other_entity == entity {
                     continue;
                 }
 
-                let local = other_transform.rotation.inverse().mul_vec3(transform.translation - other_transform.translation);
+                let local = other_transform
+                    .rotation
+                    .inverse()
+                    .mul_vec3(transform.translation - other_transform.translation);
                 let within_x = local.x.abs() <= 1.0 * 0.28 + 2.0 * 0.28 * 0.5;
                 let within_z = local.z.abs() <= 0.5 * 0.28 + 1.0 * 0.28 * 0.5;
                 let max_height = 2.5 * 0.28 + 2.5 * 0.28 + 0.15;
@@ -425,13 +472,18 @@ fn grounded_for_animation(tracker: &PlayerVelocityTracker) -> bool {
 
 pub fn track_player_velocities(
     mut commands: Commands,
-    mut query: Query<(Entity, &Transform, Option<&mut PlayerVelocityTracker>), With<crate::common::net::components::Player>>,
+    mut query: Query<
+        (Entity, &Transform, Option<&mut PlayerVelocityTracker>),
+        With<crate::common::net::components::Player>,
+    >,
     spatial_query: SpatialQuery,
     time: Res<Time>,
     mut cached_players: Local<Vec<(Entity, Transform)>>,
     mut player_grid: Local<PlayerGrid>,
 ) {
-    let Some(dt) = tracking_delta(time.delta_secs()) else { return };
+    let Some(dt) = tracking_delta(time.delta_secs()) else {
+        return;
+    };
 
     cached_players.clear();
     cached_players.extend(query.iter().map(|(e, t, _)| (e, *t)));
@@ -457,7 +509,11 @@ pub fn track_player_velocities(
 }
 
 pub fn animate_player(
-    mut anim_players: Query<(&mut AnimationPlayer, &mut AnimationTransitions, &mut PlayerAnimationMarker)>,
+    mut anim_players: Query<(
+        &mut AnimationPlayer,
+        &mut AnimationTransitions,
+        &mut PlayerAnimationMarker,
+    )>,
     players: Query<&PlayerVelocityTracker>,
     player_anims: Res<PlayerAnimationGraphLoaded>,
 ) {
@@ -478,7 +534,9 @@ pub fn animate_player(
         let walk_index = player_anims.indices[1];
         let idle_index = player_anims.indices[0];
 
-        let is_jump_finished = player.animation(jump_index).map_or(false, |anim| anim.is_finished());
+        let is_jump_finished = player
+            .animation(jump_index)
+            .is_some_and(|anim| anim.is_finished());
 
         let mut active_index = if !grounded_for_animation(tracker) {
             if velocity.y > 0.0 {
@@ -498,12 +556,27 @@ pub fn animate_player(
 
         if marker.current_index != Some(active_index) {
             if active_index == jump_index {
-                transitions.play(&mut player, active_index, std::time::Duration::from_millis(150)).replay();
+                transitions
+                    .play(
+                        &mut player,
+                        active_index,
+                        std::time::Duration::from_millis(150),
+                    )
+                    .replay();
             } else {
-                transitions.play(&mut player, active_index, std::time::Duration::from_millis(250)).repeat();
+                transitions
+                    .play(
+                        &mut player,
+                        active_index,
+                        std::time::Duration::from_millis(250),
+                    )
+                    .repeat();
             }
             marker.current_index = Some(active_index);
-            info!("PLAYER_LOG: Animation state changed to NodeIndex {:?}", active_index);
+            info!(
+                "PLAYER_LOG: Animation state changed to NodeIndex {:?}",
+                active_index
+            );
         }
     }
 }
@@ -529,17 +602,22 @@ mod tests {
 
     fn world_support(collider: Collider, transform: Transform, player_position: Vec3) -> bool {
         let mut app = App::new();
-        app.add_plugins((MinimalPlugins, AssetPlugin::default(), PhysicsPlugins::default()))
-            .init_asset::<Mesh>()
-            .init_resource::<ProbeResult>()
-            .add_systems(Update, run_probe);
+        app.add_plugins((
+            MinimalPlugins,
+            AssetPlugin::default(),
+            PhysicsPlugins::default(),
+        ))
+        .init_asset::<Mesh>()
+        .init_resource::<ProbeResult>()
+        .add_systems(Update, run_probe);
         app.world_mut().spawn((
             RigidBody::Static,
             collider,
             transform,
             CollisionLayers::from_bits(0b0001, 0xFFFF_FFFF),
         ));
-        app.world_mut().spawn((ProbePlayer, Transform::from_translation(player_position)));
+        app.world_mut()
+            .spawn((ProbePlayer, Transform::from_translation(player_position)));
         app.update();
         app.update();
         app.world().resource::<ProbeResult>().0
@@ -553,7 +631,10 @@ mod tests {
         let lower_transform = Transform::from_xyz(0.9, 0.0, 0.0);
         let upper_transform = Transform::from_xyz(0.9, 1.4, 0.0);
         let mut grid = PlayerGrid::default();
-        rebuild_player_grid(&mut grid, [(lower, lower_transform), (upper, upper_transform)].into_iter());
+        rebuild_player_grid(
+            &mut grid,
+            [(lower, lower_transform), (upper, upper_transform)].into_iter(),
+        );
 
         assert!(supported_by_player(upper, &upper_transform, &grid));
     }
@@ -566,7 +647,10 @@ mod tests {
         let lower_transform = Transform::from_xyz(0.0, 0.0, 0.0);
         let upper_transform = Transform::from_xyz(0.8, 1.4, 0.0);
         let mut grid = PlayerGrid::default();
-        rebuild_player_grid(&mut grid, [(lower, lower_transform), (upper, upper_transform)].into_iter());
+        rebuild_player_grid(
+            &mut grid,
+            [(lower, lower_transform), (upper, upper_transform)].into_iter(),
+        );
 
         assert!(!supported_by_player(upper, &upper_transform, &grid));
     }
@@ -576,10 +660,14 @@ mod tests {
         let mut world = World::new();
         let lower = world.spawn_empty().id();
         let upper = world.spawn_empty().id();
-        let lower_transform = Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::FRAC_PI_2));
+        let lower_transform =
+            Transform::from_rotation(Quat::from_rotation_y(std::f32::consts::FRAC_PI_2));
         let upper_transform = Transform::from_xyz(0.0, 1.4, 0.4);
         let mut grid = PlayerGrid::default();
-        rebuild_player_grid(&mut grid, [(lower, lower_transform), (upper, upper_transform)].into_iter());
+        rebuild_player_grid(
+            &mut grid,
+            [(lower, lower_transform), (upper, upper_transform)].into_iter(),
+        );
 
         assert!(supported_by_player(upper, &upper_transform, &grid));
     }

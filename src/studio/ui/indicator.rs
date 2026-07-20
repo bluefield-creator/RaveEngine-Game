@@ -67,14 +67,14 @@ pub fn update_camera_fov(
     if let Ok((mut free_camera, mut projection)) = camera_query.single_mut() {
         if ctrl_pressed {
             free_camera.scroll_factor = 0.0;
-            if scroll_val != 0.0 {
-                if let Projection::Perspective(ref mut perspective) = *projection {
-                    let mut fov_deg = perspective.fov.to_degrees();
-                    fov_deg = (fov_deg - scroll_val * 2.0).clamp(10.0, 120.0);
-                    perspective.fov = fov_deg.to_radians();
-                    indicator.current_fov = fov_deg;
-                    indicator.visible_timer = 2.0;
-                }
+            if scroll_val != 0.0
+                && let Projection::Perspective(ref mut perspective) = *projection
+            {
+                let mut fov_deg = perspective.fov.to_degrees();
+                fov_deg = (fov_deg - scroll_val * 2.0).clamp(10.0, 120.0);
+                perspective.fov = fov_deg.to_radians();
+                indicator.current_fov = fov_deg;
+                indicator.visible_timer = 2.0;
             }
         } else {
             free_camera.scroll_factor = 0.1;
@@ -83,12 +83,11 @@ pub fn update_camera_fov(
 
     if indicator.visible_timer > 0.0 {
         indicator.visible_timer -= time.delta_secs();
-        if !indicator.interacting {
-            if let Ok((_, projection)) = camera_query.single() {
-                if let Projection::Perspective(perspective) = projection {
-                    indicator.current_fov = perspective.fov.to_degrees();
-                }
-            }
+        if !indicator.interacting
+            && let Ok((_, projection)) = camera_query.single()
+            && let Projection::Perspective(perspective) = projection
+        {
+            indicator.current_fov = perspective.fov.to_degrees();
         }
     }
 }
@@ -128,24 +127,22 @@ pub fn draw_indicator(
                             let sliderres = ui.add(
                                 egui::Slider::new(&mut speed, 0.1..=100.0).text("Camera Speed"),
                             );
-                            if sliderres.changed() {
-                                if let Some((free_camera, mut free_camera_state)) =
+                            if sliderres.changed()
+                                && let Some((free_camera, mut free_camera_state)) =
                                     cameraquery.iter_mut().next()
-                                {
-                                    free_camera_state.speed_multiplier =
-                                        speed / free_camera.walk_speed;
-                                    cameraindicator.current_speed = speed;
-                                }
+                            {
+                                free_camera_state.speed_multiplier = speed / free_camera.walk_speed;
+                                cameraindicator.current_speed = speed;
                             }
                             slideractive =
                                 sliderres.dragged() || sliderres.has_focus() || sliderres.hovered();
                         });
                     });
 
-                if let Some(pos) = ctx.input(|i| i.pointer.latest_pos()) {
-                    if frameres.response.rect.contains(pos) {
-                        innerhovered = true;
-                    }
+                if let Some(pos) = ctx.input(|i| i.pointer.latest_pos())
+                    && frameres.response.rect.contains(pos)
+                {
+                    innerhovered = true;
                 }
             });
 
@@ -186,25 +183,22 @@ pub fn draw_fov_indicator(
                             let mut fov = fov_indicator.current_fov;
                             let sliderres = ui
                                 .add(egui::Slider::new(&mut fov, 10.0..=120.0).text("Camera FOV"));
-                            if sliderres.changed() {
-                                if let Ok(mut projection) = camera_query.single_mut() {
-                                    if let Projection::Perspective(ref mut perspective) =
-                                        *projection
-                                    {
-                                        perspective.fov = fov.to_radians();
-                                        fov_indicator.current_fov = fov;
-                                    }
-                                }
+                            if sliderres.changed()
+                                && let Ok(mut projection) = camera_query.single_mut()
+                                && let Projection::Perspective(ref mut perspective) = *projection
+                            {
+                                perspective.fov = fov.to_radians();
+                                fov_indicator.current_fov = fov;
                             }
                             slideractive =
                                 sliderres.dragged() || sliderres.has_focus() || sliderres.hovered();
                         });
                     });
 
-                if let Some(pos) = ctx.input(|i| i.pointer.latest_pos()) {
-                    if frameres.response.rect.contains(pos) {
-                        innerhovered = true;
-                    }
+                if let Some(pos) = ctx.input(|i| i.pointer.latest_pos())
+                    && frameres.response.rect.contains(pos)
+                {
+                    innerhovered = true;
                 }
             });
 

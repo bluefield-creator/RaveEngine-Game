@@ -35,23 +35,19 @@ impl LuaUserData for LightingService {
         methods.add_meta_method(LuaMetaMethod::NewIndex, |lua, _, (key, value): (String, LuaValue)| {
             let world = unsafe { crate::scripting::vm::server_vm::world_from_lua(lua)? };
 
-            match key.as_str() {
-                "TimeOfDay" => {
-                    let opt_val = match value {
-                        LuaValue::Number(n) => Some(n),
-                        LuaValue::Integer(i) => Some(i as f64),
-                        _ => None,
-                    };
-                    if let Some(val) = opt_val {
-                        if let Some(mut service) = world.get_resource_mut::<crate::common::game::environment::lighting::LightingService>() {
-                            service.time_of_day = val as f32;
-                            if let Ok(mut shared) = crate::studio::tools::SHARED_LIGHTING_SERVICE.write() {
-                                *shared = val as f32;
-                            }
+            if key.as_str() == "TimeOfDay" {
+                let opt_val = match value {
+                    LuaValue::Number(n) => Some(n),
+                    LuaValue::Integer(i) => Some(i as f64),
+                    _ => None,
+                };
+                if let Some(val) = opt_val
+                    && let Some(mut service) = world.get_resource_mut::<crate::common::game::environment::lighting::LightingService>() {
+                        service.time_of_day = val as f32;
+                        if let Ok(mut shared) = crate::studio::tools::SHARED_LIGHTING_SERVICE.write() {
+                            *shared = val as f32;
                         }
                     }
-                }
-                _ => {}
             }
             Ok(())
         });

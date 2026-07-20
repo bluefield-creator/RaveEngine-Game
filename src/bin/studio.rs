@@ -1,7 +1,7 @@
-use bevy::prelude::*;
-use bevy::log::LogPlugin;
 use RaveEngineLib::common::CommonPlugin;
 use RaveEngineLib::studio::StudioPlugin;
+use bevy::log::LogPlugin;
+use bevy::prelude::*;
 
 fn main() {
     let rust_log = std::env::var("RUST_LOG").unwrap_or_default();
@@ -21,18 +21,26 @@ fn main() {
             auto_create_primary_context: false,
             ..default()
         })
-        .add_plugins(DefaultPlugins.set(LogPlugin {
-            filter: "info,wgpu=warn,naga=warn,wgpu_hal=warn,wgpu_core=warn,offset_allocator=off".to_string(),
-            ..default()
-        }).set(bevy::render::RenderPlugin {
-            render_creation: bevy::render::settings::RenderCreation::Automatic(Box::new(
-                bevy::render::settings::WgpuSettings {
-                    disabled_features: Some(bevy::render::settings::WgpuFeatures::TEXTURE_BINDING_ARRAY),
+        .add_plugins(
+            DefaultPlugins
+                .set(LogPlugin {
+                    filter:
+                        "info,wgpu=warn,naga=warn,wgpu_hal=warn,wgpu_core=warn,offset_allocator=off"
+                            .to_string(),
                     ..default()
-                }
-            )),
-            ..default()
-        }))
+                })
+                .set(bevy::render::RenderPlugin {
+                    render_creation: bevy::render::settings::RenderCreation::Automatic(Box::new(
+                        bevy::render::settings::WgpuSettings {
+                            disabled_features: Some(
+                                bevy::render::settings::WgpuFeatures::TEXTURE_BINDING_ARRAY,
+                            ),
+                            ..default()
+                        },
+                    )),
+                    ..default()
+                }),
+        )
         .add_plugins(lightyear::prelude::client::ClientPlugins {
             tick_duration: core::time::Duration::from_secs_f64(1.0 / 60.0),
         })

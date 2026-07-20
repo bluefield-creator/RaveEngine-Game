@@ -1,9 +1,9 @@
-use bevy::prelude::*;
-use bevy::state::app::StatesPlugin;
+use crate::app::common::log::setup_app_logging;
 use crate::app::server::config::ServerAppConfig;
 use crate::common::CommonPlugin;
 use crate::server::ServerPlugin;
-use crate::app::common::log::setup_app_logging;
+use bevy::prelude::*;
+use bevy::state::app::StatesPlugin;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 pub static SHUTDOWN_SERVER: AtomicBool = AtomicBool::new(false);

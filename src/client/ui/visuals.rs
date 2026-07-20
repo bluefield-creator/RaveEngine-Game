@@ -1,14 +1,13 @@
 use bevy::prelude::*;
-use bevy_egui::{egui, EguiContexts};
+use bevy_egui::{EguiContexts, egui};
 
-pub fn configure_client_visuals(
-    mut contexts: EguiContexts,
-    mut initialized: Local<bool>,
-) {
+pub fn configure_client_visuals(mut contexts: EguiContexts, mut initialized: Local<bool>) {
     if *initialized {
         return;
     }
-    let Ok(ctx) = contexts.ctx_mut() else { return; };
+    let Ok(ctx) = contexts.ctx_mut() else {
+        return;
+    };
 
     let mut visuals = egui::Visuals::dark();
     visuals.widgets.noninteractive.bg_fill = egui::Color32::from_rgba_unmultiplied(61, 61, 61, 102);
@@ -55,9 +54,10 @@ pub fn configure_client_visuals(
             "Ubuntu-Medium".to_owned(),
             std::sync::Arc::new(egui::FontData::from_owned(medium_font_bytes)),
         );
-        fonts
-            .families
-            .insert(egui::FontFamily::Name("Medium".into()), vec!["Ubuntu-Medium".to_owned()]);
+        fonts.families.insert(
+            egui::FontFamily::Name("Medium".into()),
+            vec!["Ubuntu-Medium".to_owned()],
+        );
     }
 
     if !bold_font_bytes.is_empty() {
@@ -65,9 +65,10 @@ pub fn configure_client_visuals(
             "Ubuntu-Bold".to_owned(),
             std::sync::Arc::new(egui::FontData::from_owned(bold_font_bytes)),
         );
-        fonts
-            .families
-            .insert(egui::FontFamily::Name("Bold".into()), vec!["Ubuntu-Bold".to_owned()]);
+        fonts.families.insert(
+            egui::FontFamily::Name("Bold".into()),
+            vec!["Ubuntu-Bold".to_owned()],
+        );
         if !has_font {
             fonts
                 .families

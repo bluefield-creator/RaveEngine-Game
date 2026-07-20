@@ -1,9 +1,9 @@
-use std::time::Instant;
+use bevy::log::*;
+use bevy::prelude::{Entity, Resource};
+use mlua::prelude::*;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
-use bevy::prelude::{Entity, Resource};
-use bevy::log::*;
-use mlua::prelude::*;
+use std::time::Instant;
 
 #[derive(Resource, Default)]
 pub struct ServiceEntities {
@@ -25,11 +25,18 @@ pub struct LuaScheduler {
 pub struct SchedulerRef(pub Arc<Mutex<LuaScheduler>>);
 
 pub struct ScriptRegistry {
-    pub connections: std::collections::HashMap<(Entity, &'static str), Vec<std::sync::Arc<mlua::RegistryKey>>>,
+    pub connections:
+        std::collections::HashMap<(Entity, &'static str), Vec<std::sync::Arc<mlua::RegistryKey>>>,
 }
 
 #[derive(Clone)]
 pub struct ScriptRegistryRef(pub Arc<Mutex<ScriptRegistry>>);
+
+impl Default for LuaScheduler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl LuaScheduler {
     pub fn new() -> Self {
@@ -62,7 +69,8 @@ impl LuaScheduler {
                 match thread.resume::<Option<f32>>(()) {
                     Ok(yielded_val) => {
                         if thread.status() == LuaThreadStatus::Resumable {
-                            let wake = yielded_val.map(|sec| now + std::time::Duration::from_secs_f64(sec as f64));
+                            let wake = yielded_val
+                                .map(|sec| now + std::time::Duration::from_secs_f64(sec as f64));
                             self.tasks.push(LuaTask {
                                 thread_key,
                                 wake_time: wake,
@@ -87,7 +95,8 @@ impl LuaScheduler {
                 match thread.resume::<Option<f32>>(()) {
                     Ok(yielded_val) => {
                         if thread.status() == LuaThreadStatus::Resumable {
-                            let wake = yielded_val.map(|sec| now + std::time::Duration::from_secs_f64(sec as f64));
+                            let wake = yielded_val
+                                .map(|sec| now + std::time::Duration::from_secs_f64(sec as f64));
                             self.tasks.push(LuaTask {
                                 thread_key,
                                 wake_time: wake,

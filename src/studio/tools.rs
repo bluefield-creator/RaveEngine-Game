@@ -147,15 +147,15 @@ impl UndoCommand {
                 if *entity == old {
                     *entity = new;
                 }
-                if let Some(p) = old_parent {
-                    if *p == old {
-                        *p = new;
-                    }
+                if let Some(p) = old_parent
+                    && *p == old
+                {
+                    *p = new;
                 }
-                if let Some(p) = new_parent {
-                    if *p == old {
-                        *p = new;
-                    }
+                if let Some(p) = new_parent
+                    && *p == old
+                {
+                    *p = new;
                 }
             }
             UndoCommand::SpawnTrees { roots, snapshots }
@@ -350,10 +350,10 @@ pub fn handle_undo_redo_action(
                                 *transform = old_transform;
                             }
                             if let Some(parent) = old_parent {
-                                if commands.get_entity(entity).is_ok() {
-                                    if let Ok(mut p_cmd) = commands.get_entity(parent) {
-                                        p_cmd.add_child(entity);
-                                    }
+                                if commands.get_entity(entity).is_ok()
+                                    && let Ok(mut p_cmd) = commands.get_entity(parent)
+                                {
+                                    p_cmd.add_child(entity);
                                 }
                             } else {
                                 if let Ok(mut e_cmd) = commands.get_entity(entity) {
@@ -439,10 +439,10 @@ pub fn handle_undo_redo_action(
                                 *transform = new_transform;
                             }
                             if let Some(parent) = new_parent {
-                                if commands.get_entity(entity).is_ok() {
-                                    if let Ok(mut p_cmd) = commands.get_entity(parent) {
-                                        p_cmd.add_child(entity);
-                                    }
+                                if commands.get_entity(entity).is_ok()
+                                    && let Ok(mut p_cmd) = commands.get_entity(parent)
+                                {
+                                    p_cmd.add_child(entity);
                                 }
                             } else {
                                 if let Ok(mut e_cmd) = commands.get_entity(entity) {
@@ -615,10 +615,10 @@ pub fn select_brick(
     mut contexts: bevy_egui::EguiContexts,
     keys: Res<ButtonInput<KeyCode>>,
 ) {
-    if let Ok(ctx) = contexts.ctx_mut() {
-        if ctx.egui_wants_pointer_input() || ctx.egui_wants_keyboard_input() {
-            return;
-        }
+    if let Ok(ctx) = contexts.ctx_mut()
+        && (ctx.egui_wants_pointer_input() || ctx.egui_wants_keyboard_input())
+    {
+        return;
     }
 
     let shift = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
@@ -628,7 +628,7 @@ pub fn select_brick(
         let target = click.event_target();
         if click.button == PointerButton::Primary {
             if bricks.get(target).is_ok() {
-                if brick_physics.get(target).map_or(false, |p| p.locked) {
+                if brick_physics.get(target).is_ok_and(|p| p.locked) {
                     continue;
                 }
                 if shift {
@@ -799,18 +799,15 @@ pub fn handle_drag_end(
         }
         if let (Some(gizmo_entity), Some(start_transform)) =
             (drag_state.gizmo_entity, drag_state.start_transform)
+            && let Ok(gizmo) = gizmos.get(gizmo_entity)
+            && let Ok(final_transform) = bricks.get(gizmo.target)
+            && start_transform != *final_transform
         {
-            if let Ok(gizmo) = gizmos.get(gizmo_entity) {
-                if let Ok(final_transform) = bricks.get(gizmo.target) {
-                    if start_transform != *final_transform {
-                        history.push_command(UndoCommand::TransformChange {
-                            entity: gizmo.target,
-                            old_transform: start_transform,
-                            new_transform: *final_transform,
-                        });
-                    }
-                }
-            }
+            history.push_command(UndoCommand::TransformChange {
+                entity: gizmo.target,
+                old_transform: start_transform,
+                new_transform: *final_transform,
+            });
         }
         drag_state.active = false;
         drag_state.gizmo_entity = None;
@@ -836,7 +833,7 @@ pub fn handle_part_drag_start(
         if gizmos.get(target).is_ok() {
             continue;
         }
-        if brick_physics.get(target).map_or(false, |p| p.locked) {
+        if brick_physics.get(target).is_ok_and(|p| p.locked) {
             continue;
         }
         if let Ok(transform) = bricks.get(target) {
@@ -934,7 +931,7 @@ pub fn handle_part_drag(
             && (bricks.contains(entity)
                 || name_query
                     .get(entity)
-                    .map_or(false, |n| n.as_str() == "Baseplate"))
+                    .is_ok_and(|n| n.as_str() == "Baseplate"))
     };
 
     let raycast_settings = MeshRayCastSettings {
@@ -1012,16 +1009,14 @@ pub fn handle_part_drag_end(
         if let (Some(dragged_entity), Some(part_drag_state_start_transform)) = (
             part_drag_state.dragged_entity,
             part_drag_state.start_transform,
-        ) {
-            if let Ok(final_transform) = bricks.get(dragged_entity) {
-                if part_drag_state_start_transform != *final_transform {
-                    history.push_command(UndoCommand::TransformChange {
-                        entity: dragged_entity,
-                        old_transform: part_drag_state_start_transform,
-                        new_transform: *final_transform,
-                    });
-                }
-            }
+        ) && let Ok(final_transform) = bricks.get(dragged_entity)
+            && part_drag_state_start_transform != *final_transform
+        {
+            history.push_command(UndoCommand::TransformChange {
+                entity: dragged_entity,
+                old_transform: part_drag_state_start_transform,
+                new_transform: *final_transform,
+            });
         }
         part_drag_state.active = false;
         part_drag_state.dragged_entity = None;
@@ -1041,7 +1036,7 @@ pub fn handle_hover(
         let target = over.event_target();
         if gizmos.get(target).is_ok() {
             hover_state.hovered_gizmo = Some(target);
-        } else if bricks.get(target).is_ok() && !brick_physics.get(target).map_or(false, |p| p.locked) {
+        } else if bricks.get(target).is_ok() && !brick_physics.get(target).is_ok_and(|p| p.locked) {
             hover_state.hovered_brick = Some(target);
         }
     }
@@ -1067,9 +1062,13 @@ pub fn update_cursor(
         return;
     };
     if drag_state.active || part_drag_state.active {
-        commands.entity(window_entity).insert(CursorIcon::from(SystemCursorIcon::Grabbing));
+        commands
+            .entity(window_entity)
+            .insert(CursorIcon::from(SystemCursorIcon::Grabbing));
     } else if hover_state.hovered_gizmo.is_some() || hover_state.hovered_brick.is_some() {
-        commands.entity(window_entity).insert(CursorIcon::from(SystemCursorIcon::Grab));
+        commands
+            .entity(window_entity)
+            .insert(CursorIcon::from(SystemCursorIcon::Grab));
     } else {
         commands.entity(window_entity).remove::<CursorIcon>();
     }
@@ -1158,67 +1157,70 @@ pub fn handle_marquee_selection(
         && !hover_state.is_hovering_ui
         && !drag_state.active
         && !part_drag_state.active
+        && let Some(cursor_pos) = window.cursor_position()
     {
-        if let Some(cursor_pos) = window.cursor_position() {
-            marquee_state.start_pos = Some(cursor_pos);
-            marquee_state.current_pos = Some(cursor_pos);
-            marquee_state.active = false;
-        }
+        marquee_state.start_pos = Some(cursor_pos);
+        marquee_state.current_pos = Some(cursor_pos);
+        marquee_state.active = false;
     }
 
     if mouse_buttons.pressed(MouseButton::Left) {
-        if let Some(start) = marquee_state.start_pos {
-            if let Some(cursor_pos) = window.cursor_position() {
-                marquee_state.current_pos = Some(cursor_pos);
-                if !marquee_state.active {
-                    if start.distance(cursor_pos) > 5.0 {
-                        if !drag_state.active && !part_drag_state.active {
-                            marquee_state.active = true;
-                        }
-                    }
-                }
+        if let Some(start) = marquee_state.start_pos
+            && let Some(cursor_pos) = window.cursor_position()
+        {
+            marquee_state.current_pos = Some(cursor_pos);
+            if !marquee_state.active
+                && start.distance(cursor_pos) > 5.0
+                && !drag_state.active
+                && !part_drag_state.active
+            {
+                marquee_state.active = true;
             }
         }
     } else if mouse_buttons.just_released(MouseButton::Left) {
-        if marquee_state.active {
-            if let (Some(start), Some(end)) = (marquee_state.start_pos, marquee_state.current_pos) {
-                let min_x = start.x.min(end.x);
-                let max_x = start.x.max(end.x);
-                let min_y = start.y.min(end.y);
-                let max_y = start.y.max(end.y);
+        if marquee_state.active
+            && let (Some(start), Some(end)) = (marquee_state.start_pos, marquee_state.current_pos)
+        {
+            let min_x = start.x.min(end.x);
+            let max_x = start.x.max(end.x);
+            let min_y = start.y.min(end.y);
+            let max_y = start.y.max(end.y);
 
-                let Some((camera, camera_transform)) = camera_query.iter().next() else {
-                    return;
-                };
+            let Some((camera, camera_transform)) = camera_query.iter().next() else {
+                return;
+            };
 
-                let mut selected_entities = Vec::new();
-                for (entity, global_transform) in &bricks_query {
-                    if brick_physics.get(entity).map_or(false, |p| p.locked) {
-                        continue;
-                    }
-                    let world_pos = global_transform.translation();
-                    if let Ok(screen_pos) = camera.world_to_viewport(camera_transform, world_pos) {
-                        if screen_pos.x >= min_x
-                            && screen_pos.x <= max_x
-                            && screen_pos.y >= min_y
-                            && screen_pos.y <= max_y
-                        {
-                            selected_entities.push(entity);
-                            add_children_recursive(entity, &bricks_query, &children_query, &mut selected_entities);
-                        }
-                    }
+            let mut selected_entities = Vec::new();
+            for (entity, global_transform) in &bricks_query {
+                if brick_physics.get(entity).is_ok_and(|p| p.locked) {
+                    continue;
                 }
-
-                if !selected_entities.is_empty() {
-                    selection.entities = selected_entities.clone();
-                    selection.entity = Some(selected_entities[0]);
-                    selection.workspace_selected = false;
-                    selection.players_selected = false;
-                    selection.lighting_selected = false;
-                } else {
-                    selection.entities.clear();
-                    selection.entity = None;
+                let world_pos = global_transform.translation();
+                if let Ok(screen_pos) = camera.world_to_viewport(camera_transform, world_pos)
+                    && screen_pos.x >= min_x
+                    && screen_pos.x <= max_x
+                    && screen_pos.y >= min_y
+                    && screen_pos.y <= max_y
+                {
+                    selected_entities.push(entity);
+                    add_children_recursive(
+                        entity,
+                        &bricks_query,
+                        &children_query,
+                        &mut selected_entities,
+                    );
                 }
+            }
+
+            if !selected_entities.is_empty() {
+                selection.entities = selected_entities.clone();
+                selection.entity = Some(selected_entities[0]);
+                selection.workspace_selected = false;
+                selection.players_selected = false;
+                selection.lighting_selected = false;
+            } else {
+                selection.entities.clear();
+                selection.entity = None;
             }
         }
         marquee_state.active = false;

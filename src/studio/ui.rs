@@ -23,10 +23,7 @@ pub use resources::{
 pub use visuals::configure_visuals;
 
 pub(crate) fn line_numbers(cache: &mut Option<(usize, String)>, total_lines: usize) -> &str {
-    if cache
-        .as_ref()
-        .map_or(true, |cached| cached.0 != total_lines)
-    {
+    if cache.as_ref().is_none_or(|cached| cached.0 != total_lines) {
         let max_digit_width = total_lines.to_string().len();
         let mut text = String::with_capacity(total_lines * (max_digit_width + 1));
         for line in 1..=total_lines {
@@ -320,13 +317,12 @@ pub fn studio_ui(
                                     queries.entities_query.iter()
                                 {
                                     let name_str = name.as_str();
-                                    if brick_opt.is_some()
+                                    if (brick_opt.is_some()
                                         || name_str == "Player"
-                                        || name_str.starts_with("Player_")
+                                        || name_str.starts_with("Player_"))
+                                        && let Ok(mut e) = ui_res.commands.get_entity(entity)
                                     {
-                                        if let Ok(mut e) = ui_res.commands.get_entity(entity) {
-                                            e.despawn();
-                                        }
+                                        e.despawn();
                                     }
                                 }
 
@@ -366,13 +362,12 @@ pub fn studio_ui(
                                 {
                                     if child_of_opt.is_none() && brick_opt.is_none() {
                                         let n = name.as_str();
-                                        if n.contains("Armature")
+                                        if (n.contains("Armature")
                                             || n == "LocalPlayer"
-                                            || n.starts_with("Player_")
+                                            || n.starts_with("Player_"))
+                                            && let Ok(mut e) = ui_res.commands.get_entity(entity)
                                         {
-                                            if let Ok(mut e) = ui_res.commands.get_entity(entity) {
-                                                e.despawn();
-                                            }
+                                            e.despawn();
                                         }
                                     }
                                 }
@@ -380,10 +375,10 @@ pub fn studio_ui(
                                 for (entity, _, _, _, _, s_opt, l_opt, m_opt) in
                                     queries.explorer_query.iter()
                                 {
-                                    if s_opt.is_some() || l_opt.is_some() || m_opt.is_some() {
-                                        if let Ok(mut e) = ui_res.commands.get_entity(entity) {
-                                            e.despawn();
-                                        }
+                                    if (s_opt.is_some() || l_opt.is_some() || m_opt.is_some())
+                                        && let Ok(mut e) = ui_res.commands.get_entity(entity)
+                                    {
+                                        e.despawn();
                                     }
                                 }
 
@@ -429,20 +424,20 @@ pub fn studio_ui(
                                         }
                                     }
                                     let new_script_entity = cmd.id();
-                                    if let Some(ref p_name) = script_data.parent_name {
-                                        if let Some(&parent_entity) = named_entities.get(p_name) {
-                                            ui_res
-                                                .commands
-                                                .entity(parent_entity)
-                                                .add_child(new_script_entity);
-                                        }
+                                    if let Some(ref p_name) = script_data.parent_name
+                                        && let Some(&parent_entity) = named_entities.get(p_name)
+                                    {
+                                        ui_res
+                                            .commands
+                                            .entity(parent_entity)
+                                            .add_child(new_script_entity);
                                     }
                                 }
 
-                                if let Some(gravity_val) = ui_state.playtest_backup.gravity.take() {
-                                    if let Some(ref mut g) = ui_res.gravity {
-                                        g.0 = gravity_val;
-                                    }
+                                if let Some(gravity_val) = ui_state.playtest_backup.gravity.take()
+                                    && let Some(ref mut g) = ui_res.gravity
+                                {
+                                    g.0 = gravity_val;
                                 }
                                 if let Some(ps_val) =
                                     ui_state.playtest_backup.players_service.take()
@@ -479,7 +474,7 @@ pub fn studio_ui(
         .fill(egui::Color32::from_rgb(245, 246, 247))
         .inner_margin(egui::Margin::same(0));
 
-    let camera_transform_val = queries.camera_transform_query.iter().next().map(|t| *t);
+    let camera_transform_val = queries.camera_transform_query.iter().next().copied();
 
     let top_bar_res = egui::Panel::top("topbar").frame(frame).show(ctx, |ui| {
         panels::draw_top_bar(
@@ -621,11 +616,11 @@ pub fn studio_ui(
                 }
             }
             EditorAction::Rename => {
-                if let Some(entity) = ui_state.selection.entity {
-                    if let Ok((_, name, _, _, _, _, _, _)) = queries.explorer_query.get(entity) {
-                        ui_state.explorer_state.rename_entity = Some(entity);
-                        ui_state.explorer_state.rename_buffer = name.to_string();
-                    }
+                if let Some(entity) = ui_state.selection.entity
+                    && let Ok((_, name, _, _, _, _, _, _)) = queries.explorer_query.get(entity)
+                {
+                    ui_state.explorer_state.rename_entity = Some(entity);
+                    ui_state.explorer_state.rename_buffer = name.to_string();
                 }
             }
             EditorAction::SelectAll => {
@@ -1009,7 +1004,7 @@ pub fn studio_ui(
                         standard_material: ui_state.copiedbuffer.material.clone(),
                         studs_material: ui_state.copiedbuffer.studs_material.clone(),
                         parent,
-                        physics: ui_state.copiedbuffer.physics.clone(),
+                        physics: ui_state.copiedbuffer.physics,
                         color: None,
                     };
                     Some(crate::common::game::bricks::data::spawn_from_data(
@@ -1020,10 +1015,10 @@ pub fn studio_ui(
                     None
                 };
                 if let Some(entity) = spawned {
-                    if ui_state.copiedbuffer.script.is_some() {
-                        if let Some(parent) = parent {
-                            ui_res.commands.entity(parent).add_child(entity);
-                        }
+                    if ui_state.copiedbuffer.script.is_some()
+                        && let Some(parent) = parent
+                    {
+                        ui_res.commands.entity(parent).add_child(entity);
                     }
                     ui_state.selection.entity = Some(entity);
                     ui_state.selection.entities = vec![entity];
@@ -1033,56 +1028,51 @@ pub fn studio_ui(
         }
     }
 
-    if !ui_state.document_state.dirty {
-        if let Some(pending) = ui_state.document_state.pending.take() {
-            match pending {
-                resources::PendingDocumentAction::NewProject => {
-                    for (entity, _, _, _, brick, server, local, module) in
-                        queries.explorer_query.iter()
-                    {
-                        if brick.is_some()
-                            || server.is_some()
-                            || local.is_some()
-                            || module.is_some()
-                        {
-                            ui_res.commands.entity(entity).try_despawn();
-                        }
-                    }
-                    *ui_state.selection = Selection::default();
-                    *ui_state.active_editor = ActiveScriptEditor::default();
-                    *ui_res.history = crate::studio::tools::UndoRedoHistory::default();
-                    *ui_state.graphics_settings = GraphicsSettings::default();
-                    if let Some(ref mut lighting) = ui_res.lighting_service {
-                        **lighting =
-                            crate::common::game::environment::lighting::LightingService::default();
-                    }
-                    ui_state.onboarding_data.save_path.clear();
-                    ui_state
-                        .next_onboarding_state
-                        .set(crate::studio::tools::OnboardingState::TemplateSelection);
-                }
-                resources::PendingDocumentAction::Open => {
-                    if !ui_state
-                        .file_dialog_state
-                        .is_open
-                        .swap(true, std::sync::atomic::Ordering::Relaxed)
-                    {
-                        let tx = ui_state.file_dialog_state.tx.clone();
-                        std::thread::spawn(move || {
-                            let result = rfd::FileDialog::new()
-                                .add_filter("Rave Project", &["vrtx"])
-                                .pick_file();
-                            let _ = tx.send(
-                                result
-                                    .map(resources::FileDialogResult::OpenFile)
-                                    .unwrap_or(resources::FileDialogResult::Cancel),
-                            );
-                        });
+    if !ui_state.document_state.dirty
+        && let Some(pending) = ui_state.document_state.pending.take()
+    {
+        match pending {
+            resources::PendingDocumentAction::NewProject => {
+                for (entity, _, _, _, brick, server, local, module) in queries.explorer_query.iter()
+                {
+                    if brick.is_some() || server.is_some() || local.is_some() || module.is_some() {
+                        ui_res.commands.entity(entity).try_despawn();
                     }
                 }
-                resources::PendingDocumentAction::Exit => {
-                    ui_res.app_exit_writer.write(AppExit::Success);
+                *ui_state.selection = Selection::default();
+                *ui_state.active_editor = ActiveScriptEditor::default();
+                *ui_res.history = crate::studio::tools::UndoRedoHistory::default();
+                *ui_state.graphics_settings = GraphicsSettings::default();
+                if let Some(ref mut lighting) = ui_res.lighting_service {
+                    **lighting =
+                        crate::common::game::environment::lighting::LightingService::default();
                 }
+                ui_state.onboarding_data.save_path.clear();
+                ui_state
+                    .next_onboarding_state
+                    .set(crate::studio::tools::OnboardingState::TemplateSelection);
+            }
+            resources::PendingDocumentAction::Open => {
+                if !ui_state
+                    .file_dialog_state
+                    .is_open
+                    .swap(true, std::sync::atomic::Ordering::Relaxed)
+                {
+                    let tx = ui_state.file_dialog_state.tx.clone();
+                    std::thread::spawn(move || {
+                        let result = rfd::FileDialog::new()
+                            .add_filter("Rave Project", &["vrtx"])
+                            .pick_file();
+                        let _ = tx.send(
+                            result
+                                .map(resources::FileDialogResult::OpenFile)
+                                .unwrap_or(resources::FileDialogResult::Cancel),
+                        );
+                    });
+                }
+            }
+            resources::PendingDocumentAction::Exit => {
+                ui_res.app_exit_writer.write(AppExit::Success);
             }
         }
     }
@@ -1174,10 +1164,9 @@ pub fn studio_ui(
                 for &entity in &ui_state.selection.entities {
                     if let Ok((_, _, _, _, _, server_opt, local_opt, module_opt)) =
                         queries.explorer_query.get(entity)
+                        && (server_opt.is_some() || local_opt.is_some() || module_opt.is_some())
                     {
-                        if server_opt.is_some() || local_opt.is_some() || module_opt.is_some() {
-                            selected_scripts.push(entity);
-                        }
+                        selected_scripts.push(entity);
                     }
                 }
 
@@ -1395,42 +1384,43 @@ pub fn studio_ui(
             });
         });
 
-    if let Some(dragged) = ui_state.dragged_entity.entity {
-        if panel_res.response.hovered() && ctx.input(|i| i.pointer.any_released()) {
-            if let Ok((_, _, _, child_of_opt, _, _, _, child_global, _, _, _, _, _)) =
-                queries.entities_query.get(dragged)
-            {
-                let old_parent = child_of_opt.map(|co| co.parent());
-                let old_transform = queries
-                    .entities_query
-                    .get(dragged)
-                    .ok()
-                    .map(|(_, t, _, _, _, _, _, _, _, _, _, _, _)| *t)
-                    .unwrap_or(Transform::IDENTITY);
+    if let Some(dragged) = ui_state.dragged_entity.entity
+        && panel_res.response.hovered()
+        && ctx.input(|i| i.pointer.any_released())
+    {
+        if let Ok((_, _, _, child_of_opt, _, _, _, child_global, _, _, _, _, _)) =
+            queries.entities_query.get(dragged)
+        {
+            let old_parent = child_of_opt.map(|co| co.parent());
+            let old_transform = queries
+                .entities_query
+                .get(dragged)
+                .ok()
+                .map(|(_, t, _, _, _, _, _, _, _, _, _, _, _)| *t)
+                .unwrap_or(Transform::IDENTITY);
 
-                let new_transform = Transform {
-                    translation: child_global.translation(),
-                    rotation: child_global.rotation(),
-                    scale: child_global.scale(),
-                };
+            let new_transform = Transform {
+                translation: child_global.translation(),
+                rotation: child_global.rotation(),
+                scale: child_global.scale(),
+            };
 
-                if let Ok(mut d_cmd) = ui_res.commands.get_entity(dragged) {
-                    d_cmd.insert(new_transform);
-                    d_cmd.remove::<ChildOf>();
-                }
-
-                ui_res
-                    .history
-                    .push_command(crate::studio::tools::UndoCommand::ParentChange {
-                        entity: dragged,
-                        old_parent,
-                        new_parent: None,
-                        old_transform,
-                        new_transform,
-                    });
+            if let Ok(mut d_cmd) = ui_res.commands.get_entity(dragged) {
+                d_cmd.insert(new_transform);
+                d_cmd.remove::<ChildOf>();
             }
-            ui_state.dragged_entity.entity = None;
+
+            ui_res
+                .history
+                .push_command(crate::studio::tools::UndoCommand::ParentChange {
+                    entity: dragged,
+                    old_parent,
+                    new_parent: None,
+                    old_transform,
+                    new_transform,
+                });
         }
+        ui_state.dragged_entity.entity = None;
     }
 
     if ui_state.settings_window.open {
@@ -1480,12 +1470,12 @@ pub fn studio_ui(
             open_status = false;
         }
 
-        if !ui_state.context_menu.just_opened && ctx.input(|i| i.pointer.any_pressed()) {
-            if let Some(mouse_pos) = ctx.pointer_interact_pos() {
-                if !inner_res.response.rect.contains(mouse_pos) {
-                    open_status = false;
-                }
-            }
+        if !ui_state.context_menu.just_opened
+            && ctx.input(|i| i.pointer.any_pressed())
+            && let Some(mouse_pos) = ctx.pointer_interact_pos()
+            && !inner_res.response.rect.contains(mouse_pos)
+        {
+            open_status = false;
         }
 
         ui_state.context_menu.just_opened = false;
@@ -1511,13 +1501,13 @@ pub fn studio_ui(
             if let Ok((_, _, _, _, _, server_opt, local_opt, module_opt)) =
                 queries.explorer_query.get(active_entity)
             {
-                if let Some(ref script) = server_opt {
+                if let Some(script) = server_opt {
                     current_source = script.code.clone();
                     script_found = true;
-                } else if let Some(ref script) = local_opt {
+                } else if let Some(script) = local_opt {
                     current_source = script.code.clone();
                     script_found = true;
-                } else if let Some(ref script) = module_opt {
+                } else if let Some(script) = module_opt {
                     current_source = script.code.clone();
                     script_found = true;
                 }
@@ -1650,9 +1640,7 @@ pub fn studio_ui(
                                                             } else {
                                                                 egui::Stroke::NONE
                                                             })
-                                                            .corner_radius(if is_active {
-                                                                egui::CornerRadius { nw: 6, ne: 6, sw: 0, se: 0 }
-                                                            } else if is_hovered {
+                                                            .corner_radius(if is_active || is_hovered {
                                                                 egui::CornerRadius { nw: 6, ne: 6, sw: 0, se: 0 }
                                                             } else {
                                                                 egui::CornerRadius { nw: 0, ne: 0, sw: 0, se: 0 }
@@ -1839,44 +1827,42 @@ pub fn studio_ui(
                 if let Ok((_, _, _, _, _, server_opt, local_opt, module_opt)) =
                     queries.explorer_query.get(active_entity)
                 {
-                    if let Some(ref script) = server_opt {
+                    if let Some(script) = server_opt {
                         if script.code != current_source {
                             source_changed = true;
                         }
-                    } else if let Some(ref script) = local_opt {
+                    } else if let Some(script) = local_opt {
                         if script.code != current_source {
                             source_changed = true;
                         }
-                    } else if let Some(ref script) = module_opt {
-                        if script.code != current_source {
-                            source_changed = true;
-                        }
+                    } else if let Some(script) = module_opt
+                        && script.code != current_source
+                    {
+                        source_changed = true;
                     }
                 }
 
-                if source_changed {
-                    if let Ok((_, _, _, _, _, server_opt, local_opt, module_opt)) =
+                if source_changed
+                    && let Ok((_, _, _, _, _, server_opt, local_opt, module_opt)) =
                         queries.explorer_query.get(active_entity)
-                    {
-                        if let Ok(mut e_cmd) = ui_res.commands.get_entity(active_entity) {
-                            if let Some(server_script) = server_opt {
-                                e_cmd.insert(crate::scripting::ecs::ServerScript {
-                                    code: current_source.clone(),
-                                    enabled: server_script.enabled,
-                                    started: false,
-                                });
-                            } else if let Some(local_script) = local_opt {
-                                e_cmd.insert(crate::scripting::ecs::LocalScript {
-                                    code: current_source.clone(),
-                                    enabled: local_script.enabled,
-                                    started: false,
-                                });
-                            } else if module_opt.is_some() {
-                                e_cmd.insert(crate::scripting::ecs::ModuleScript {
-                                    code: current_source.clone(),
-                                });
-                            }
-                        }
+                    && let Ok(mut e_cmd) = ui_res.commands.get_entity(active_entity)
+                {
+                    if let Some(server_script) = server_opt {
+                        e_cmd.insert(crate::scripting::ecs::ServerScript {
+                            code: current_source.clone(),
+                            enabled: server_script.enabled,
+                            started: false,
+                        });
+                    } else if let Some(local_script) = local_opt {
+                        e_cmd.insert(crate::scripting::ecs::LocalScript {
+                            code: current_source.clone(),
+                            enabled: local_script.enabled,
+                            started: false,
+                        });
+                    } else if module_opt.is_some() {
+                        e_cmd.insert(crate::scripting::ecs::ModuleScript {
+                            code: current_source.clone(),
+                        });
                     }
                 }
             } else {
@@ -1898,10 +1884,10 @@ pub fn studio_ui(
         if panel_res.response.rect.contains(pos) {
             is_hovering_ui = true;
         }
-        if let Some(rect) = script_editor_rect {
-            if rect.contains(pos) {
-                is_hovering_ui = true;
-            }
+        if let Some(rect) = script_editor_rect
+            && rect.contains(pos)
+        {
+            is_hovering_ui = true;
         }
         if ctx.is_pointer_over_area() {
             is_hovering_ui = true;

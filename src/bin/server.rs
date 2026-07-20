@@ -1,14 +1,14 @@
-use bevy::prelude::*;
-use bevy::log::LogPlugin;
-use bevy::state::app::StatesPlugin;
-use RaveEngineLib::server::ServerPlugin;
 use RaveEngineLib::common::CommonPlugin;
 #[cfg(feature = "bench")]
-use avian3d::prelude::*;
+use RaveEngineLib::common::net::components::NetworkTransform;
 #[cfg(feature = "bench")]
 use RaveEngineLib::common::net::components::Player;
+use RaveEngineLib::server::ServerPlugin;
 #[cfg(feature = "bench")]
-use RaveEngineLib::common::net::components::NetworkTransform;
+use avian3d::prelude::*;
+use bevy::log::LogPlugin;
+use bevy::prelude::*;
+use bevy::state::app::StatesPlugin;
 
 #[cfg(feature = "bench")]
 fn spawn_bench_players(mut commands: Commands) {
@@ -63,9 +63,13 @@ fn main() {
     let rust_log = std::env::var("RUST_LOG").unwrap_or_default();
     let new_rust_log = if rust_log.is_empty() {
         #[cfg(feature = "bench")]
-        { "info,wgpu=error,bevy_render=error,bevy_ecs=warn,lightyear=error,naga=warn,wgpu_hal=warn,wgpu_core=warn,offset_allocator=off".to_string() }
+        {
+            "info,wgpu=error,bevy_render=error,bevy_ecs=warn,lightyear=error,naga=warn,wgpu_hal=warn,wgpu_core=warn,offset_allocator=off".to_string()
+        }
         #[cfg(not(feature = "bench"))]
-        { "debug,wgpu=error,bevy_render=error,bevy_ecs=warn,lightyear=debug,lightyear_udp=trace,lightyear_netcode=trace,naga=warn,wgpu_hal=warn,wgpu_core=warn,offset_allocator=off".to_string() }
+        {
+            "debug,wgpu=error,bevy_render=error,bevy_ecs=warn,lightyear=debug,lightyear_udp=trace,lightyear_netcode=trace,naga=warn,wgpu_hal=warn,wgpu_core=warn,offset_allocator=off".to_string()
+        }
     } else if !rust_log.contains("offset_allocator") {
         format!("{rust_log},offset_allocator=off")
     } else {
@@ -89,10 +93,11 @@ fn main() {
 
     let args: Vec<String> = std::env::args().collect();
     for i in 0..args.len() {
-        if args[i] == "--port" && i + 1 < args.len() {
-            if let Ok(p) = args[i + 1].parse::<u16>() {
-                port = p;
-            }
+        if args[i] == "--port"
+            && i + 1 < args.len()
+            && let Ok(p) = args[i + 1].parse::<u16>()
+        {
+            port = p;
         }
         if args[i] == "--map" && i + 1 < args.len() {
             map_path = args[i + 1].clone();
@@ -102,16 +107,18 @@ fn main() {
             bench_mode = true;
         }
         #[cfg(feature = "bench")]
-        if args[i] == "--bench-frames" && i + 1 < args.len() {
-            if let Ok(f) = args[i + 1].parse::<u64>() {
-                bench_frames = f;
-            }
+        if args[i] == "--bench-frames"
+            && i + 1 < args.len()
+            && let Ok(f) = args[i + 1].parse::<u64>()
+        {
+            bench_frames = f;
         }
         #[cfg(feature = "bench")]
-        if args[i] == "--bench-warmup" && i + 1 < args.len() {
-            if let Ok(f) = args[i + 1].parse::<u64>() {
-                bench_warmup = f;
-            }
+        if args[i] == "--bench-warmup"
+            && i + 1 < args.len()
+            && let Ok(f) = args[i + 1].parse::<u64>()
+        {
+            bench_warmup = f;
         }
         #[cfg(feature = "bench")]
         if args[i] == "--bench-scenario" && i + 1 < args.len() {
@@ -133,7 +140,10 @@ fn main() {
     app.add_plugins(CommonPlugin);
     #[cfg(feature = "bench")]
     if !bench_mode || bench_scenario == "server" {
-        app.add_plugins(ServerPlugin { map_path: map_path.clone(), port });
+        app.add_plugins(ServerPlugin {
+            map_path: map_path.clone(),
+            port,
+        });
     }
     #[cfg(not(feature = "bench"))]
     app.add_plugins(ServerPlugin { map_path, port });
@@ -154,7 +164,10 @@ fn main() {
         } else {
             RaveEngineLib::studio::add_studio_benchmark(&mut app);
         }
-        info!("BENCH: Running {} with {} warmup and {} measured frames", bench_scenario, bench_warmup, bench_frames);
+        info!(
+            "BENCH: Running {} with {} warmup and {} measured frames",
+            bench_scenario, bench_warmup, bench_frames
+        );
     }
 
     app.run();

@@ -1,5 +1,5 @@
-use bevy::prelude::*;
 use avian3d::prelude::*;
+use bevy::prelude::*;
 
 #[derive(Resource, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PhysicsSimulationState {
@@ -27,11 +27,14 @@ impl Plugin for PhysicsSimulationPlugin {
             .init_resource::<PhysicsSimulationState>()
             .add_message::<PhysicsSimulationAction>()
             .add_systems(Startup, setup_physics)
-            .add_systems(Update, (
-                handle_physics_simulation_actions,
-                handle_newly_spawned_bricks,
-                sync_brick_physics_changes,
-            ));
+            .add_systems(
+                Update,
+                (
+                    handle_physics_simulation_actions,
+                    handle_newly_spawned_bricks,
+                    sync_brick_physics_changes,
+                ),
+            );
     }
 }
 
@@ -53,14 +56,17 @@ fn handle_physics_simulation_actions(
     mut state: ResMut<PhysicsSimulationState>,
     mut time_physics: ResMut<Time<Physics>>,
     mut commands: Commands,
-    mut bricks_query: Query<(
-        Entity,
-        &mut Transform,
-        &Name,
-        Option<&crate::common::game::bricks::components::BrickShapeComponent>,
-        Option<&crate::common::game::bricks::components::BrickPhysics>,
-        Option<&TransformBackup>,
-    ), With<crate::common::game::bricks::components::Brick>>,
+    mut bricks_query: Query<
+        (
+            Entity,
+            &mut Transform,
+            &Name,
+            Option<&crate::common::game::bricks::components::BrickShapeComponent>,
+            Option<&crate::common::game::bricks::components::BrickPhysics>,
+            Option<&TransformBackup>,
+        ),
+        With<crate::common::game::bricks::components::Brick>,
+    >,
 ) {
     for action in actions.read() {
         match *action {
@@ -74,13 +80,29 @@ fn handle_physics_simulation_actions(
                             commands.entity(entity).insert(TransformBackup(*transform));
                         }
 
-                        let (enabled, bounciness, player_can_collide, friction, gravity_scale, mass) = if let Some(phys) = phys_opt {
-                            (phys.enabled, phys.bounciness, phys.player_can_collide, phys.friction, phys.gravity_scale, phys.mass)
+                        let (
+                            enabled,
+                            bounciness,
+                            player_can_collide,
+                            friction,
+                            gravity_scale,
+                            mass,
+                        ) = if let Some(phys) = phys_opt {
+                            (
+                                phys.enabled,
+                                phys.bounciness,
+                                phys.player_can_collide,
+                                phys.friction,
+                                phys.gravity_scale,
+                                phys.mass,
+                            )
                         } else {
                             (true, 0.3, true, 0.3, 1.0, 1.0)
                         };
 
-                        let shape = shape_opt.map(|s| s.shape).unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
+                        let shape = shape_opt
+                            .map(|s| s.shape)
+                            .unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
                         let collider = match shape {
                             crate::common::game::bricks::components::BrickShape::Block => {
                                 Collider::cuboid(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28)
@@ -173,13 +195,23 @@ fn handle_physics_simulation_actions(
                         commands.entity(entity).insert(TransformBackup(*transform));
                     }
 
-                    let (enabled, bounciness, player_can_collide, friction, gravity_scale, mass) = if let Some(phys) = phys_opt {
-                        (phys.enabled, phys.bounciness, phys.player_can_collide, phys.friction, phys.gravity_scale, phys.mass)
-                    } else {
-                        (true, 0.3, true, 0.3, 1.0, 1.0)
-                    };
+                    let (enabled, bounciness, player_can_collide, friction, gravity_scale, mass) =
+                        if let Some(phys) = phys_opt {
+                            (
+                                phys.enabled,
+                                phys.bounciness,
+                                phys.player_can_collide,
+                                phys.friction,
+                                phys.gravity_scale,
+                                phys.mass,
+                            )
+                        } else {
+                            (true, 0.3, true, 0.3, 1.0, 1.0)
+                        };
 
-                    let shape = shape_opt.map(|s| s.shape).unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
+                    let shape = shape_opt
+                        .map(|s| s.shape)
+                        .unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
                     let collider = match shape {
                         crate::common::game::bricks::components::BrickShape::Block => {
                             Collider::cuboid(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28)
@@ -224,19 +256,41 @@ fn handle_physics_simulation_actions(
 fn handle_newly_spawned_bricks(
     mut commands: Commands,
     state: Res<PhysicsSimulationState>,
-    query: Query<(Entity, &Transform, &Name, Option<&crate::common::game::bricks::components::BrickShapeComponent>, Option<&crate::common::game::bricks::components::BrickPhysics>), (With<crate::common::game::bricks::components::Brick>, Without<TransformBackup>)>,
+    query: Query<
+        (
+            Entity,
+            &Transform,
+            &Name,
+            Option<&crate::common::game::bricks::components::BrickShapeComponent>,
+            Option<&crate::common::game::bricks::components::BrickPhysics>,
+        ),
+        (
+            With<crate::common::game::bricks::components::Brick>,
+            Without<TransformBackup>,
+        ),
+    >,
 ) {
     if *state == PhysicsSimulationState::Running {
         for (entity, transform, _name, shape_opt, phys_opt) in &query {
             commands.entity(entity).insert(TransformBackup(*transform));
 
-            let (enabled, bounciness, player_can_collide, friction, gravity_scale, mass) = if let Some(phys) = phys_opt {
-                (phys.enabled, phys.bounciness, phys.player_can_collide, phys.friction, phys.gravity_scale, phys.mass)
-            } else {
-                (true, 0.3, true, 0.3, 1.0, 1.0)
-            };
+            let (enabled, bounciness, player_can_collide, friction, gravity_scale, mass) =
+                if let Some(phys) = phys_opt {
+                    (
+                        phys.enabled,
+                        phys.bounciness,
+                        phys.player_can_collide,
+                        phys.friction,
+                        phys.gravity_scale,
+                        phys.mass,
+                    )
+                } else {
+                    (true, 0.3, true, 0.3, 1.0, 1.0)
+                };
 
-            let shape = shape_opt.map(|s| s.shape).unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
+            let shape = shape_opt
+                .map(|s| s.shape)
+                .unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
             let collider = match shape {
                 crate::common::game::bricks::components::BrickShape::Block => {
                     Collider::cuboid(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28)
@@ -278,20 +332,31 @@ fn handle_newly_spawned_bricks(
 
 pub fn sync_brick_physics_changes(
     mut commands: Commands,
-    query: Query<(
-        Entity,
-        &crate::common::game::bricks::components::BrickPhysics,
-        Option<&Friction>,
-        Option<&Restitution>,
-        Option<&GravityScale>,
-        Option<&Mass>,
-        Option<&RigidBody>,
-        Option<&CollisionLayers>,
-    ), Or<(Changed<crate::common::game::bricks::components::BrickPhysics>, Changed<crate::common::game::bricks::components::BrickShapeComponent>)>>,
+    query: Query<
+        (
+            Entity,
+            &crate::common::game::bricks::components::BrickPhysics,
+            Option<&Friction>,
+            Option<&Restitution>,
+            Option<&GravityScale>,
+            Option<&Mass>,
+            Option<&RigidBody>,
+            Option<&CollisionLayers>,
+        ),
+        Or<(
+            Changed<crate::common::game::bricks::components::BrickPhysics>,
+            Changed<crate::common::game::bricks::components::BrickShapeComponent>,
+        )>,
+    >,
 ) {
-    for (entity, physics, friction, restitution, gravity_scale, mass, rigid_body, layers) in &query {
+    for (entity, physics, friction, restitution, gravity_scale, mass, rigid_body, layers) in &query
+    {
         if let Some(rb) = rigid_body {
-            let new_body = if physics.enabled { RigidBody::Dynamic } else { RigidBody::Static };
+            let new_body = if physics.enabled {
+                RigidBody::Dynamic
+            } else {
+                RigidBody::Static
+            };
             if *rb != new_body {
                 commands.entity(entity).insert(new_body);
             }

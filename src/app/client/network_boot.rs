@@ -1,8 +1,8 @@
 use bevy::prelude::*;
-use lightyear::prelude::*;
 use lightyear::prelude::client::*;
+use lightyear::prelude::*;
 use serde::Deserialize;
-use std::net::{IpAddr, SocketAddr, Ipv4Addr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 #[derive(Resource)]
 pub struct ClientConnectSettings {
@@ -25,26 +25,28 @@ pub fn poll_launch_details(
     ukey_res: Option<Res<crate::client::ClientUkey>>,
     mut settings: Option<ResMut<ClientConnectSettings>>,
 ) {
-    if let Some(ukey) = &ukey_res {
-        if !ukey.0.is_empty() {
-            return;
-        }
+    if let Some(ukey) = &ukey_res
+        && !ukey.0.is_empty()
+    {
+        return;
     }
 
-    if let Ok(file_content) = std::fs::read_to_string("launch_info.json") {
-        if let Ok(info) = serde_json::from_str::<LaunchInfo>(&file_content) {
-            if let Ok(parsed_ip) = info.ip.parse::<IpAddr>() {
-                commands.insert_resource(crate::client::ClientUkey(info.ukey));
-                if let Some(ref mut s) = settings {
-                    s.ip = parsed_ip;
-                    s.port = info.port;
-                } else {
-                    commands.insert_resource(ClientConnectSettings { ip: parsed_ip, port: info.port });
-                }
-                info!("CLIENT_CONNECT: Successfully loaded connection details from launch_info.json");
-                let _ = std::fs::remove_file("launch_info.json");
-            }
+    if let Ok(file_content) = std::fs::read_to_string("launch_info.json")
+        && let Ok(info) = serde_json::from_str::<LaunchInfo>(&file_content)
+        && let Ok(parsed_ip) = info.ip.parse::<IpAddr>()
+    {
+        commands.insert_resource(crate::client::ClientUkey(info.ukey));
+        if let Some(ref mut s) = settings {
+            s.ip = parsed_ip;
+            s.port = info.port;
+        } else {
+            commands.insert_resource(ClientConnectSettings {
+                ip: parsed_ip,
+                port: info.port,
+            });
         }
+        info!("CLIENT_CONNECT: Successfully loaded connection details from launch_info.json");
+        let _ = std::fs::remove_file("launch_info.json");
     }
 }
 
@@ -93,15 +95,15 @@ pub fn initialize_client(
         Client::default(),
         UdpIo::default(),
         netcode_client,
-        LocalAddr(SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-            0,
-        )),
+        LocalAddr(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0)),
         PeerAddr(server_addr),
     ));
 
     spawned.0 = true;
-    info!("CLIENT_CONNECT: Spawned Client entity with server_addr: {}, client_id: {}", server_addr, client_id);
+    info!(
+        "CLIENT_CONNECT: Spawned Client entity with server_addr: {}, client_id: {}",
+        server_addr, client_id
+    );
 }
 
 pub fn trigger_delayed_connect(
@@ -126,7 +128,10 @@ pub fn trigger_delayed_connect(
     if *frame_count >= 30 {
         for entity in &client_query {
             commands.trigger(Connect { entity });
-            info!("CLIENT_CONNECT: Handshake connection triggered after rendering warmup with ukey: {}", ukey.0);
+            info!(
+                "CLIENT_CONNECT: Handshake connection triggered after rendering warmup with ukey: {}",
+                ukey.0
+            );
         }
         *connected = true;
     }

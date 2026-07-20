@@ -1,5 +1,5 @@
-use bevy::prelude::*;
 use crate::client::LocalPlayer;
+use bevy::prelude::*;
 use lightyear::prelude::Replicate;
 
 #[derive(Resource)]
@@ -25,7 +25,18 @@ pub struct UniqueLocalMaterial;
 pub fn attach_character_visuals(
     mut commands: Commands,
     character_assets: Option<Res<crate::client::player::loader::PlayerCharacterAssets>>,
-    query: Query<(Entity, &crate::common::net::components::Player, Option<&LocalPlayer>), (With<NeedsCharacterVisuals>, Without<CharacterVisualsSpawned>, Without<Replicate>)>,
+    query: Query<
+        (
+            Entity,
+            &crate::common::net::components::Player,
+            Option<&LocalPlayer>,
+        ),
+        (
+            With<NeedsCharacterVisuals>,
+            Without<CharacterVisualsSpawned>,
+            Without<Replicate>,
+        ),
+    >,
     local_client_id: Option<Res<crate::client::LocalClientId>>,
 ) {
     let Some(assets) = character_assets else {
@@ -36,13 +47,15 @@ pub fn attach_character_visuals(
     let local_id = local_client_id.map(|id| id.0);
 
     for (entity, player_comp, local_player_opt) in &query {
-        info!("PLAYER_LOG: Attaching unified Av.glb visuals to player entity: {:?}", entity);
+        info!(
+            "PLAYER_LOG: Attaching unified Av.glb visuals to player entity: {:?}",
+            entity
+        );
         let is_local = (local_id == Some(player_comp.client_id)) || local_player_opt.is_some();
 
         let mut visual_root = commands.spawn((
             WorldAssetRoot(assets.avatar_scene.clone()),
-            Transform::from_translation(Vec3::new(0.0, -0.7, 0.0))
-                .with_scale(Vec3::splat(0.28)),
+            Transform::from_translation(Vec3::new(0.0, -0.7, 0.0)).with_scale(Vec3::splat(0.28)),
             GlobalTransform::default(),
             Visibility::Inherited,
             PlayerVisualChild { parent: entity },
@@ -54,9 +67,13 @@ pub fn attach_character_visuals(
 
         let visual_root_entity = visual_root.id();
         commands.entity(entity).add_child(visual_root_entity);
-        info!("PLAYER_LOG: Successfully linked unified visual_root {:?} to player {:?}.", visual_root_entity, entity);
+        info!(
+            "PLAYER_LOG: Successfully linked unified visual_root {:?} to player {:?}.",
+            visual_root_entity, entity
+        );
 
-        commands.entity(entity)
+        commands
+            .entity(entity)
             .remove::<NeedsCharacterVisuals>()
             .insert(CharacterVisualsSpawned);
     }
@@ -69,7 +86,10 @@ pub fn cleanup_orphaned_visuals(
 ) {
     for (entity, visual_child) in &query_visuals {
         if query_parents.get(visual_child.parent).is_err() {
-            debug!("CLIENT: Despawning orphaned player visual child {:?} as its parent has been despawned", entity);
+            debug!(
+                "CLIENT: Despawning orphaned player visual child {:?} as its parent has been despawned",
+                entity
+            );
             if let Ok(mut entity_cmd) = commands.get_entity(entity) {
                 entity_cmd.despawn();
             }
@@ -78,7 +98,10 @@ pub fn cleanup_orphaned_visuals(
 }
 
 pub fn update_local_player_transparency(
-    camera_query: Query<(&Transform, &crate::client::player::CameraSettings), With<crate::client::player::PlayerCamera>>,
+    camera_query: Query<
+        (&Transform, &crate::client::player::CameraSettings),
+        With<crate::client::player::PlayerCamera>,
+    >,
     local_player_query: Query<(&Transform, &Children), With<LocalPlayer>>,
     child_query: Query<Entity, With<UniqueLocalMaterial>>,
     mut visibility_query: Query<&mut Visibility>,
@@ -96,13 +119,13 @@ pub fn update_local_player_transparency(
     let show = distance > 0.6;
 
     for child in children.iter() {
-        if let Ok(child_entity) = child_query.get(child) {
-            if let Ok(mut visibility) = visibility_query.get_mut(child_entity) {
-                if show {
-                    *visibility = Visibility::Inherited;
-                } else {
-                    *visibility = Visibility::Hidden;
-                }
+        if let Ok(child_entity) = child_query.get(child)
+            && let Ok(mut visibility) = visibility_query.get_mut(child_entity)
+        {
+            if show {
+                *visibility = Visibility::Inherited;
+            } else {
+                *visibility = Visibility::Hidden;
             }
         }
     }
@@ -132,18 +155,17 @@ pub fn log_player_loading_precision(
 
     if let Some(graph_handle) = &player_anims.graph {
         let anim_state = asset_server.load_state(graph_handle);
-        info!("PLAYER_LOG: Player animations graph load state: {:?}", anim_state);
+        info!(
+            "PLAYER_LOG: Player animations graph load state: {:?}",
+            anim_state
+        );
     } else {
         info!("PLAYER_LOG: PlayerAnimationGraphLoaded is currently empty.");
     }
 }
 
 #[cfg(debug_assertions)]
-pub fn inspect_hierarchy_deep(
-    world: &World,
-    mut last_log: Local<f32>,
-    time: Res<Time>,
-) {
+pub fn inspect_hierarchy_deep(world: &World, mut last_log: Local<f32>, time: Res<Time>) {
     let now = time.elapsed_secs();
     if now - *last_log < 3.0 {
         return;
@@ -161,7 +183,10 @@ pub fn inspect_hierarchy_deep(
     }
 
     for visual_root in visual_root_entities {
-        info!("PLAYER_LOG: Deep inspection of Visual Root Entity {:?}", visual_root);
+        info!(
+            "PLAYER_LOG: Deep inspection of Visual Root Entity {:?}",
+            visual_root
+        );
         print_entity_recursive(world, visual_root, 0);
     }
 }
@@ -169,9 +194,12 @@ pub fn inspect_hierarchy_deep(
 #[cfg(debug_assertions)]
 fn print_entity_recursive(world: &World, entity: Entity, depth: usize) {
     let indent = "  ".repeat(depth);
-    let name = world.get::<Name>(entity).map(|n| n.as_str().to_string()).unwrap_or_else(|| "Instance".to_string());
+    let name = world
+        .get::<Name>(entity)
+        .map(|n| n.as_str().to_string())
+        .unwrap_or_else(|| "Instance".to_string());
     let vis = world.get::<Visibility>(entity);
-    
+
     let mut comp_names = Vec::new();
     let entity_ref = world.entity(entity);
     let archetype = entity_ref.archetype();
@@ -181,8 +209,10 @@ fn print_entity_recursive(world: &World, entity: Entity, depth: usize) {
         }
     }
 
-    info!("PLAYER_LOG: {}└─ Entity {:?} '{}': vis={:?}, components={:?}",
-        indent, entity, name, vis, comp_names);
+    info!(
+        "PLAYER_LOG: {}└─ Entity {:?} '{}': vis={:?}, components={:?}",
+        indent, entity, name, vis, comp_names
+    );
 
     if let Some(children) = world.get::<Children>(entity) {
         for child in children.iter() {
@@ -207,10 +237,19 @@ pub fn inspect_meshes(
     for (entity, name, global_transform, vis_opt) in &query {
         count += 1;
         let (scale, _rotation, translation) = global_transform.to_scale_rotation_translation();
-        info!("PLAYER_LOG: Mesh3d Entity '{}' ({:?}): translation={:?}, scale={:?}, vis={:?}",
-            name.as_str(), entity, translation, scale, vis_opt);
+        info!(
+            "PLAYER_LOG: Mesh3d Entity '{}' ({:?}): translation={:?}, scale={:?}, vis={:?}",
+            name.as_str(),
+            entity,
+            translation,
+            scale,
+            vis_opt
+        );
     }
-    info!("PLAYER_LOG: Total entities with Mesh3d component: {}", count);
+    info!(
+        "PLAYER_LOG: Total entities with Mesh3d component: {}",
+        count
+    );
 }
 
 pub fn inspect_gltf_container(
@@ -227,10 +266,22 @@ pub fn inspect_gltf_container(
     if let Some(gltf) = gltf_assets.get(&handle.0) {
         info!("PLAYER_LOG: --- GLTF CONTAINER INSPECTION ---");
         info!("PLAYER_LOG: Scenes count: {}", gltf.scenes.len());
-        info!("PLAYER_LOG: Named scenes: {:?}", gltf.named_scenes.keys().collect::<Vec<_>>());
-        info!("PLAYER_LOG: Named meshes: {:?}", gltf.named_meshes.keys().collect::<Vec<_>>());
-        info!("PLAYER_LOG: Named nodes: {:?}", gltf.named_nodes.keys().collect::<Vec<_>>());
-        info!("PLAYER_LOG: Named animations: {:?}", gltf.named_animations.keys().collect::<Vec<_>>());
+        info!(
+            "PLAYER_LOG: Named scenes: {:?}",
+            gltf.named_scenes.keys().collect::<Vec<_>>()
+        );
+        info!(
+            "PLAYER_LOG: Named meshes: {:?}",
+            gltf.named_meshes.keys().collect::<Vec<_>>()
+        );
+        info!(
+            "PLAYER_LOG: Named nodes: {:?}",
+            gltf.named_nodes.keys().collect::<Vec<_>>()
+        );
+        info!(
+            "PLAYER_LOG: Named animations: {:?}",
+            gltf.named_animations.keys().collect::<Vec<_>>()
+        );
         info!("PLAYER_LOG: Animations count: {}", gltf.animations.len());
         *logged = true;
     }

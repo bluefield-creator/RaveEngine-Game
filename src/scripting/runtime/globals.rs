@@ -4,7 +4,9 @@ use mlua::prelude::*;
 pub fn setup_globals(lua: &Lua) -> Result<(), mlua::Error> {
     let task_table = lua.create_table()?;
 
-    let wait_fn: LuaFunction = lua.load("function(seconds) return coroutine.yield(seconds or 0) end").eval()?;
+    let wait_fn: LuaFunction = lua
+        .load("function(seconds) return coroutine.yield(seconds or 0) end")
+        .eval()?;
     task_table.set("wait", wait_fn)?;
 
     let spawn_fn = lua.create_function(|lua, val: LuaValue| {
@@ -13,35 +15,51 @@ pub fn setup_globals(lua: &Lua) -> Result<(), mlua::Error> {
                 let thread = lua.create_thread(f)?;
                 thread.resume::<Option<f32>>(())?;
                 if thread.status() == LuaThreadStatus::Resumable {
-                    let scheduler_ref = lua.app_data_ref::<crate::scripting::vm::scheduler::SchedulerRef>().unwrap();
-                    let mut scheduler = scheduler_ref.0.lock().expect("Lua scheduler lock poisoned");
+                    let scheduler_ref = lua
+                        .app_data_ref::<crate::scripting::vm::scheduler::SchedulerRef>()
+                        .unwrap();
+                    let mut scheduler =
+                        scheduler_ref.0.lock().expect("Lua scheduler lock poisoned");
                     let key = lua.create_registry_value(thread)?;
-                    scheduler.tasks.push(crate::scripting::vm::scheduler::LuaTask {
-                        thread_key: key,
-                        wake_time: None,
-                    });
+                    scheduler
+                        .tasks
+                        .push(crate::scripting::vm::scheduler::LuaTask {
+                            thread_key: key,
+                            wake_time: None,
+                        });
                 }
             }
             LuaValue::Thread(t) => {
                 t.resume::<Option<f32>>(())?;
                 if t.status() == LuaThreadStatus::Resumable {
-                    let scheduler_ref = lua.app_data_ref::<crate::scripting::vm::scheduler::SchedulerRef>().unwrap();
-                    let mut scheduler = scheduler_ref.0.lock().expect("Lua scheduler lock poisoned");
+                    let scheduler_ref = lua
+                        .app_data_ref::<crate::scripting::vm::scheduler::SchedulerRef>()
+                        .unwrap();
+                    let mut scheduler =
+                        scheduler_ref.0.lock().expect("Lua scheduler lock poisoned");
                     let key = lua.create_registry_value(t)?;
-                    scheduler.tasks.push(crate::scripting::vm::scheduler::LuaTask {
-                        thread_key: key,
-                        wake_time: None,
-                    });
+                    scheduler
+                        .tasks
+                        .push(crate::scripting::vm::scheduler::LuaTask {
+                            thread_key: key,
+                            wake_time: None,
+                        });
                 }
             }
-            _ => return Err(mlua::Error::RuntimeError("task.spawn expects function or thread".to_string())),
+            _ => {
+                return Err(mlua::Error::RuntimeError(
+                    "task.spawn expects function or thread".to_string(),
+                ));
+            }
         }
         Ok(())
     })?;
     task_table.set("spawn", spawn_fn)?;
 
     let defer_fn = lua.create_function(|lua, f: LuaFunction| {
-        let scheduler_ref = lua.app_data_ref::<crate::scripting::vm::scheduler::SchedulerRef>().unwrap();
+        let scheduler_ref = lua
+            .app_data_ref::<crate::scripting::vm::scheduler::SchedulerRef>()
+            .unwrap();
         let mut scheduler = scheduler_ref.0.lock().expect("Lua scheduler lock poisoned");
         let thread = lua.create_thread(f)?;
         let key = lua.create_registry_value(thread)?;
@@ -51,18 +69,26 @@ pub fn setup_globals(lua: &Lua) -> Result<(), mlua::Error> {
     task_table.set("defer", defer_fn)?;
 
     let delay_fn = lua.create_function(|lua, (seconds, f): (f32, LuaFunction)| {
-        let scheduler_ref = lua.app_data_ref::<crate::scripting::vm::scheduler::SchedulerRef>().unwrap();
+        let scheduler_ref = lua
+            .app_data_ref::<crate::scripting::vm::scheduler::SchedulerRef>()
+            .unwrap();
         let mut scheduler = scheduler_ref.0.lock().expect("Lua scheduler lock poisoned");
         let thread = lua.create_thread(f)?;
         let key = lua.create_registry_value(thread)?;
-        let delay = if seconds.is_finite() && seconds >= 0.0 { seconds as f64 } else {
+        let delay = if seconds.is_finite() && seconds >= 0.0 {
+            seconds as f64
+        } else {
             warn!("task.delay called with invalid seconds: {:?}", seconds);
             0.0
         };
-        scheduler.tasks.push(crate::scripting::vm::scheduler::LuaTask {
-            thread_key: key,
-            wake_time: Some(std::time::Instant::now() + std::time::Duration::from_secs_f64(delay)),
-        });
+        scheduler
+            .tasks
+            .push(crate::scripting::vm::scheduler::LuaTask {
+                thread_key: key,
+                wake_time: Some(
+                    std::time::Instant::now() + std::time::Duration::from_secs_f64(delay),
+                ),
+            });
         Ok(())
     })?;
     task_table.set("delay", delay_fn)?;
@@ -88,27 +114,45 @@ pub fn setup_globals(lua: &Lua) -> Result<(), mlua::Error> {
     lua.globals().set("error", error_fn)?;
 
     let vector3_class = lua.create_table()?;
-    vector3_class.set("new", lua.create_function(|_, (x, y, z): (f32, f32, f32)| {
-        Ok(crate::scripting::userdata::vector3::Vector3(Vec3::new(x, y, z)))
-    })?)?;
+    vector3_class.set(
+        "new",
+        lua.create_function(|_, (x, y, z): (f32, f32, f32)| {
+            Ok(crate::scripting::userdata::vector3::Vector3(Vec3::new(
+                x, y, z,
+            )))
+        })?,
+    )?;
     lua.globals().set("Vector3", vector3_class)?;
 
     let color3_class = lua.create_table()?;
-    color3_class.set("new", lua.create_function(|_, (r, g, b): (f32, f32, f32)| {
-        Ok(crate::scripting::userdata::color3::Color3(Color::Srgba(Srgba::new(r, g, b, 1.0))))
-    })?)?;
-    color3_class.set("fromRGB", lua.create_function(|_, (r, g, b): (f32, f32, f32)| {
-        Ok(crate::scripting::userdata::color3::Color3(Color::Srgba(Srgba::new(r / 255.0, g / 255.0, b / 255.0, 1.0))))
-    })?)?;
+    color3_class.set(
+        "new",
+        lua.create_function(|_, (r, g, b): (f32, f32, f32)| {
+            Ok(crate::scripting::userdata::color3::Color3(Color::Srgba(
+                Srgba::new(r, g, b, 1.0),
+            )))
+        })?,
+    )?;
+    color3_class.set(
+        "fromRGB",
+        lua.create_function(|_, (r, g, b): (f32, f32, f32)| {
+            Ok(crate::scripting::userdata::color3::Color3(Color::Srgba(
+                Srgba::new(r / 255.0, g / 255.0, b / 255.0, 1.0),
+            )))
+        })?,
+    )?;
     lua.globals().set("Color3", color3_class)?;
 
     let cframe_class = lua.create_table()?;
-    cframe_class.set("new", lua.create_function(|_, (x, y, z): (f32, f32, f32)| {
-        Ok(crate::scripting::userdata::cframe::CFrame {
-            position: Vec3::new(x, y, z),
-            rotation: Quat::IDENTITY,
-        })
-    })?)?;
+    cframe_class.set(
+        "new",
+        lua.create_function(|_, (x, y, z): (f32, f32, f32)| {
+            Ok(crate::scripting::userdata::cframe::CFrame {
+                position: Vec3::new(x, y, z),
+                rotation: Quat::IDENTITY,
+            })
+        })?,
+    )?;
     lua.globals().set("CFrame", cframe_class)?;
 
     Ok(())

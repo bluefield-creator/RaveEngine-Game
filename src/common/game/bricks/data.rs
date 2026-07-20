@@ -1,8 +1,8 @@
-use bevy::prelude::*;
-use bevy::pbr::ExtendedMaterial;
 use crate::common::game::bricks::components::{Brick, BrickShape, BrickShapeComponent};
 use crate::common::game::bricks::studs::{StudsAssets, StudsExtension};
 use avian3d::prelude::CollisionLayers;
+use bevy::pbr::ExtendedMaterial;
+use bevy::prelude::*;
 
 #[derive(Resource, Default)]
 pub struct BrickSpawnerCount {
@@ -26,16 +26,20 @@ pub fn spawn_brick(
         BrickShape::Sphere => "Sphere",
     };
 
-    commands.spawn((
-        Transform::from_translation(spawn_pos),
-        Brick,
-        BrickShapeComponent { shape },
-        crate::common::game::bricks::components::BrickPhysics::default(),
-        crate::common::game::bricks::components::BrickColor { color: Color::srgb(0.84, 0.24, 0.16) },
-        CollisionLayers::from_bits(0b0001, 0xFFFF_FFFF),
-        Pickable::default(),
-        Name::new(format!("{}{}", name_prefix, current_index)),
-    )).id()
+    commands
+        .spawn((
+            Transform::from_translation(spawn_pos),
+            Brick,
+            BrickShapeComponent { shape },
+            crate::common::game::bricks::components::BrickPhysics::default(),
+            crate::common::game::bricks::components::BrickColor {
+                color: Color::srgb(0.84, 0.24, 0.16),
+            },
+            CollisionLayers::from_bits(0b0001, 0xFFFF_FFFF),
+            Pickable::default(),
+            Name::new(format!("{}{}", name_prefix, current_index)),
+        ))
+        .id()
 }
 
 #[derive(Clone, Debug)]
@@ -54,18 +58,15 @@ pub struct BrickData {
 
 impl BrickData {
     pub fn remap(&mut self, old: Entity, new: Entity) {
-        if let Some(p) = &mut self.parent {
-            if *p == old {
-                *p = new;
-            }
+        if let Some(p) = &mut self.parent
+            && *p == old
+        {
+            *p = new;
         }
     }
 }
 
-pub fn spawn_from_data(
-    commands: &mut Commands,
-    data: &BrickData,
-) -> Entity {
+pub fn spawn_from_data(commands: &mut Commands, data: &BrickData) -> Entity {
     let mut spawned = commands.spawn((
         data.transform,
         Name::new(data.name.clone()),
@@ -75,7 +76,9 @@ pub fn spawn_from_data(
         spawned.insert((
             Brick,
             BrickShapeComponent { shape: data.shape },
-            crate::common::game::bricks::components::BrickColor { color: data.color.unwrap_or(Color::srgb(0.84, 0.24, 0.16)) },
+            crate::common::game::bricks::components::BrickColor {
+                color: data.color.unwrap_or(Color::srgb(0.84, 0.24, 0.16)),
+            },
         ));
     }
     if let Some(ref m) = data.mesh {
@@ -100,35 +103,63 @@ pub fn spawn_from_data(
         spawned.insert(CollisionLayers::from_bits(0b0001, 0xFFFF_FFFF));
     }
     let new_entity = spawned.id();
-    if let Some(parent) = data.parent {
-        if let Ok(mut p_cmd) = commands.get_entity(parent) {
-            p_cmd.add_child(new_entity);
-        }
+    if let Some(parent) = data.parent
+        && let Ok(mut p_cmd) = commands.get_entity(parent)
+    {
+        p_cmd.add_child(new_entity);
     }
     new_entity
 }
 
 pub fn capture_brick_data(
     entity: Entity,
-    query: &Query<(
-        Entity,
-        &mut Transform,
-        &Name,
-        Option<&ChildOf>,
-        Option<&Children>,
-        Option<&Brick>,
-        Option<&mut BrickShapeComponent>,
-        &GlobalTransform,
-        Option<&Mesh3d>,
-        Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
-        Option<&mut crate::common::game::bricks::components::BrickPhysics>,
-        Option<&crate::common::game::bricks::components::BrickColor>,
-    ), Without<Camera3d>>,
+    query: &Query<
+        (
+            Entity,
+            &mut Transform,
+            &Name,
+            Option<&ChildOf>,
+            Option<&Children>,
+            Option<&Brick>,
+            Option<&mut BrickShapeComponent>,
+            &GlobalTransform,
+            Option<&Mesh3d>,
+            Option<&MeshMaterial3d<StandardMaterial>>,
+            Option<
+                &MeshMaterial3d<
+                    ExtendedMaterial<
+                        StandardMaterial,
+                        crate::common::game::bricks::studs::StudsExtension,
+                    >,
+                >,
+            >,
+            Option<&mut crate::common::game::bricks::components::BrickPhysics>,
+            Option<&crate::common::game::bricks::components::BrickColor>,
+        ),
+        Without<Camera3d>,
+    >,
 ) -> Option<BrickData> {
-    if let Ok((_, transform, name, child_of_opt, _, brick_opt, shape_opt, _, mesh_opt, mat_opt, studs_mat_opt, phys_opt, brick_color_opt)) = query.get(entity) {
+    if let Ok((
+        _,
+        transform,
+        name,
+        child_of_opt,
+        _,
+        brick_opt,
+        shape_opt,
+        _,
+        mesh_opt,
+        mat_opt,
+        studs_mat_opt,
+        phys_opt,
+        brick_color_opt,
+    )) = query.get(entity)
+    {
         let is_brick = brick_opt.is_some();
-        let shape = shape_opt.as_ref().map(|s| s.shape).unwrap_or(BrickShape::Block);
+        let shape = shape_opt
+            .as_ref()
+            .map(|s| s.shape)
+            .unwrap_or(BrickShape::Block);
         Some(BrickData {
             transform: *transform,
             name: name.to_string(),

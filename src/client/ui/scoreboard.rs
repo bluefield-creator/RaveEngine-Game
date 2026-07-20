@@ -1,12 +1,11 @@
-use bevy::prelude::*;
-use bevy_egui::{egui, EguiContexts};
 use crate::common::net::components::Player;
+use bevy::prelude::*;
+use bevy_egui::{EguiContexts, egui};
 
-pub fn draw_scoreboard(
-    mut contexts: EguiContexts,
-    query_players: Query<&Player>,
-) {
-    let Ok(ctx) = contexts.ctx_mut() else { return; };
+pub fn draw_scoreboard(mut contexts: EguiContexts, query_players: Query<&Player>) {
+    let Ok(ctx) = contexts.ctx_mut() else {
+        return;
+    };
 
     let screen_rect = ctx.content_rect();
     let screen_width = screen_rect.width();
@@ -50,7 +49,10 @@ pub fn draw_scoreboard(
 
     let bg_color = egui::Color32::from_rgba_unmultiplied(61, 61, 61, 102);
 
-    let is_bold_loaded = ctx.fonts(|f| f.families().contains(&egui::FontFamily::Name("Bold".into())));
+    let is_bold_loaded = ctx.fonts(|f| {
+        f.families()
+            .contains(&egui::FontFamily::Name("Bold".into()))
+    });
 
     let title_font = if is_bold_loaded {
         egui::FontId::new(header_font_size, egui::FontFamily::Name("Bold".into()))
@@ -73,15 +75,21 @@ pub fn draw_scoreboard(
                 egui::Frame::NONE
                     .fill(bg_color)
                     .corner_radius(4.0 * scale_factor)
-                    .inner_margin(egui::Margin::symmetric(horizontal_margin as i8, header_v_margin as i8))
+                    .inner_margin(egui::Margin::symmetric(
+                        horizontal_margin as i8,
+                        header_v_margin as i8,
+                    ))
                     .show(ui, |ui| {
                         ui.set_width(header_inner_width);
                         ui.horizontal(|ui| {
-                            ui.add(egui::Label::new(
-                                egui::RichText::new("Scoreboard")
-                                    .color(egui::Color32::WHITE)
-                                    .font(title_font),
-                            ).selectable(false));
+                            ui.add(
+                                egui::Label::new(
+                                    egui::RichText::new("Scoreboard")
+                                        .color(egui::Color32::WHITE)
+                                        .font(title_font),
+                                )
+                                .selectable(false),
+                            );
                         });
                     });
 
@@ -97,15 +105,21 @@ pub fn draw_scoreboard(
                                 egui::Frame::NONE
                                     .fill(bg_color)
                                     .corner_radius(4.0 * scale_factor)
-                                    .inner_margin(egui::Margin::symmetric(horizontal_margin as i8, player_v_margin as i8))
+                                    .inner_margin(egui::Margin::symmetric(
+                                        horizontal_margin as i8,
+                                        player_v_margin as i8,
+                                    ))
                                     .show(ui, |ui| {
                                         ui.set_width(player_inner_width);
                                         ui.horizontal(|ui| {
-                                            ui.add(egui::Label::new(
-                                                egui::RichText::new(username)
-                                                    .color(egui::Color32::WHITE)
-                                                    .font(player_font.clone()),
-                                            ).selectable(false));
+                                            ui.add(
+                                                egui::Label::new(
+                                                    egui::RichText::new(username)
+                                                        .color(egui::Color32::WHITE)
+                                                        .font(player_font.clone()),
+                                                )
+                                                .selectable(false),
+                                            );
                                         });
                                     });
                             }

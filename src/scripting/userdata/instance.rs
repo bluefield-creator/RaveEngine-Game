@@ -1,11 +1,11 @@
-use bevy::prelude::*;
-use mlua::prelude::*;
-use crate::common::game::bricks::components::{Brick, BrickColor, BrickPhysics};
-use super::vector3::Vector3;
-use super::color3::Color3;
 use super::cframe::CFrame;
+use super::color3::Color3;
+use super::vector3::Vector3;
+use crate::common::game::bricks::components::{Brick, BrickColor, BrickPhysics};
 use crate::scripting::vm::scheduler::ScriptRegistryRef;
 use avian3d::prelude::*;
+use bevy::prelude::*;
+use mlua::prelude::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Instance {
@@ -24,7 +24,10 @@ impl LuaUserData for Instance {
 
         methods.add_meta_method(LuaMetaMethod::ToString, |lua, this, _: ()| {
             let world = unsafe { crate::scripting::vm::server_vm::world_from_lua(lua)? };
-            let name = world.get::<Name>(this.entity).map(|n| n.as_str().to_string()).unwrap_or_else(|| "Instance".to_string());
+            let name = world
+                .get::<Name>(this.entity)
+                .map(|n| n.as_str().to_string())
+                .unwrap_or_else(|| "Instance".to_string());
             Ok(name)
         });
 
@@ -96,12 +99,12 @@ impl LuaUserData for Instance {
                 }
                 "Anchored" => {
                     let phys = world.get::<BrickPhysics>(this.entity);
-                    let anchored = phys.map_or(true, |p| !p.enabled);
+                    let anchored = phys.is_none_or(|p| !p.enabled);
                     Ok(LuaValue::Boolean(anchored))
                 }
                 "CanCollide" => {
                     let phys = world.get::<BrickPhysics>(this.entity);
-                    let can_collide = phys.map_or(true, |p| p.player_can_collide);
+                    let can_collide = phys.is_none_or(|p| p.player_can_collide);
                     Ok(LuaValue::Boolean(can_collide))
                 }
                 "Touched" => {
@@ -151,7 +154,7 @@ impl LuaUserData for Instance {
                 }
                 "GetChildren" => {
                     let mut children_list = Vec::new();
-                    let is_workspace = world.get::<Name>(this.entity).map_or(false, |n| n.as_str() == "Workspace");
+                    let is_workspace = world.get::<Name>(this.entity).is_some_and(|n| n.as_str() == "Workspace");
                     if is_workspace {
                         if let Some(children) = world.get::<Children>(this.entity) {
                             children_list.extend(children.to_vec());
@@ -196,7 +199,7 @@ impl LuaUserData for Instance {
                 }
                 "FindFirstChild" => {
                     let mut children_list = Vec::new();
-                    let is_workspace = world.get::<Name>(this.entity).map_or(false, |n| n.as_str() == "Workspace");
+                    let is_workspace = world.get::<Name>(this.entity).is_some_and(|n| n.as_str() == "Workspace");
                     if is_workspace {
                         if let Some(children) = world.get::<Children>(this.entity) {
                             children_list.extend(children.to_vec());
@@ -224,21 +227,19 @@ impl LuaUserData for Instance {
                     Ok(LuaValue::Function(lua.create_function(move |lua, args: LuaMultiValue| {
                         let mut name_to_find = String::new();
                         if args.len() == 1 {
-                            if let Some(LuaValue::String(s)) = args.get(0) {
+                            if let Some(LuaValue::String(s)) = args.front() {
                                 name_to_find = s.to_str()?.to_string();
                             }
-                        } else if args.len() >= 2 {
-                            if let Some(LuaValue::String(s)) = args.get(1) {
+                        } else if args.len() >= 2
+                            && let Some(LuaValue::String(s)) = args.get(1) {
                                 name_to_find = s.to_str()?.to_string();
                             }
-                        }
                         let world = unsafe { crate::scripting::vm::server_vm::world_from_lua_shared(lua)? };
                         for child in &children_list {
-                            if let Some(child_name) = world.get::<Name>(*child) {
-                                if child_name.as_str() == name_to_find {
+                            if let Some(child_name) = world.get::<Name>(*child)
+                                && child_name.as_str() == name_to_find {
                                     return lua.create_userdata(Instance { entity: *child }).map(LuaValue::UserData);
                                 }
-                            }
                         }
                         Ok(LuaValue::Nil)
                     })?))
@@ -283,50 +284,50 @@ impl LuaUserData for Instance {
             }
         });
 
-        methods.add_meta_method(LuaMetaMethod::NewIndex, |lua, this, (key, value): (String, LuaValue)| {
-            let world = unsafe { crate::scripting::vm::server_vm::world_from_lua(lua)? };
+        methods.add_meta_method(
+            LuaMetaMethod::NewIndex,
+            |lua, this, (key, value): (String, LuaValue)| {
+                let world = unsafe { crate::scripting::vm::server_vm::world_from_lua(lua)? };
 
-            if world.get_entity(this.entity).is_err() {
-                return Err(mlua::Error::RuntimeError("Instance has been destroyed".to_string()));
-            }
+                if world.get_entity(this.entity).is_err() {
+                    return Err(mlua::Error::RuntimeError(
+                        "Instance has been destroyed".to_string(),
+                    ));
+                }
 
-            match key.as_str() {
-                "Name" => {
-                    if let LuaValue::String(s) = value {
-                        let s_str = s.to_str()?.to_string();
-                        world.entity_mut(this.entity).insert(Name::new(s_str));
-                    }
-                }
-                "Position" => {
-                    if let LuaValue::UserData(ud) = value {
-                        if let Ok(vec) = ud.borrow::<Vector3>() {
-                            if let Some(mut transform) = world.get_mut::<Transform>(this.entity) {
-                                transform.translation = vec.0 * 0.28;
-                            }
+                match key.as_str() {
+                    "Name" => {
+                        if let LuaValue::String(s) = value {
+                            let s_str = s.to_str()?.to_string();
+                            world.entity_mut(this.entity).insert(Name::new(s_str));
                         }
                     }
-                }
-                "Size" => {
-                    if let LuaValue::UserData(ud) = value {
-                        if let Ok(vec) = ud.borrow::<Vector3>() {
-                            if let Some(mut transform) = world.get_mut::<Transform>(this.entity) {
-                                transform.scale = vec.0;
-                            }
+                    "Position" => {
+                        if let LuaValue::UserData(ud) = value
+                            && let Ok(vec) = ud.borrow::<Vector3>()
+                            && let Some(mut transform) = world.get_mut::<Transform>(this.entity)
+                        {
+                            transform.translation = vec.0 * 0.28;
                         }
                     }
-                }
-                "CFrame" => {
-                    if let LuaValue::UserData(ud) = value {
-                        if let Ok(cf) = ud.borrow::<CFrame>() {
-                            if let Some(mut transform) = world.get_mut::<Transform>(this.entity) {
-                                transform.translation = cf.position * 0.28;
-                                transform.rotation = cf.rotation;
-                            }
+                    "Size" => {
+                        if let LuaValue::UserData(ud) = value
+                            && let Ok(vec) = ud.borrow::<Vector3>()
+                            && let Some(mut transform) = world.get_mut::<Transform>(this.entity)
+                        {
+                            transform.scale = vec.0;
                         }
                     }
-                }
-                "Parent" => {
-                    match value {
+                    "CFrame" => {
+                        if let LuaValue::UserData(ud) = value
+                            && let Ok(cf) = ud.borrow::<CFrame>()
+                            && let Some(mut transform) = world.get_mut::<Transform>(this.entity)
+                        {
+                            transform.translation = cf.position * 0.28;
+                            transform.rotation = cf.rotation;
+                        }
+                    }
+                    "Parent" => match value {
                         LuaValue::UserData(ud) => {
                             if let Ok(parent_inst) = ud.borrow::<Instance>() {
                                 world.entity_mut(parent_inst.entity).add_child(this.entity);
@@ -336,107 +337,118 @@ impl LuaUserData for Instance {
                             world.entity_mut(this.entity).remove::<ChildOf>();
                         }
                         _ => {}
-                    }
-                }
-                "Color" | "BrickColor" => {
-                    if let LuaValue::UserData(ud) = value {
-                        if let Ok(col) = ud.borrow::<Color3>() {
+                    },
+                    "Color" | "BrickColor" => {
+                        if let LuaValue::UserData(ud) = value
+                            && let Ok(col) = ud.borrow::<Color3>()
+                        {
                             if let Some(mut bc) = world.get_mut::<BrickColor>(this.entity) {
                                 bc.color = col.0;
                             } else {
-                                world.entity_mut(this.entity).insert(BrickColor { color: col.0 });
+                                world
+                                    .entity_mut(this.entity)
+                                    .insert(BrickColor { color: col.0 });
                             }
                         }
                     }
-                }
-                "Anchored" => {
-                    if let LuaValue::Boolean(b) = value {
-                        if let Some(mut phys) = world.get_mut::<BrickPhysics>(this.entity) {
-                            phys.enabled = !b;
-                        } else {
-                            world.entity_mut(this.entity).insert(BrickPhysics {
-                                enabled: !b,
-                                ..default()
-                            });
-                        }
-                        let is_enabled = world.get::<BrickPhysics>(this.entity).map_or(true, |p| p.enabled);
-                        if is_enabled {
-                            world.entity_mut(this.entity).insert(RigidBody::Dynamic);
-                        } else {
-                            world.entity_mut(this.entity).insert(RigidBody::Static);
+                    "Anchored" => {
+                        if let LuaValue::Boolean(b) = value {
+                            if let Some(mut phys) = world.get_mut::<BrickPhysics>(this.entity) {
+                                phys.enabled = !b;
+                            } else {
+                                world.entity_mut(this.entity).insert(BrickPhysics {
+                                    enabled: !b,
+                                    ..default()
+                                });
+                            }
+                            let is_enabled = world
+                                .get::<BrickPhysics>(this.entity)
+                                .is_none_or(|p| p.enabled);
+                            if is_enabled {
+                                world.entity_mut(this.entity).insert(RigidBody::Dynamic);
+                            } else {
+                                world.entity_mut(this.entity).insert(RigidBody::Static);
+                            }
                         }
                     }
-                }
-                "CanCollide" => {
-                    if let LuaValue::Boolean(b) = value {
-                        if let Some(mut phys) = world.get_mut::<BrickPhysics>(this.entity) {
-                            phys.player_can_collide = b;
-                        } else {
-                            world.entity_mut(this.entity).insert(BrickPhysics {
-                                player_can_collide: b,
-                                ..default()
-                            });
+                    "CanCollide" => {
+                        if let LuaValue::Boolean(b) = value {
+                            if let Some(mut phys) = world.get_mut::<BrickPhysics>(this.entity) {
+                                phys.player_can_collide = b;
+                            } else {
+                                world.entity_mut(this.entity).insert(BrickPhysics {
+                                    player_can_collide: b,
+                                    ..default()
+                                });
+                            }
+                            let player_can_collide = world
+                                .get::<BrickPhysics>(this.entity)
+                                .is_none_or(|p| p.player_can_collide);
+                            let layers = if player_can_collide {
+                                CollisionLayers::from_bits(0b0001, 0xFFFF_FFFF)
+                            } else {
+                                CollisionLayers::from_bits(0b0100, 0xFFFF_FFFD)
+                            };
+                            world.entity_mut(this.entity).insert(layers);
                         }
-                        let player_can_collide = world.get::<BrickPhysics>(this.entity).map_or(true, |p| p.player_can_collide);
-                        let layers = if player_can_collide {
-                            CollisionLayers::from_bits(0b0001, 0xFFFF_FFFF)
-                        } else {
-                            CollisionLayers::from_bits(0b0100, 0xFFFF_FFFD)
+                    }
+                    "JumpPower" => {
+                        let opt_val = match value {
+                            LuaValue::Number(n) => Some(n),
+                            LuaValue::Integer(i) => Some(i as f64),
+                            _ => None,
                         };
-                        world.entity_mut(this.entity).insert(layers);
-                    }
-                }
-                "JumpPower" => {
-                    let opt_val = match value {
-                        LuaValue::Number(n) => Some(n),
-                        LuaValue::Integer(i) => Some(i as f64),
-                        _ => None,
-                    };
-                    if let Some(val) = opt_val {
-                        if let Some(mut player) = world.get_mut::<crate::common::net::components::Player>(this.entity) {
+                        if let Some(val) = opt_val
+                            && let Some(mut player) =
+                                world.get_mut::<crate::common::net::components::Player>(this.entity)
+                        {
                             player.jump_power = val as f32 * 0.28;
                         }
                     }
-                }
-                "Speed" => {
-                    let opt_val = match value {
-                        LuaValue::Number(n) => Some(n),
-                        LuaValue::Integer(i) => Some(i as f64),
-                        _ => None,
-                    };
-                    if let Some(val) = opt_val {
-                        if let Some(mut player) = world.get_mut::<crate::common::net::components::Player>(this.entity) {
+                    "Speed" => {
+                        let opt_val = match value {
+                            LuaValue::Number(n) => Some(n),
+                            LuaValue::Integer(i) => Some(i as f64),
+                            _ => None,
+                        };
+                        if let Some(val) = opt_val
+                            && let Some(mut player) =
+                                world.get_mut::<crate::common::net::components::Player>(this.entity)
+                        {
                             player.speed = val as f32 * 0.28;
                         }
                     }
-                }
-                "Velocity" => {
-                    if let LuaValue::UserData(ud) = value {
-                        if let Ok(vec) = ud.borrow::<Vector3>() {
+                    "Velocity" => {
+                        if let LuaValue::UserData(ud) = value
+                            && let Ok(vec) = ud.borrow::<Vector3>()
+                        {
                             if let Some(mut vel) = world.get_mut::<LinearVelocity>(this.entity) {
                                 vel.0 = vec.0 * 0.28;
                             } else {
-                                world.entity_mut(this.entity).insert(LinearVelocity(vec.0 * 0.28));
+                                world
+                                    .entity_mut(this.entity)
+                                    .insert(LinearVelocity(vec.0 * 0.28));
                             }
                         }
                     }
-                }
-                "Gravity" => {
-                    let opt_val = match value {
-                        LuaValue::Number(n) => Some(n),
-                        LuaValue::Integer(i) => Some(i as f64),
-                        _ => None,
-                    };
-                    if let Some(val) = opt_val {
-                        if let Some(mut g) = world.get_resource_mut::<avian3d::prelude::Gravity>() {
+                    "Gravity" => {
+                        let opt_val = match value {
+                            LuaValue::Number(n) => Some(n),
+                            LuaValue::Integer(i) => Some(i as f64),
+                            _ => None,
+                        };
+                        if let Some(val) = opt_val
+                            && let Some(mut g) =
+                                world.get_resource_mut::<avian3d::prelude::Gravity>()
+                        {
                             g.0.y = -val as f32 * 0.28;
                         }
                     }
+                    _ => {}
                 }
-                _ => {}
-            }
-            Ok(())
-        });
+                Ok(())
+            },
+        );
     }
 }
 
@@ -448,10 +460,12 @@ pub fn find_service_entity(world: &World, service_name: &str) -> Option<Entity> 
             "Lighting" => cache.lighting,
             _ => None,
         };
-        if let Some(entity) = cached {
-            if world.get::<Name>(entity).is_some_and(|name| name.as_str() == service_name) {
-                return Some(entity);
-            }
+        if let Some(entity) = cached
+            && world
+                .get::<Name>(entity)
+                .is_some_and(|name| name.as_str() == service_name)
+        {
+            return Some(entity);
         }
     }
     for archetype in world.archetypes().iter() {
@@ -481,11 +495,14 @@ pub struct RBXScriptSignal {
 impl LuaUserData for RBXScriptSignal {
     fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("Connect", |lua, this, callback: LuaFunction| {
-            let registry_ref = lua.app_data_ref::<ScriptRegistryRef>()
+            let registry_ref = lua
+                .app_data_ref::<ScriptRegistryRef>()
                 .ok_or_else(|| mlua::Error::RuntimeError("ScriptRegistryRef not set".into()))?;
             let mut registry = registry_ref.0.lock().expect("ScriptRegistry lock poisoned");
             let key = std::sync::Arc::new(lua.create_registry_value(callback)?);
-            registry.connections.entry((this.entity, this.name))
+            registry
+                .connections
+                .entry((this.entity, this.name))
                 .or_default()
                 .push(key.clone());
 
@@ -494,13 +511,19 @@ impl LuaUserData for RBXScriptSignal {
             let entity = this.entity;
             let name = this.name;
             let registry_ref_clone = (*registry_ref).clone();
-            conn_table.set("Disconnect", lua.create_function(move |_, _: ()| {
-                let mut registry = registry_ref_clone.0.lock().expect("ScriptRegistry lock poisoned");
-                if let Some(conns) = registry.connections.get_mut(&(entity, name)) {
-                    conns.retain(|k| k != &key_clone);
-                }
-                Ok(())
-            })?)?;
+            conn_table.set(
+                "Disconnect",
+                lua.create_function(move |_, _: ()| {
+                    let mut registry = registry_ref_clone
+                        .0
+                        .lock()
+                        .expect("ScriptRegistry lock poisoned");
+                    if let Some(conns) = registry.connections.get_mut(&(entity, name)) {
+                        conns.retain(|k| k != &key_clone);
+                    }
+                    Ok(())
+                })?,
+            )?;
             Ok(conn_table)
         });
     }

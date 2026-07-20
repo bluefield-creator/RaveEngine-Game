@@ -1,7 +1,7 @@
-use bevy::prelude::*;
+use super::{CameraSettings, Player, PlayerCamera, PlayerController};
 use avian3d::prelude::*;
+use bevy::prelude::*;
 use bevy_egui::EguiContexts;
-use super::{Player, PlayerController, CameraSettings, PlayerCamera};
 
 pub fn player_movement(
     keys: Res<ButtonInput<KeyCode>>,
@@ -95,15 +95,14 @@ pub fn player_movement(
             let filter = SpatialQueryFilter::default()
                 .with_excluded_entities([player_entity])
                 .with_mask(0b0011);
-            if let Some(hit) = spatial_query.cast_ray(ray_origin, Dir3::NEG_Y, 0.45, true, &filter) {
+            if let Some(hit) = spatial_query.cast_ray(ray_origin, Dir3::NEG_Y, 0.45, true, &filter)
+            {
                 let hit_point_y = ray_origin.y - hit.distance;
                 let step_height = hit_point_y - player_bottom_y;
 
-                if step_height > 0.01 && step_height <= 0.29 {
-                    if step_height > best_step_height {
-                        best_step_height = step_height;
-                        best_target_y = Some(hit_point_y + 2.5 * 0.28);
-                    }
+                if step_height > 0.01 && step_height <= 0.29 && step_height > best_step_height {
+                    best_step_height = step_height;
+                    best_target_y = Some(hit_point_y + 2.5 * 0.28);
                 }
             }
         }
@@ -134,7 +133,10 @@ pub fn player_movement(
             let filter = SpatialQueryFilter::default()
                 .with_excluded_entities([player_entity])
                 .with_mask(0b0011);
-            if spatial_query.cast_ray(ray_origin, Dir3::NEG_Y, max_ray_dist, true, &filter).is_some() {
+            if spatial_query
+                .cast_ray(ray_origin, Dir3::NEG_Y, max_ray_dist, true, &filter)
+                .is_some()
+            {
                 grounded = true;
             }
         }

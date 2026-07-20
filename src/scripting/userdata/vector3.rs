@@ -10,14 +10,18 @@ impl LuaUserData for Vector3 {
             if let Ok(other_vec) = other.borrow::<Vector3>() {
                 Ok(Vector3(this.0 + other_vec.0))
             } else {
-                Err(mlua::Error::RuntimeError("Vector3 expected for Add".to_string()))
+                Err(mlua::Error::RuntimeError(
+                    "Vector3 expected for Add".to_string(),
+                ))
             }
         });
         methods.add_meta_method(LuaMetaMethod::Sub, |_, this, other: LuaAnyUserData| {
             if let Ok(other_vec) = other.borrow::<Vector3>() {
                 Ok(Vector3(this.0 - other_vec.0))
             } else {
-                Err(mlua::Error::RuntimeError("Vector3 expected for Sub".to_string()))
+                Err(mlua::Error::RuntimeError(
+                    "Vector3 expected for Sub".to_string(),
+                ))
             }
         });
         methods.add_meta_method(LuaMetaMethod::Mul, |_, this, scale: f32| {
@@ -26,9 +30,7 @@ impl LuaUserData for Vector3 {
         methods.add_meta_method(LuaMetaMethod::Div, |_, this, scale: f32| {
             Ok(Vector3(this.0 / scale))
         });
-        methods.add_meta_method(LuaMetaMethod::Unm, |_, this, _: ()| {
-            Ok(Vector3(-this.0))
-        });
+        methods.add_meta_method(LuaMetaMethod::Unm, |_, this, _: ()| Ok(Vector3(-this.0)));
         methods.add_meta_method(LuaMetaMethod::ToString, |_, this, _: ()| {
             Ok(format!("{}, {}, {}", this.0.x, this.0.y, this.0.z))
         });
@@ -44,14 +46,18 @@ impl LuaUserData for Vector3 {
             if let Ok(other_vec) = other.borrow::<Vector3>() {
                 Ok(this.0.dot(other_vec.0))
             } else {
-                Err(mlua::Error::RuntimeError("Vector3 expected for Dot".to_string()))
+                Err(mlua::Error::RuntimeError(
+                    "Vector3 expected for Dot".to_string(),
+                ))
             }
         });
         methods.add_method("Cross", |_, this, other: LuaAnyUserData| {
             if let Ok(other_vec) = other.borrow::<Vector3>() {
                 Ok(Vector3(this.0.cross(other_vec.0)))
             } else {
-                Err(mlua::Error::RuntimeError("Vector3 expected for Cross".to_string()))
+                Err(mlua::Error::RuntimeError(
+                    "Vector3 expected for Cross".to_string(),
+                ))
             }
         });
 
@@ -61,7 +67,9 @@ impl LuaUserData for Vector3 {
                 "Y" | "y" => Ok(LuaValue::Number(this.0.y as f64)),
                 "Z" | "z" => Ok(LuaValue::Number(this.0.z as f64)),
                 "Magnitude" => Ok(LuaValue::Number(this.0.length() as f64)),
-                "Unit" => Ok(LuaValue::UserData(lua.create_userdata(Vector3(this.0.normalize_or_zero()))?)),
+                "Unit" => Ok(LuaValue::UserData(
+                    lua.create_userdata(Vector3(this.0.normalize_or_zero()))?,
+                )),
                 _ => Ok(LuaValue::Nil),
             }
         });

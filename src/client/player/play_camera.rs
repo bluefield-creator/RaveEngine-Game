@@ -1,22 +1,26 @@
-use bevy::prelude::*;
-use bevy::input::mouse::{MouseMotion, MouseWheel};
-use bevy::window::{CursorGrabMode, CursorOptions};
-use avian3d::prelude::{SpatialQuery, SpatialQueryFilter};
-use super::{PlayerCamera, CameraSettings};
+use super::{CameraSettings, PlayerCamera};
 use crate::client::LocalPlayer;
+use avian3d::prelude::{SpatialQuery, SpatialQueryFilter};
+use bevy::input::mouse::{MouseMotion, MouseWheel};
+use bevy::prelude::*;
+use bevy::window::{CursorGrabMode, CursorOptions};
 
 pub fn update_camera(
     mut mouse_motion: MessageReader<MouseMotion>,
     mut mouse_wheel: MessageReader<MouseWheel>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut player_query: Query<(Entity, &mut Transform, Option<&Children>), With<LocalPlayer>>,
-    mut camera_query: Query<(&mut Transform, &mut CameraSettings), (With<PlayerCamera>, Without<LocalPlayer>)>,
+    mut camera_query: Query<
+        (&mut Transform, &mut CameraSettings),
+        (With<PlayerCamera>, Without<LocalPlayer>),
+    >,
     spatial_query: SpatialQuery,
     mut window_query: Query<&mut CursorOptions, With<bevy::window::PrimaryWindow>>,
     time: Res<Time>,
     mut last_log: Local<f32>,
 ) {
-    let Some((player_entity, mut player_transform, _children_opt)) = player_query.iter_mut().next() else {
+    let Some((player_entity, mut player_transform, _children_opt)) = player_query.iter_mut().next()
+    else {
         return;
     };
     let Some((mut camera_transform, mut settings)) = camera_query.iter_mut().next() else {
@@ -33,7 +37,8 @@ pub fn update_camera(
     }
 
     let lerp_factor = (15.0 * time.delta_secs()).min(1.0);
-    settings.current_distance = settings.current_distance + (settings.distance - settings.current_distance) * lerp_factor;
+    settings.current_distance =
+        settings.current_distance + (settings.distance - settings.current_distance) * lerp_factor;
 
     let in_first_person = settings.current_distance <= 0.6;
 
@@ -88,7 +93,12 @@ pub fn update_camera(
     let now = time.elapsed_secs();
     if now - *last_log >= 1.0 {
         *last_log = now;
-        info!("PLAYER_LOG: update_camera current_distance={}, final_distance={}, camera_translation={:?}, target_translation={:?}",
-            settings.current_distance, final_distance, camera_transform.translation, target_translation);
+        info!(
+            "PLAYER_LOG: update_camera current_distance={}, final_distance={}, camera_translation={:?}, target_translation={:?}",
+            settings.current_distance,
+            final_distance,
+            camera_transform.translation,
+            target_translation
+        );
     }
 }

@@ -1,8 +1,8 @@
-pub mod play_camera;
+pub mod animation;
 pub mod controller;
 pub mod loader;
-pub mod animation;
 pub mod model;
+pub mod play_camera;
 
 use bevy::prelude::*;
 
@@ -42,7 +42,8 @@ impl Plugin for PlayerPlugin {
                     animation::init_player_animations,
                     animation::track_player_velocities,
                     animation::animate_player,
-                ).run_if(crate::client::is_playtesting),
+                )
+                    .run_if(crate::client::is_playtesting),
             )
             .add_systems(
                 PostUpdate,

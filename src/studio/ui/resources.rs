@@ -238,13 +238,12 @@ pub fn capture_editor_snapshot(
             code: script.code.clone(),
             enabled: script.enabled,
         }
-    } else if let Some(script) = module {
+    } else {
+        let script = module?;
         EditorItemSnapshot::Module {
             name: name.to_string(),
             code: script.code.clone(),
         }
-    } else {
-        return None;
     };
     let children = children
         .into_iter()
@@ -473,7 +472,9 @@ pub fn handle_file_dialog_results(
             }
             FileDialogResult::OpenFile(path) => {
                 let open_path_str = path.display().to_string();
-                if let Ok(state) = crate::common::core::vrtx::VrtxFileState::load_from_file(&open_path_str) {
+                if let Ok(state) =
+                    crate::common::core::vrtx::VrtxFileState::load_from_file(&open_path_str)
+                {
                     next_onboarding_state.set(crate::studio::tools::OnboardingState::Inactive);
                     onboarding_data.save_path = open_path_str;
                     for (entity, brick_opt) in &entities_query {
@@ -568,12 +569,11 @@ pub fn handle_file_dialog_results(
                         node_entities.insert(script.node_id, new_script_entity);
                         if let Some(parent) = script.parent_node_id {
                             pending_parents.push((new_script_entity, parent));
-                        } else if version < 6 {
-                            if let Some(ref p_name) = script.parent_name {
-                                if let Some(&parent_entity) = named_entities.get(p_name) {
-                                    commands.entity(parent_entity).add_child(new_script_entity);
-                                }
-                            }
+                        } else if version < 6
+                            && let Some(ref p_name) = script.parent_name
+                            && let Some(&parent_entity) = named_entities.get(p_name)
+                        {
+                            commands.entity(parent_entity).add_child(new_script_entity);
                         }
                     }
                     for (child, parent_id) in pending_parents {
@@ -624,10 +624,10 @@ pub fn handle_file_dialog_results(
                             if let Some(mat) = studs_materials.get(&studs_mat_handle.0) {
                                 current_color = mat.base.base_color;
                             }
-                        } else if let Some(mat_handle) = mat_opt {
-                            if let Some(mat) = materials.get(&mat_handle.0) {
-                                current_color = mat.base_color;
-                            }
+                        } else if let Some(mat_handle) = mat_opt
+                            && let Some(mat) = materials.get(&mat_handle.0)
+                        {
+                            current_color = mat.base_color;
                         }
                         let (
                             physics_enabled,
@@ -689,12 +689,11 @@ pub fn handle_file_dialog_results(
                     }
                     if let Some(script_type) = script_type_opt {
                         let mut parent_name = None;
-                        if let Some(child_of) = child_of_opt {
-                            if let Ok((_, p_name, _, _, _, _, _, _)) =
+                        if let Some(child_of) = child_of_opt
+                            && let Ok((_, p_name, _, _, _, _, _, _)) =
                                 save_explorer_query.get(child_of.parent())
-                            {
-                                parent_name = Some(p_name.to_string());
-                            }
+                        {
+                            parent_name = Some(p_name.to_string());
                         }
                         scripts_data.push(crate::common::core::vrtx::VrtxScript {
                             node_id: node_ids
@@ -739,7 +738,9 @@ pub fn handle_file_dialog_results(
                         error!("Failed to save project to '{}': {}", save_path_str, error);
                     }
                 }
-                file_dialog_state.is_open.store(false, std::sync::atomic::Ordering::Relaxed);
+                file_dialog_state
+                    .is_open
+                    .store(false, std::sync::atomic::Ordering::Relaxed);
             }
             FileDialogResult::Cancel => {
                 file_dialog_state

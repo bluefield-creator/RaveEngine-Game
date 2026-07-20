@@ -1,4 +1,4 @@
-use bevy_egui::{egui, EguiContexts};
+use bevy_egui::{EguiContexts, egui};
 
 struct MockMessage {
     username: &'static str,
@@ -19,10 +19,10 @@ const MOCK_MESSAGES: &[MockMessage] = &[
     },
 ];
 
-pub fn draw_chat_container(
-    mut contexts: EguiContexts,
-) {
-    let Ok(ctx) = contexts.ctx_mut() else { return; };
+pub fn draw_chat_container(mut contexts: EguiContexts) {
+    let Ok(ctx) = contexts.ctx_mut() else {
+        return;
+    };
 
     let screen_rect = ctx.content_rect();
     let screen_width = screen_rect.width();
@@ -60,19 +60,32 @@ pub fn draw_chat_container(
                                     ui.set_min_width(min_w);
 
                                     ui.horizontal_wrapped(|ui| {
-                                        ui.spacing_mut().item_spacing = egui::vec2(4.0 * scale_factor, 0.0);
+                                        ui.spacing_mut().item_spacing =
+                                            egui::vec2(4.0 * scale_factor, 0.0);
 
-                                        ui.add(egui::Label::new(
-                                            egui::RichText::new(msg.username)
-                                                .color(msg.color)
-                                                .font(egui::FontId::new(13.0 * scale_factor, egui::FontFamily::Proportional))
-                                        ).selectable(false));
+                                        ui.add(
+                                            egui::Label::new(
+                                                egui::RichText::new(msg.username)
+                                                    .color(msg.color)
+                                                    .font(egui::FontId::new(
+                                                        13.0 * scale_factor,
+                                                        egui::FontFamily::Proportional,
+                                                    )),
+                                            )
+                                            .selectable(false),
+                                        );
 
-                                        ui.add(egui::Label::new(
-                                            egui::RichText::new(msg.text)
-                                                .color(egui::Color32::WHITE)
-                                                .font(egui::FontId::new(13.0 * scale_factor, egui::FontFamily::Proportional))
-                                        ).selectable(false));
+                                        ui.add(
+                                            egui::Label::new(
+                                                egui::RichText::new(msg.text)
+                                                    .color(egui::Color32::WHITE)
+                                                    .font(egui::FontId::new(
+                                                        13.0 * scale_factor,
+                                                        egui::FontFamily::Proportional,
+                                                    )),
+                                            )
+                                            .selectable(false),
+                                        );
                                     });
                                 });
                         }

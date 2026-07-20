@@ -477,7 +477,7 @@ fn decompress_gcpf_file(data: &[u8]) -> std::io::Result<Vec<u8>> {
         ));
     }
 
-    let num_blocks = (uncompressed_size + block_size - 1) / block_size;
+    let num_blocks = uncompressed_size.div_ceil(block_size);
     let header_size = 16 + num_blocks * 4;
     debug!(
         "GCPF decompress: num_blocks={}, header_size={}",

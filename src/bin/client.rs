@@ -1,9 +1,9 @@
-use bevy::prelude::*;
-use bevy::log::LogPlugin;
-use lightyear::prelude::*;
-use lightyear::prelude::client::*;
 use RaveEngineLib::client::ClientPlugin;
 use RaveEngineLib::common::CommonPlugin;
+use bevy::log::LogPlugin;
+use bevy::prelude::*;
+use lightyear::prelude::client::*;
+use lightyear::prelude::*;
 
 #[derive(Resource)]
 struct ClientConnectSettings {
@@ -31,15 +31,17 @@ fn main() {
 
     let args: Vec<String> = std::env::args().collect();
     for i in 0..args.len() {
-        if args[i] == "--port" && i + 1 < args.len() {
-            if let Ok(p) = args[i + 1].parse::<u16>() {
-                port = p;
-            }
+        if args[i] == "--port"
+            && i + 1 < args.len()
+            && let Ok(p) = args[i + 1].parse::<u16>()
+        {
+            port = p;
         }
-        if args[i] == "--ip" && i + 1 < args.len() {
-            if let Ok(ip_addr) = args[i + 1].parse::<std::net::IpAddr>() {
-                ip = ip_addr;
-            }
+        if args[i] == "--ip"
+            && i + 1 < args.len()
+            && let Ok(ip_addr) = args[i + 1].parse::<std::net::IpAddr>()
+        {
+            ip = ip_addr;
         }
         if args[i] == "--ukey" && i + 1 < args.len() {
             ukey = args[i + 1].clone();
@@ -67,7 +69,10 @@ fn main() {
     });
     app.add_plugins(CommonPlugin);
     app.add_plugins(ClientPlugin);
-    app.add_systems(Startup, setup_client.after(RaveEngineLib::client::setup_player_assets));
+    app.add_systems(
+        Startup,
+        setup_client.after(RaveEngineLib::client::setup_player_assets),
+    );
     app.add_systems(Update, trigger_delayed_connect);
     app.run();
 }

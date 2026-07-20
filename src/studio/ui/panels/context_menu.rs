@@ -71,70 +71,69 @@ pub fn draw_entity_context_menu(
         ui.close();
         closed = true;
     }
-    if copiedbuffer.transform.is_some() {
-        if ui.button("Paste").clicked() {
-            let transform = copiedbuffer.transform.unwrap();
-            let name = copiedbuffer.name.clone().unwrap();
-            let mut newtransform = transform;
-            newtransform.translation += Vec3::new(2.0, 0.0, 2.0);
+    if let Some(transform) = copiedbuffer.transform
+        && ui.button("Paste").clicked()
+    {
+        let name = copiedbuffer.name.clone().unwrap();
+        let mut newtransform = transform;
+        newtransform.translation += Vec3::new(2.0, 0.0, 2.0);
 
-            let new_entity = commands
-                .spawn((
-                    newtransform,
-                    Name::new(format!("{} - Copy", name)),
-                    Pickable::default(),
-                ))
-                .id();
+        let new_entity = commands
+            .spawn((
+                newtransform,
+                Name::new(format!("{} - Copy", name)),
+                Pickable::default(),
+            ))
+            .id();
 
-            if let Some(ref mesh) = copiedbuffer.mesh {
-                commands.entity(new_entity).insert(mesh.clone());
-            }
-            if let Some(ref mat) = copiedbuffer.material {
-                commands.entity(new_entity).insert(mat.clone());
-            }
-            if let Some(ref studs_mat) = copiedbuffer.studs_material {
-                commands.entity(new_entity).insert(studs_mat.clone());
-            }
-            if copiedbuffer.is_brick {
-                commands.entity(new_entity).insert((
-                    Brick,
-                    crate::common::game::bricks::components::BrickShapeComponent {
-                        shape: copiedbuffer.shape,
-                    },
-                ));
-            }
-            if let Some(phys) = copiedbuffer.physics {
-                commands.entity(new_entity).insert(phys.clone());
-            } else if copiedbuffer.is_brick {
-                commands
-                    .entity(new_entity)
-                    .insert(crate::common::game::bricks::components::BrickPhysics::default());
-            }
-
-            let data = crate::common::game::bricks::data::BrickData {
-                transform: newtransform,
-                name: format!("{} - Copy", name),
-                is_brick: copiedbuffer.is_brick,
-                shape: copiedbuffer.shape,
-                mesh: copiedbuffer.mesh.clone(),
-                standard_material: copiedbuffer.material.clone(),
-                studs_material: copiedbuffer.studs_material.clone(),
-                parent: None,
-                physics: copiedbuffer.physics.clone(),
-                color: None,
-            };
-
-            history.push_command(crate::studio::tools::UndoCommand::Spawn {
-                entity: new_entity,
-                data,
-            });
-
-            ui.close();
-            closed = true;
+        if let Some(ref mesh) = copiedbuffer.mesh {
+            commands.entity(new_entity).insert(mesh.clone());
         }
+        if let Some(ref mat) = copiedbuffer.material {
+            commands.entity(new_entity).insert(mat.clone());
+        }
+        if let Some(ref studs_mat) = copiedbuffer.studs_material {
+            commands.entity(new_entity).insert(studs_mat.clone());
+        }
+        if copiedbuffer.is_brick {
+            commands.entity(new_entity).insert((
+                Brick,
+                crate::common::game::bricks::components::BrickShapeComponent {
+                    shape: copiedbuffer.shape,
+                },
+            ));
+        }
+        if let Some(phys) = copiedbuffer.physics {
+            commands.entity(new_entity).insert(phys);
+        } else if copiedbuffer.is_brick {
+            commands
+                .entity(new_entity)
+                .insert(crate::common::game::bricks::components::BrickPhysics::default());
+        }
+
+        let data = crate::common::game::bricks::data::BrickData {
+            transform: newtransform,
+            name: format!("{} - Copy", name),
+            is_brick: copiedbuffer.is_brick,
+            shape: copiedbuffer.shape,
+            mesh: copiedbuffer.mesh.clone(),
+            standard_material: copiedbuffer.material.clone(),
+            studs_material: copiedbuffer.studs_material.clone(),
+            parent: None,
+            physics: copiedbuffer.physics,
+            color: None,
+        };
+
+        history.push_command(crate::studio::tools::UndoCommand::Spawn {
+            entity: new_entity,
+            data,
+        });
+
+        ui.close();
+        closed = true;
     }
-    if ui.button("Duplicate").clicked() {
-        if let Ok((
+    if ui.button("Duplicate").clicked()
+        && let Ok((
             _,
             transform,
             name,
@@ -149,72 +148,71 @@ pub fn draw_entity_context_menu(
             phys_opt,
             _,
         )) = entities_query.get(entity)
-        {
-            let newtransform = *transform;
+    {
+        let newtransform = *transform;
 
-            let new_entity = commands
-                .spawn((
-                    newtransform,
-                    Name::new(format!("{} - Copy", name.as_str())),
-                    Pickable::default(),
-                ))
-                .id();
+        let new_entity = commands
+            .spawn((
+                newtransform,
+                Name::new(format!("{} - Copy", name.as_str())),
+                Pickable::default(),
+            ))
+            .id();
 
-            if let Some(mesh) = mesh_opt {
-                commands.entity(new_entity).insert(mesh.clone());
-            }
-            if let Some(mat) = mat_opt {
-                commands.entity(new_entity).insert(mat.clone());
-            }
-            if let Some(studs_mat) = studs_mat_opt {
-                commands.entity(new_entity).insert(studs_mat.clone());
-            }
-            let shape = shape_opt
-                .as_ref()
-                .map(|s| s.shape)
-                .unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
-            if brick_opt.is_some() {
-                commands.entity(new_entity).insert((
-                    Brick,
-                    crate::common::game::bricks::components::BrickShapeComponent { shape },
-                ));
-            }
-            if let Some(phys) = phys_opt {
-                commands.entity(new_entity).insert(phys.clone());
-            } else if brick_opt.is_some() {
-                commands
-                    .entity(new_entity)
-                    .insert(crate::common::game::bricks::components::BrickPhysics::default());
-            }
-
-            let parent_entity = child_of_opt.map(|co| co.parent());
-            if let Some(p) = parent_entity {
-                if let Ok(mut p_cmd) = commands.get_entity(p) {
-                    p_cmd.add_child(new_entity);
-                }
-            }
-
-            let data = crate::common::game::bricks::data::BrickData {
-                transform: newtransform,
-                name: format!("{} - Copy", name.as_str()),
-                is_brick: brick_opt.is_some(),
-                shape,
-                mesh: mesh_opt.cloned(),
-                standard_material: mat_opt.cloned(),
-                studs_material: studs_mat_opt.cloned(),
-                parent: parent_entity,
-                physics: phys_opt.cloned(),
-                color: None,
-            };
-
-            history.push_command(crate::studio::tools::UndoCommand::Spawn {
-                entity: new_entity,
-                data,
-            });
-
-            ui.close();
-            closed = true;
+        if let Some(mesh) = mesh_opt {
+            commands.entity(new_entity).insert(mesh.clone());
         }
+        if let Some(mat) = mat_opt {
+            commands.entity(new_entity).insert(mat.clone());
+        }
+        if let Some(studs_mat) = studs_mat_opt {
+            commands.entity(new_entity).insert(studs_mat.clone());
+        }
+        let shape = shape_opt
+            .as_ref()
+            .map(|s| s.shape)
+            .unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
+        if brick_opt.is_some() {
+            commands.entity(new_entity).insert((
+                Brick,
+                crate::common::game::bricks::components::BrickShapeComponent { shape },
+            ));
+        }
+        if let Some(phys) = phys_opt {
+            commands.entity(new_entity).insert(*phys);
+        } else if brick_opt.is_some() {
+            commands
+                .entity(new_entity)
+                .insert(crate::common::game::bricks::components::BrickPhysics::default());
+        }
+
+        let parent_entity = child_of_opt.map(|co| co.parent());
+        if let Some(p) = parent_entity
+            && let Ok(mut p_cmd) = commands.get_entity(p)
+        {
+            p_cmd.add_child(new_entity);
+        }
+
+        let data = crate::common::game::bricks::data::BrickData {
+            transform: newtransform,
+            name: format!("{} - Copy", name.as_str()),
+            is_brick: brick_opt.is_some(),
+            shape,
+            mesh: mesh_opt.cloned(),
+            standard_material: mat_opt.cloned(),
+            studs_material: studs_mat_opt.cloned(),
+            parent: parent_entity,
+            physics: phys_opt.cloned(),
+            color: None,
+        };
+
+        history.push_command(crate::studio::tools::UndoCommand::Spawn {
+            entity: new_entity,
+            data,
+        });
+
+        ui.close();
+        closed = true;
     }
     if ui.button("Delete").clicked() {
         if let Some(data) =

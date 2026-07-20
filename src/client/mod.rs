@@ -1,18 +1,18 @@
 pub mod player;
 pub mod ui;
 
-use bevy::prelude::*;
-use bevy::pbr::ExtendedMaterial;
-use bevy::light::ShadowFilteringMethod;
-use avian3d::prelude::Physics;
-use avian3d::schedule::PhysicsTime;
-use lightyear::prelude::*;
 use crate::common::game::bricks::components::{Brick, BrickShapeComponent};
 use crate::common::game::bricks::studs::{StudsAssets, StudsExtension};
-use crate::common::net::components::NetworkTransform;
 use crate::common::game::physics::PhysicsSimulationState;
-use bevy_egui::EguiContexts;
+use crate::common::net::components::NetworkTransform;
+use avian3d::prelude::Physics;
+use avian3d::schedule::PhysicsTime;
 use bevy::camera::Hdr;
+use bevy::light::ShadowFilteringMethod;
+use bevy::pbr::ExtendedMaterial;
+use bevy::prelude::*;
+use bevy_egui::EguiContexts;
+use lightyear::prelude::*;
 
 #[derive(Resource)]
 pub struct ClientUkey(pub String);
@@ -60,7 +60,7 @@ pub fn is_playtesting(playtest: Option<Res<PlaytestState>>) -> bool {
     if std::env::var("VERTIGO_APP").unwrap_or_default() == "client" {
         return true;
     }
-    playtest.map_or(false, |p| p.active)
+    playtest.is_some_and(|p| p.active)
 }
 
 pub struct ClientPlugin;
@@ -76,41 +76,46 @@ impl Plugin for ClientPlugin {
             .init_resource::<StudioPlaytestPhysicsState>()
             .add_plugins(player::PlayerPlugin)
             .add_plugins(crate::common::net::ProtocolPlugin)
-            .add_systems(Startup, (
-                setup_physics_initializer,
-                setup_player_assets,
-            ))
-            .add_systems(PreUpdate, (
-                initialize_client_physics,
-                sync_studio_playtest_physics,
-            ))
-            .add_systems(Update, (
-                sync_network_transforms_to_client,
-                sync_predicted_interpolated_transforms,
-                sync_brick_color_to_material,
-                send_player_inputs,
-                sync_local_player,
-                attach_character_visuals.after(sync_local_player),
-                update_local_player_transparency,
-                hide_confirmed_player_visuals.after(update_local_player_transparency),
-                send_hello_message,
-                handle_kick_message,
-                handle_auth_success,
-            ).run_if(is_playtesting))
+            .add_systems(Startup, (setup_physics_initializer, setup_player_assets))
+            .add_systems(
+                PreUpdate,
+                (initialize_client_physics, sync_studio_playtest_physics),
+            )
+            .add_systems(
+                Update,
+                (
+                    sync_network_transforms_to_client,
+                    sync_predicted_interpolated_transforms,
+                    sync_brick_color_to_material,
+                    send_player_inputs,
+                    sync_local_player,
+                    attach_character_visuals.after(sync_local_player),
+                    update_local_player_transparency,
+                    hide_confirmed_player_visuals.after(update_local_player_transparency),
+                    send_hello_message,
+                    handle_kick_message,
+                    handle_auth_success,
+                )
+                    .run_if(is_playtesting),
+            )
             .add_systems(Update, cleanup_orphaned_visuals);
 
-            app.add_systems(bevy_egui::EguiPrimaryContextPass, (
+        app.add_systems(
+            bevy_egui::EguiPrimaryContextPass,
+            (
                 ui::configure_client_visuals,
                 ui::draw_scoreboard,
                 ui::draw_chatbox,
                 ui::draw_health_bar,
                 ui::draw_chat_container,
-            ).run_if(is_playtesting))
-            .add_observer(on_client_connected)
-            .add_observer(on_player_added)
-            .add_observer(on_player_removed)
-            .add_observer(on_brick_added)
-            .add_observer(on_network_transform_added);
+            )
+                .run_if(is_playtesting),
+        )
+        .add_observer(on_client_connected)
+        .add_observer(on_player_added)
+        .add_observer(on_player_removed)
+        .add_observer(on_brick_added)
+        .add_observer(on_network_transform_added);
     }
 }
 
@@ -150,16 +155,11 @@ fn setup_physics_initializer(
     ));
 }
 
-pub fn setup_player_assets(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-) {
+pub fn setup_player_assets(mut commands: Commands, asset_server: Res<AssetServer>) {
     let avatar_scene = asset_server.load("content/game/character/Legacy/Av.glb#Scene0");
     let gltf_handle = asset_server.load("content/game/character/Legacy/Av.glb");
 
-    commands.insert_resource(player::loader::PlayerCharacterAssets {
-        avatar_scene,
-    });
+    commands.insert_resource(player::loader::PlayerCharacterAssets { avatar_scene });
     commands.insert_resource(player::model::PlayerGltfHandle(gltf_handle));
 }
 
@@ -181,16 +181,23 @@ fn initialize_client_physics(
 
 fn sync_network_transforms_to_client(
     time: Res<Time>,
-    mut query: Query<(
-        &NetworkTransform,
-        &mut Transform,
-        Option<&crate::common::net::components::Player>,
-        Option<&LocalPlayer>,
-    ), Without<Replicate>>,
+    mut query: Query<
+        (
+            &NetworkTransform,
+            &mut Transform,
+            Option<&crate::common::net::components::Player>,
+            Option<&LocalPlayer>,
+        ),
+        Without<Replicate>,
+    >,
     camera_query: Query<&player::CameraSettings, With<player::PlayerCamera>>,
 ) {
     let lerp_factor = (25.0 * time.delta_secs()).min(1.0);
-    let in_first_person = camera_query.iter().next().map(|s| s.distance <= 0.6).unwrap_or(false);
+    let in_first_person = camera_query
+        .iter()
+        .next()
+        .map(|s| s.distance <= 0.6)
+        .unwrap_or(false);
 
     for (net_transform, mut transform, player_opt, local_opt) in &mut query {
         transform.translation = net_transform.translation;
@@ -199,10 +206,14 @@ fn sync_network_transforms_to_client(
         if player_opt.is_some() {
             if local_opt.is_some() {
                 if !in_first_person {
-                    transform.rotation = transform.rotation.slerp(net_transform.rotation, lerp_factor);
+                    transform.rotation = transform
+                        .rotation
+                        .slerp(net_transform.rotation, lerp_factor);
                 }
             } else {
-                transform.rotation = transform.rotation.slerp(net_transform.rotation, lerp_factor);
+                transform.rotation = transform
+                    .rotation
+                    .slerp(net_transform.rotation, lerp_factor);
             }
         } else {
             transform.rotation = net_transform.rotation;
@@ -239,8 +250,10 @@ fn send_player_inputs(
     let in_first_person = camera_settings.distance <= 0.6;
 
     if w || a || s || d || jump {
-        trace!("Client transmitting PlayerInputMessage: w={}, a={}, s={}, d={}, jump={}, yaw={}, in_first_person={}",
-            w, a, s, d, jump, camera_settings.yaw, in_first_person);
+        trace!(
+            "Client transmitting PlayerInputMessage: w={}, a={}, s={}, d={}, jump={}, yaw={}, in_first_person={}",
+            w, a, s, d, jump, camera_settings.yaw, in_first_person
+        );
     }
 
     let message = crate::common::net::messages::PlayerInputMessage {
@@ -253,7 +266,7 @@ fn send_player_inputs(
         in_first_person,
     };
 
-    let _ = sender.send::<crate::common::net::messages::GameChannel>(message);
+    sender.send::<crate::common::net::messages::GameChannel>(message);
 }
 
 fn on_client_connected(
@@ -261,10 +274,16 @@ fn on_client_connected(
     query: Query<&LocalId>,
     mut commands: Commands,
 ) {
-    debug!("on_client_connected observer triggered for entity: {:?}", trigger.entity);
+    debug!(
+        "on_client_connected observer triggered for entity: {:?}",
+        trigger.entity
+    );
     if let Ok(local_id) = query.get(trigger.entity) {
         let client_id = local_id.0.to_bits();
-        info!("Client connected successfully! Mapped Local Client ID: {}", client_id);
+        info!(
+            "Client connected successfully! Mapped Local Client ID: {}",
+            client_id
+        );
         commands.insert_resource(LocalClientId(client_id));
     } else {
         warn!("on_client_connected failed: LocalId component missing on target entity");
@@ -274,13 +293,21 @@ fn on_client_connected(
 fn on_player_added(
     trigger: On<Add, crate::common::net::components::Player>,
     mut commands: Commands,
-    query: Query<(Option<&Predicted>, Option<&Interpolated>, Option<&Replicate>)>,
+    query: Query<(
+        Option<&Predicted>,
+        Option<&Interpolated>,
+        Option<&Replicate>,
+    )>,
 ) {
     let entity = trigger.entity;
-    let (pred, interp, rep) = query.get(entity)
+    let (pred, interp, rep) = query
+        .get(entity)
         .map(|(p, i, r)| (p.is_some(), i.is_some(), r.is_some()))
         .unwrap_or((false, false, false));
-    info!("PLAYER ADDED OBSERVER: {:?} (predicted={}, interpolated={}, replicated={})", entity, pred, interp, rep);
+    info!(
+        "PLAYER ADDED OBSERVER: {:?} (predicted={}, interpolated={}, replicated={})",
+        entity, pred, interp, rep
+    );
     if rep {
         return;
     }
@@ -291,7 +318,10 @@ fn on_player_removed(
     trigger: On<Remove, crate::common::net::components::Player>,
     mut commands: Commands,
 ) {
-    debug!("CLIENT PLAYER REMOVED: {:?}, performing recursive despawn of children", trigger.entity);
+    debug!(
+        "CLIENT PLAYER REMOVED: {:?}, performing recursive despawn of children",
+        trigger.entity
+    );
     if let Ok(mut entity_cmd) = commands.get_entity(trigger.entity) {
         entity_cmd.despawn();
     }
@@ -304,7 +334,10 @@ fn cleanup_orphaned_visuals(
 ) {
     for (entity, visual_child) in &query_visuals {
         if query_parents.get(visual_child.parent).is_err() {
-            debug!("CLIENT: Despawning orphaned player visual child {:?} as its parent has been despawned", entity);
+            debug!(
+                "CLIENT: Despawning orphaned player visual child {:?} as its parent has been despawned",
+                entity
+            );
             if let Ok(mut entity_cmd) = commands.get_entity(entity) {
                 entity_cmd.despawn();
             }
@@ -315,7 +348,18 @@ fn cleanup_orphaned_visuals(
 fn attach_character_visuals(
     mut commands: Commands,
     character_assets: Option<Res<player::loader::PlayerCharacterAssets>>,
-    query: Query<(Entity, &crate::common::net::components::Player, Option<&LocalPlayer>), (With<NeedsCharacterVisuals>, Without<CharacterVisualsSpawned>, Without<Replicate>)>,
+    query: Query<
+        (
+            Entity,
+            &crate::common::net::components::Player,
+            Option<&LocalPlayer>,
+        ),
+        (
+            With<NeedsCharacterVisuals>,
+            Without<CharacterVisualsSpawned>,
+            Without<Replicate>,
+        ),
+    >,
     local_client_id: Option<Res<LocalClientId>>,
 ) {
     let Some(assets) = character_assets else {
@@ -326,12 +370,14 @@ fn attach_character_visuals(
 
     for (entity, player_comp, local_player_opt) in &query {
         let is_local = (local_id == Some(player_comp.client_id)) || local_player_opt.is_some();
-        info!("ATTACHING CHARACTER VISUALS TO entity={:?}, client_id={}, is_local={}", entity, player_comp.client_id, is_local);
+        info!(
+            "ATTACHING CHARACTER VISUALS TO entity={:?}, client_id={}, is_local={}",
+            entity, player_comp.client_id, is_local
+        );
 
         let mut child_cmd = commands.spawn((
             WorldAssetRoot(assets.avatar_scene.clone()),
-            Transform::from_translation(Vec3::new(0.0, -0.7, 0.0))
-                .with_scale(Vec3::splat(0.28)),
+            Transform::from_translation(Vec3::new(0.0, -0.7, 0.0)).with_scale(Vec3::splat(0.28)),
             GlobalTransform::default(),
             Visibility::Inherited,
             PlayerVisualChild { parent: entity },
@@ -344,7 +390,8 @@ fn attach_character_visuals(
         let child_id = child_cmd.id();
         commands.entity(entity).add_child(child_id);
 
-        commands.entity(entity)
+        commands
+            .entity(entity)
             .remove::<NeedsCharacterVisuals>()
             .insert(CharacterVisualsSpawned);
     }
@@ -352,7 +399,10 @@ fn attach_character_visuals(
 
 fn sync_local_player(
     mut commands: Commands,
-    query: Query<(Entity, &crate::common::net::components::Player), (Without<LocalPlayer>, Without<Replicate>)>,
+    query: Query<
+        (Entity, &crate::common::net::components::Player),
+        (Without<LocalPlayer>, Without<Replicate>),
+    >,
     local_client_id: Option<Res<LocalClientId>>,
     startup_cameras: Query<Entity, With<StartupCamera>>,
 ) {
@@ -361,10 +411,15 @@ fn sync_local_player(
     };
     let local_client_id = local_id.0;
     for (entity, player) in &query {
-        trace!("sync_local_player checking entity={:?}, player client_id={}, expected client_id={}",
-            entity, player.client_id, local_client_id);
+        trace!(
+            "sync_local_player checking entity={:?}, player client_id={}, expected client_id={}",
+            entity, player.client_id, local_client_id
+        );
         if player.client_id == local_client_id {
-            debug!("Local player match verified! Inserting LocalPlayer and spawning camera on entity: {:?}", entity);
+            debug!(
+                "Local player match verified! Inserting LocalPlayer and spawning camera on entity: {:?}",
+                entity
+            );
             commands.entity(entity).insert(LocalPlayer);
 
             for camera_entity in &startup_cameras {
@@ -420,13 +475,13 @@ fn update_local_player_transparency(
     let show = camera_settings.distance > 0.6;
 
     for child in children.iter() {
-        if let Ok(child_entity) = child_query.get(child) {
-            if let Ok(mut visibility) = visibility_query.get_mut(child_entity) {
-                if show {
-                    *visibility = Visibility::Inherited;
-                } else {
-                    *visibility = Visibility::Hidden;
-                }
+        if let Ok(child_entity) = child_query.get(child)
+            && let Ok(mut visibility) = visibility_query.get_mut(child_entity)
+        {
+            if show {
+                *visibility = Visibility::Inherited;
+            } else {
+                *visibility = Visibility::Hidden;
             }
         }
     }
@@ -445,12 +500,16 @@ fn on_brick_added(
 ) {
     let entity = trigger.entity;
     trace!("Brick added to scene: {:?}", entity);
-    let shape = shape_query.get(entity).map(|s| s.shape).unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
+    let shape = shape_query
+        .get(entity)
+        .map(|s| s.shape)
+        .unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
 
     let mesh_handle = match shape {
         crate::common::game::bricks::components::BrickShape::Block => {
             if cache.block_mesh.is_none() {
-                cache.block_mesh = Some(meshes.add(Cuboid::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28)));
+                cache.block_mesh =
+                    Some(meshes.add(Cuboid::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28)));
             }
             cache.block_mesh.clone().unwrap()
         }
@@ -488,7 +547,11 @@ fn on_brick_added(
             base: StandardMaterial {
                 base_color,
                 perceptual_roughness: 0.9,
-                alpha_mode: if base_color.alpha() < 1.0 { AlphaMode::Blend } else { AlphaMode::Opaque },
+                alpha_mode: if base_color.alpha() < 1.0 {
+                    AlphaMode::Blend
+                } else {
+                    AlphaMode::Opaque
+                },
                 ..default()
             },
             extension: StudsExtension {
@@ -500,10 +563,9 @@ fn on_brick_added(
         new_mat
     };
 
-    commands.entity(entity).insert((
-        Mesh3d(mesh_handle),
-        MeshMaterial3d(material_handle),
-    ));
+    commands
+        .entity(entity)
+        .insert((Mesh3d(mesh_handle), MeshMaterial3d(material_handle)));
 }
 
 fn on_network_transform_added(
@@ -512,7 +574,9 @@ fn on_network_transform_added(
     query: Query<&NetworkTransform>,
 ) {
     let entity = trigger.entity;
-    let Ok(net_transform) = query.get(entity) else { return };
+    let Ok(net_transform) = query.get(entity) else {
+        return;
+    };
     commands.entity(entity).insert((
         Transform {
             translation: net_transform.translation,
@@ -574,8 +638,18 @@ fn sync_studio_playtest_physics(
 }
 
 fn sync_predicted_interpolated_transforms(
-    mut predicted_interpolated_query: Query<(&crate::common::net::components::Player, &mut Transform), Or<(With<Predicted>, With<Interpolated>)>>,
-    confirmed_query: Query<(&crate::common::net::components::Player, &Transform), (Without<Predicted>, Without<Interpolated>, Without<Replicate>)>,
+    mut predicted_interpolated_query: Query<
+        (&crate::common::net::components::Player, &mut Transform),
+        Or<(With<Predicted>, With<Interpolated>)>,
+    >,
+    confirmed_query: Query<
+        (&crate::common::net::components::Player, &Transform),
+        (
+            Without<Predicted>,
+            Without<Interpolated>,
+            Without<Replicate>,
+        ),
+    >,
     mut confirmed_transforms: Local<std::collections::HashMap<u64, Transform>>,
 ) {
     index_confirmed_transforms(&mut confirmed_transforms, confirmed_query.iter());
@@ -588,7 +662,10 @@ fn sync_predicted_interpolated_transforms(
 
 fn sync_brick_color_to_material(
     mut commands: Commands,
-    query: Query<(Entity, &crate::common::game::bricks::components::BrickColor), Changed<crate::common::game::bricks::components::BrickColor>>,
+    query: Query<
+        (Entity, &crate::common::game::bricks::components::BrickColor),
+        Changed<crate::common::game::bricks::components::BrickColor>,
+    >,
     mut cache: ResMut<crate::common::game::bricks::BrickMaterialCache>,
     mut studs_materials: ResMut<Assets<ExtendedMaterial<StandardMaterial, StudsExtension>>>,
     studs_assets: Res<StudsAssets>,
@@ -610,7 +687,11 @@ fn sync_brick_color_to_material(
                 base: StandardMaterial {
                     base_color,
                     perceptual_roughness: 0.9,
-                    alpha_mode: if base_color.alpha() < 1.0 { AlphaMode::Blend } else { AlphaMode::Opaque },
+                    alpha_mode: if base_color.alpha() < 1.0 {
+                        AlphaMode::Blend
+                    } else {
+                        AlphaMode::Opaque
+                    },
                     ..default()
                 },
                 extension: StudsExtension {
@@ -621,13 +702,25 @@ fn sync_brick_color_to_material(
             cache.studs_materials.insert(cache_key, new_mat.clone());
             new_mat
         };
-        commands.entity(entity).insert(MeshMaterial3d(material_handle));
+        commands
+            .entity(entity)
+            .insert(MeshMaterial3d(material_handle));
     }
 }
 
 fn hide_confirmed_player_visuals(
-    predicted_interpolated_query: Query<&crate::common::net::components::Player, Or<(With<Predicted>, With<Interpolated>)>>,
-    mut confirmed_query: Query<(&crate::common::net::components::Player, &mut Visibility), (Without<Predicted>, Without<Interpolated>, Without<Replicate>)>,
+    predicted_interpolated_query: Query<
+        &crate::common::net::components::Player,
+        Or<(With<Predicted>, With<Interpolated>)>,
+    >,
+    mut confirmed_query: Query<
+        (&crate::common::net::components::Player, &mut Visibility),
+        (
+            Without<Predicted>,
+            Without<Interpolated>,
+            Without<Replicate>,
+        ),
+    >,
     mut cached_ids: Local<std::collections::HashSet<u64>>,
 ) {
     cached_ids.clear();
@@ -650,23 +743,38 @@ fn hide_confirmed_player_visuals(
 
 fn send_hello_message(
     mut commands: Commands,
-    mut client_query: Query<(Entity, &mut MessageSender<crate::common::net::messages::HelloMessage>), (With<Connected>, Without<HelloSent>)>,
+    mut client_query: Query<
+        (
+            Entity,
+            &mut MessageSender<crate::common::net::messages::HelloMessage>,
+        ),
+        (With<Connected>, Without<HelloSent>),
+    >,
     ukey_res: Option<Res<crate::client::ClientUkey>>,
 ) {
-    let Some(ukey) = ukey_res else { return; };
-    if ukey.0.is_empty() { return; }
+    let Some(ukey) = ukey_res else {
+        return;
+    };
+    if ukey.0.is_empty() {
+        return;
+    }
     for (entity, mut sender) in &mut client_query {
         info!("Sending HelloMessage with ukey to server...");
-        let _ = sender.send::<crate::common::net::messages::GameChannel>(crate::common::net::messages::HelloMessage {
-            ukey: ukey.0.clone(),
-        });
+        sender.send::<crate::common::net::messages::GameChannel>(
+            crate::common::net::messages::HelloMessage {
+                ukey: ukey.0.clone(),
+            },
+        );
         commands.entity(entity).insert(HelloSent);
     }
 }
 
 fn handle_kick_message(
     mut commands: Commands,
-    mut receivers: Query<(Entity, &mut MessageReceiver<crate::common::net::messages::KickMessage>)>,
+    mut receivers: Query<(
+        Entity,
+        &mut MessageReceiver<crate::common::net::messages::KickMessage>,
+    )>,
 ) {
     for (entity, mut receiver) in &mut receivers {
         for kick in receiver.receive() {
@@ -681,112 +789,13 @@ fn handle_auth_success(
 ) {
     for mut receiver in &mut receivers {
         for success in receiver.receive() {
-            info!("Successfully authenticated! User ID: {}, Username: {}", success.uid, success.username);
+            info!(
+                "Successfully authenticated! User ID: {}, Username: {}",
+                success.uid, success.username
+            );
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn player(client_id: u64) -> crate::common::net::components::Player {
-        crate::common::net::components::Player {
-            client_id,
-            ..default()
-        }
-    }
-
-    #[test]
-    fn indexes_confirmed_transforms_by_client() {
-        let players = [player(1), player(2)];
-        let transforms = [Transform::from_xyz(1.0, 2.0, 3.0), Transform::from_xyz(4.0, 5.0, 6.0)];
-        let mut index = std::collections::HashMap::new();
-
-        index_confirmed_transforms(&mut index, players.iter().zip(transforms.iter()));
-
-        assert_eq!(index.get(&1), Some(&transforms[0]));
-        assert_eq!(index.get(&2), Some(&transforms[1]));
-        assert_eq!(index.get(&3), None);
-    }
-
-    #[test]
-    fn preserves_the_first_duplicate_transform() {
-        let players = [player(1), player(1)];
-        let transforms = [Transform::from_xyz(1.0, 0.0, 0.0), Transform::from_xyz(2.0, 0.0, 0.0)];
-        let mut index = std::collections::HashMap::new();
-
-        index_confirmed_transforms(&mut index, players.iter().zip(transforms.iter()));
-
-        assert_eq!(index.get(&1), Some(&transforms[0]));
-    }
-
-    #[test]
-    fn restores_studio_physics_after_playtest() {
-        let mut time_physics = Time::<Physics>::default();
-        time_physics.pause();
-        let mut state = PhysicsSimulationState::Stopped;
-        let mut playtest_physics = StudioPlaytestPhysicsState::default();
-
-        update_studio_playtest_physics(
-            true,
-            &mut time_physics,
-            &mut state,
-            &mut playtest_physics,
-        );
-
-        assert_eq!(state, PhysicsSimulationState::Running);
-        assert!(!time_physics.is_paused());
-
-        update_studio_playtest_physics(
-            false,
-            &mut time_physics,
-            &mut state,
-            &mut playtest_physics,
-        );
-
-        assert_eq!(state, PhysicsSimulationState::Stopped);
-        assert!(time_physics.is_paused());
-    }
-
-    #[test]
-    fn preserves_running_studio_physics_after_playtest() {
-        let mut time_physics = Time::<Physics>::default();
-        let mut state = PhysicsSimulationState::Running;
-        let mut playtest_physics = StudioPlaytestPhysicsState::default();
-
-        update_studio_playtest_physics(
-            true,
-            &mut time_physics,
-            &mut state,
-            &mut playtest_physics,
-        );
-        update_studio_playtest_physics(
-            false,
-            &mut time_physics,
-            &mut state,
-            &mut playtest_physics,
-        );
-
-        assert_eq!(state, PhysicsSimulationState::Running);
-        assert!(!time_physics.is_paused());
-    }
-
-    #[cfg(feature = "bench")]
-    #[test]
-    fn client_benchmark_spawns_deterministic_players() {
-        let mut app = App::new();
-        app.add_systems(Startup, spawn_client_benchmark);
-        app.update();
-
-        let player_count = app.world_mut()
-            .query::<&crate::common::net::components::Player>()
-            .iter(app.world())
-            .count();
-        assert_eq!(player_count, 300);
-    }
-}
-
 
 #[cfg(feature = "bench")]
 fn spawn_client_benchmark(mut commands: Commands) {
@@ -816,9 +825,101 @@ fn spawn_client_benchmark(mut commands: Commands) {
 #[cfg(feature = "bench")]
 pub fn add_client_benchmark(app: &mut App) {
     app.add_systems(Startup, spawn_client_benchmark)
-        .add_systems(Update, (
-            sync_predicted_interpolated_transforms,
-            hide_confirmed_player_visuals,
-            player::animation::track_player_velocities,
-        ).chain());
+        .add_systems(
+            Update,
+            (
+                sync_predicted_interpolated_transforms,
+                hide_confirmed_player_visuals,
+                player::animation::track_player_velocities,
+            )
+                .chain(),
+        );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn player(client_id: u64) -> crate::common::net::components::Player {
+        crate::common::net::components::Player {
+            client_id,
+            ..default()
+        }
+    }
+
+    #[test]
+    fn indexes_confirmed_transforms_by_client() {
+        let players = [player(1), player(2)];
+        let transforms = [
+            Transform::from_xyz(1.0, 2.0, 3.0),
+            Transform::from_xyz(4.0, 5.0, 6.0),
+        ];
+        let mut index = std::collections::HashMap::new();
+
+        index_confirmed_transforms(&mut index, players.iter().zip(transforms.iter()));
+
+        assert_eq!(index.get(&1), Some(&transforms[0]));
+        assert_eq!(index.get(&2), Some(&transforms[1]));
+        assert_eq!(index.get(&3), None);
+    }
+
+    #[test]
+    fn preserves_the_first_duplicate_transform() {
+        let players = [player(1), player(1)];
+        let transforms = [
+            Transform::from_xyz(1.0, 0.0, 0.0),
+            Transform::from_xyz(2.0, 0.0, 0.0),
+        ];
+        let mut index = std::collections::HashMap::new();
+
+        index_confirmed_transforms(&mut index, players.iter().zip(transforms.iter()));
+
+        assert_eq!(index.get(&1), Some(&transforms[0]));
+    }
+
+    #[test]
+    fn restores_studio_physics_after_playtest() {
+        let mut time_physics = Time::<Physics>::default();
+        time_physics.pause();
+        let mut state = PhysicsSimulationState::Stopped;
+        let mut playtest_physics = StudioPlaytestPhysicsState::default();
+
+        update_studio_playtest_physics(true, &mut time_physics, &mut state, &mut playtest_physics);
+
+        assert_eq!(state, PhysicsSimulationState::Running);
+        assert!(!time_physics.is_paused());
+
+        update_studio_playtest_physics(false, &mut time_physics, &mut state, &mut playtest_physics);
+
+        assert_eq!(state, PhysicsSimulationState::Stopped);
+        assert!(time_physics.is_paused());
+    }
+
+    #[test]
+    fn preserves_running_studio_physics_after_playtest() {
+        let mut time_physics = Time::<Physics>::default();
+        let mut state = PhysicsSimulationState::Running;
+        let mut playtest_physics = StudioPlaytestPhysicsState::default();
+
+        update_studio_playtest_physics(true, &mut time_physics, &mut state, &mut playtest_physics);
+        update_studio_playtest_physics(false, &mut time_physics, &mut state, &mut playtest_physics);
+
+        assert_eq!(state, PhysicsSimulationState::Running);
+        assert!(!time_physics.is_paused());
+    }
+
+    #[cfg(feature = "bench")]
+    #[test]
+    fn client_benchmark_spawns_deterministic_players() {
+        let mut app = App::new();
+        app.add_systems(Startup, spawn_client_benchmark);
+        app.update();
+
+        let player_count = app
+            .world_mut()
+            .query::<&crate::common::net::components::Player>()
+            .iter(app.world())
+            .count();
+        assert_eq!(player_count, 300);
+    }
 }

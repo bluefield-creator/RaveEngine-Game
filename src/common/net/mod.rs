@@ -1,6 +1,6 @@
+pub mod auth;
 pub mod components;
 pub mod messages;
-pub mod auth;
 
 use bevy::prelude::*;
 use lightyear::prelude::*;
@@ -50,14 +50,22 @@ pub fn register_protocol(app: &mut App) {
 
     app.component::<components::Player>().replicate();
     app.component::<components::NetworkTransform>().replicate();
-    app.component::<components::PlayersServiceContainer>().replicate();
-    app.component::<components::LightingServiceContainer>().replicate();
-    app.component::<crate::common::game::bricks::components::Brick>().replicate();
-    app.component::<crate::common::game::bricks::components::BrickShapeComponent>().replicate();
-    app.component::<crate::common::game::bricks::components::BrickPhysics>().replicate();
-    app.component::<crate::common::game::bricks::components::BrickColor>().replicate();
-    app.component::<crate::scripting::ecs::LocalScript>().replicate();
-    app.component::<crate::scripting::ecs::ModuleScript>().replicate();
+    app.component::<components::PlayersServiceContainer>()
+        .replicate();
+    app.component::<components::LightingServiceContainer>()
+        .replicate();
+    app.component::<crate::common::game::bricks::components::Brick>()
+        .replicate();
+    app.component::<crate::common::game::bricks::components::BrickShapeComponent>()
+        .replicate();
+    app.component::<crate::common::game::bricks::components::BrickPhysics>()
+        .replicate();
+    app.component::<crate::common::game::bricks::components::BrickColor>()
+        .replicate();
+    app.component::<crate::scripting::ecs::LocalScript>()
+        .replicate();
+    app.component::<crate::scripting::ecs::ModuleScript>()
+        .replicate();
 
     app.register_message::<messages::PlayerInputMessage>()
         .add_direction(lightyear::prelude::NetworkDirection::ClientToServer);

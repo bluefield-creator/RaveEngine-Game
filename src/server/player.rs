@@ -1,17 +1,23 @@
-use bevy::prelude::*;
-use lightyear::prelude::*;
-use lightyear::prelude::server::*;
-use avian3d::prelude::*;
-use crate::common::net::components::{Player, NetworkTransform};
+use crate::common::net::components::{NetworkTransform, Player};
 use crate::common::net::messages::PlayerInputMessage;
+use avian3d::prelude::*;
+use bevy::prelude::*;
+use lightyear::prelude::server::*;
+use lightyear::prelude::*;
 
 pub fn handle_new_client(
     trigger: On<Add, Connected>,
     query: Query<&RemoteId, With<ClientOf>>,
-    _players_service_query: Query<Entity, With<crate::common::net::components::PlayersServiceContainer>>,
+    _players_service_query: Query<
+        Entity,
+        With<crate::common::net::components::PlayersServiceContainer>,
+    >,
 ) {
     let Ok(remote_id) = query.get(trigger.entity) else {
-        warn!("handle_new_client failed: RemoteId missing on entity {:?}", trigger.entity);
+        warn!(
+            "handle_new_client failed: RemoteId missing on entity {:?}",
+            trigger.entity
+        );
         return;
     };
     let _client_id = remote_id.0.to_bits();
@@ -19,9 +25,16 @@ pub fn handle_new_client(
 
 pub fn handle_hello_messages(
     mut commands: Commands,
-    mut receivers: Query<(Entity, &RemoteId, &mut MessageReceiver<crate::common::net::messages::HelloMessage>, Option<&ReplicationSender>)>,
+    mut receivers: Query<(
+        Entity,
+        &RemoteId,
+        &mut MessageReceiver<crate::common::net::messages::HelloMessage>,
+        Option<&ReplicationSender>,
+    )>,
     mut sender_query: Query<&mut MessageSender<crate::common::net::messages::KickMessage>>,
-    mut success_sender_query: Query<&mut MessageSender<crate::common::net::messages::AuthSuccessMessage>>,
+    mut success_sender_query: Query<
+        &mut MessageSender<crate::common::net::messages::AuthSuccessMessage>,
+    >,
     settings: Res<crate::server::ServerSettings>,
 ) {
     let is_local = settings.bind_addr.ip().to_string().starts_with("127.");
@@ -36,62 +49,78 @@ pub fn handle_hello_messages(
             match crate::common::net::auth::validate_user_ukey(&_hello.ukey, is_local) {
                 Ok(response) => {
                     if let Ok(mut success_sender) = success_sender_query.get_mut(client_entity) {
-                        let _ = success_sender.send::<crate::common::net::messages::GameChannel>(
+                        success_sender.send::<crate::common::net::messages::GameChannel>(
                             crate::common::net::messages::AuthSuccessMessage {
                                 uid: response.uid,
                                 username: response.username.clone(),
-                            }
+                            },
                         );
                     }
 
                     commands.entity(client_entity).insert(ReplicationSender);
 
-                    let (speed, jump_power, gravity_scale, friction, bounciness) = if let Ok(shared) = crate::studio::tools::SHARED_PLAYERS_SERVICE.read() {
-                        (shared.speed, shared.jump_power, shared.gravity_scale, shared.friction, shared.bounciness)
-                    } else {
-                        (16.0 * 0.28, 50.0 * 0.28, 1.0, 0.0, 0.0)
-                    };
+                    let (speed, jump_power, gravity_scale, friction, bounciness) =
+                        if let Ok(shared) = crate::studio::tools::SHARED_PLAYERS_SERVICE.read() {
+                            (
+                                shared.speed,
+                                shared.jump_power,
+                                shared.gravity_scale,
+                                shared.friction,
+                                shared.bounciness,
+                            )
+                        } else {
+                            (16.0 * 0.28, 50.0 * 0.28, 1.0, 0.0, 0.0)
+                        };
 
-                    let player_entity = commands.spawn((
-                        Name::new(response.username.clone()),
-                        Player {
-                            client_id,
-                            speed,
-                            jump_power,
-                            username: response.username.clone(),
-                        },
-                        Transform::from_xyz(0.0, 5.0, 0.0),
-                        NetworkTransform {
-                            translation: Vec3::new(0.0, 5.0, 0.0),
-                            rotation: Quat::IDENTITY,
-                            scale: Vec3::ONE,
-                        },
-                        ControlledBy {
-                            owner: client_entity,
-                            lifetime: Default::default(),
-                        },
-                        RigidBody::Dynamic,
-                        Collider::capsule(1.0 * 0.28, 3.0 * 0.28),
-                        CollisionLayers::from_bits(0b0010, 0b0011),
-                        LockedAxes::ROTATION_LOCKED,
-                    )).insert((
-                        Friction::new(friction),
-                        Restitution::new(bounciness),
-                        GravityScale(gravity_scale),
-                        CollidingEntities::default(),
-                        SleepingDisabled,
-                        Replicate::default(),
-                    )).id();
+                    let player_entity = commands
+                        .spawn((
+                            Name::new(response.username.clone()),
+                            Player {
+                                client_id,
+                                speed,
+                                jump_power,
+                                username: response.username.clone(),
+                            },
+                            Transform::from_xyz(0.0, 5.0, 0.0),
+                            NetworkTransform {
+                                translation: Vec3::new(0.0, 5.0, 0.0),
+                                rotation: Quat::IDENTITY,
+                                scale: Vec3::ONE,
+                            },
+                            ControlledBy {
+                                owner: client_entity,
+                                lifetime: Default::default(),
+                            },
+                            RigidBody::Dynamic,
+                            Collider::capsule(1.0 * 0.28, 3.0 * 0.28),
+                            CollisionLayers::from_bits(0b0010, 0b0011),
+                            LockedAxes::ROTATION_LOCKED,
+                        ))
+                        .insert((
+                            Friction::new(friction),
+                            Restitution::new(bounciness),
+                            GravityScale(gravity_scale),
+                            CollidingEntities::default(),
+                            SleepingDisabled,
+                            Replicate::default(),
+                        ))
+                        .id();
 
-                    info!("Server successfully spawned player entity {:?} for client {}", player_entity, response.username);
+                    info!(
+                        "Server successfully spawned player entity {:?} for client {}",
+                        player_entity, response.username
+                    );
                 }
                 Err(e) => {
-                    warn!("Authentication failed for client {}: {}. Sending KickMessage...", client_id, e);
+                    warn!(
+                        "Authentication failed for client {}: {}. Sending KickMessage...",
+                        client_id, e
+                    );
                     if let Ok(mut sender) = sender_query.get_mut(client_entity) {
-                        let _ = sender.send::<crate::common::net::messages::GameChannel>(
+                        sender.send::<crate::common::net::messages::GameChannel>(
                             crate::common::net::messages::KickMessage {
                                 reason: format!("Authentication failed: {}", e),
-                            }
+                            },
                         );
                     }
                 }
@@ -102,14 +131,23 @@ pub fn handle_hello_messages(
 
 pub fn handle_player_inputs(
     mut receivers: Query<(Entity, &RemoteId, &mut MessageReceiver<PlayerInputMessage>)>,
-    mut players: Query<(Entity, &Player, &mut Transform, &mut LinearVelocity, &CollidingEntities, Option<&ControlledBy>)>,
+    mut players: Query<(
+        Entity,
+        &Player,
+        &mut Transform,
+        &mut LinearVelocity,
+        &CollidingEntities,
+        Option<&ControlledBy>,
+    )>,
     spatial_query: SpatialQuery,
 ) {
     for (client_entity, remote_id, mut receiver) in receivers.iter_mut() {
         let client_id = remote_id.0.to_bits();
         for message in receiver.receive() {
             let mut found_player = false;
-            for (player_entity, player, mut transform, mut lin_vel, colliding, controlled_by) in players.iter_mut() {
+            for (player_entity, player, mut transform, mut lin_vel, colliding, controlled_by) in
+                players.iter_mut()
+            {
                 let is_owner = if let Some(ctrl) = controlled_by {
                     ctrl.owner == client_entity
                 } else {
@@ -153,8 +191,12 @@ pub fn handle_player_inputs(
                     lin_vel.x = direction.x * speed;
                     lin_vel.z = direction.z * speed;
 
-                    if !lin_vel.x.is_finite() { lin_vel.x = 0.0; }
-                    if !lin_vel.z.is_finite() { lin_vel.z = 0.0; }
+                    if !lin_vel.x.is_finite() {
+                        lin_vel.x = 0.0;
+                    }
+                    if !lin_vel.z.is_finite() {
+                        lin_vel.z = 0.0;
+                    }
 
                     if direction.length_squared() > 0.001 {
                         let angles = [0.0, 35.0f32.to_radians(), -35.0f32.to_radians()];
@@ -171,20 +213,24 @@ pub fn handle_player_inputs(
                             let step_check_offset = check_dir * 0.35;
                             let player_bottom_y = transform.translation.y - 2.5 * 0.28;
                             let ray_start = transform.translation + step_check_offset;
-                            let ray_origin = Vec3::new(ray_start.x, player_bottom_y + 0.32, ray_start.z);
+                            let ray_origin =
+                                Vec3::new(ray_start.x, player_bottom_y + 0.32, ray_start.z);
 
                             let filter = SpatialQueryFilter::default()
                                 .with_excluded_entities([player_entity])
                                 .with_mask(0b0011);
-                            if let Some(hit) = spatial_query.cast_ray(ray_origin, Dir3::NEG_Y, 0.45, true, &filter) {
+                            if let Some(hit) =
+                                spatial_query.cast_ray(ray_origin, Dir3::NEG_Y, 0.45, true, &filter)
+                            {
                                 let hit_point_y = ray_origin.y - hit.distance;
                                 let step_height = hit_point_y - player_bottom_y;
 
-                                if step_height > 0.01 && step_height <= 0.29 {
-                                    if step_height > best_step_height {
-                                        best_step_height = step_height;
-                                        best_target_y = Some(hit_point_y + 2.5 * 0.28);
-                                    }
+                                if step_height > 0.01
+                                    && step_height <= 0.29
+                                    && step_height > best_step_height
+                                {
+                                    best_step_height = step_height;
+                                    best_target_y = Some(hit_point_y + 2.5 * 0.28);
                                 }
                             }
                         }
@@ -205,7 +251,10 @@ pub fn handle_player_inputs(
                             let filter = SpatialQueryFilter::default()
                                 .with_excluded_entities([player_entity])
                                 .with_mask(0b0011);
-                            if spatial_query.cast_ray(ray_origin, Dir3::NEG_Y, max_ray_dist, true, &filter).is_some() {
+                            if spatial_query
+                                .cast_ray(ray_origin, Dir3::NEG_Y, max_ray_dist, true, &filter)
+                                .is_some()
+                            {
                                 grounded = true;
                             }
                         }
@@ -219,16 +268,23 @@ pub fn handle_player_inputs(
                         transform.rotation = Quat::from_rotation_y(message.yaw);
                     } else if direction.length_squared() > 0.001 {
                         let target_angle = direction.z.atan2(direction.x);
-                        transform.rotation = Quat::from_rotation_y(-target_angle + std::f32::consts::FRAC_PI_2);
+                        transform.rotation =
+                            Quat::from_rotation_y(-target_angle + std::f32::consts::FRAC_PI_2);
                     }
 
-                    trace!("Player ID: {} - Position: {:?}", player.client_id, transform.translation);
+                    trace!(
+                        "Player ID: {} - Position: {:?}",
+                        player.client_id, transform.translation
+                    );
                     break;
                 }
             }
 
             if !found_player {
-                warn!("handle_player_inputs: No player entity found for client_id: {} / entity: {:?}", client_id, client_entity);
+                warn!(
+                    "handle_player_inputs: No player entity found for client_id: {} / entity: {:?}",
+                    client_id, client_entity
+                );
             }
         }
     }
@@ -236,7 +292,12 @@ pub fn handle_player_inputs(
 
 pub fn sync_players_service_properties(
     mut last_service: Local<crate::studio::tools::PlayersService>,
-    mut query: Query<(&mut Player, &mut Friction, &mut Restitution, &mut GravityScale)>,
+    mut query: Query<(
+        &mut Player,
+        &mut Friction,
+        &mut Restitution,
+        &mut GravityScale,
+    )>,
 ) {
     let current_service = if let Ok(shared) = crate::studio::tools::SHARED_PLAYERS_SERVICE.read() {
         shared.clone()
@@ -280,7 +341,9 @@ pub fn handle_client_disconnect(
     players_query: Query<(Entity, &Player)>,
     mut commands: Commands,
 ) {
-    let Ok(remote_id) = query.get(trigger.entity) else { return };
+    let Ok(remote_id) = query.get(trigger.entity) else {
+        return;
+    };
     let client_id = remote_id.0.to_bits();
     info!("Client disconnected: {}", client_id);
     for (player_entity, player) in &players_query {

@@ -35,10 +35,10 @@ pub fn sync_lighting_service(
     if !crate::client::is_playtesting(playtest) {
         return;
     }
-    if let Ok(shared) = crate::studio::tools::SHARED_LIGHTING_SERVICE.read() {
-        if (lighting_service.time_of_day - *shared).abs() > 0.001 {
-            lighting_service.time_of_day = *shared;
-        }
+    if let Ok(shared) = crate::studio::tools::SHARED_LIGHTING_SERVICE.read()
+        && (lighting_service.time_of_day - *shared).abs() > 0.001
+    {
+        lighting_service.time_of_day = *shared;
     }
 }
 
@@ -86,7 +86,7 @@ pub fn update_lighting_system(
     let sun_dir = sun_rotation.mul_vec3(Vec3::Z);
     let sun_y = sun_dir.y;
 
-    let (ambient_color, ambient_brightness) = if time_of_day >= 6.0 && time_of_day < 12.0 {
+    let (ambient_color, ambient_brightness) = if (6.0..12.0).contains(&time_of_day) {
         let t = (time_of_day - 6.0) / 6.0;
         (
             interpolate_color(
@@ -96,7 +96,7 @@ pub fn update_lighting_system(
             ),
             180.0 + t * 140.0,
         )
-    } else if time_of_day >= 12.0 && time_of_day < 19.0 {
+    } else if (12.0..19.0).contains(&time_of_day) {
         let t = (time_of_day - 12.0) / 7.0;
         (
             interpolate_color(
@@ -106,7 +106,7 @@ pub fn update_lighting_system(
             ),
             320.0 - t * 140.0,
         )
-    } else if time_of_day >= 19.0 && time_of_day < 21.5 {
+    } else if (19.0..21.5).contains(&time_of_day) {
         let t = (time_of_day - 19.0) / 2.5;
         (
             interpolate_color(
@@ -116,7 +116,7 @@ pub fn update_lighting_system(
             ),
             180.0 - t * 130.0,
         )
-    } else if time_of_day >= 4.5 && time_of_day < 6.0 {
+    } else if (4.5..6.0).contains(&time_of_day) {
         let t = (time_of_day - 4.5) / 1.5;
         (
             interpolate_color(
@@ -133,28 +133,28 @@ pub fn update_lighting_system(
     ambient.color = multiply_color(ambient_color, lighting_service.ambient_tint);
     ambient.brightness = ambient_brightness * lighting_service.ambient_intensity.max(0.0);
 
-    let sun_color = if time_of_day >= 6.0 && time_of_day < 12.0 {
+    let sun_color = if (6.0..12.0).contains(&time_of_day) {
         let t = (time_of_day - 6.0) / 6.0;
         interpolate_color(
             Color::srgb(1.0, 0.50, 0.20),
             Color::srgb(1.0, 0.96, 0.85),
             t,
         )
-    } else if time_of_day >= 12.0 && time_of_day < 19.0 {
+    } else if (12.0..19.0).contains(&time_of_day) {
         let t = (time_of_day - 12.0) / 7.0;
         interpolate_color(
             Color::srgb(1.0, 0.96, 0.85),
             Color::srgb(1.0, 0.40, 0.10),
             t,
         )
-    } else if time_of_day >= 19.0 && time_of_day < 21.5 {
+    } else if (19.0..21.5).contains(&time_of_day) {
         let t = (time_of_day - 19.0) / 2.5;
         interpolate_color(
             Color::srgb(1.0, 0.40, 0.10),
             Color::srgb(0.55, 0.65, 0.90),
             t,
         )
-    } else if time_of_day >= 4.5 && time_of_day < 6.0 {
+    } else if (4.5..6.0).contains(&time_of_day) {
         let t = (time_of_day - 4.5) / 1.5;
         interpolate_color(
             Color::srgb(0.55, 0.65, 0.90),
@@ -165,16 +165,16 @@ pub fn update_lighting_system(
         Color::srgb(0.55, 0.65, 0.90)
     };
 
-    let sun_illuminance = if time_of_day >= 6.0 && time_of_day < 12.0 {
+    let sun_illuminance = if (6.0..12.0).contains(&time_of_day) {
         let t = (time_of_day - 6.0) / 6.0;
         12_000.0 + t * 73_000.0
-    } else if time_of_day >= 12.0 && time_of_day < 19.0 {
+    } else if (12.0..19.0).contains(&time_of_day) {
         let t = (time_of_day - 12.0) / 7.0;
         85_000.0 - t * 73_000.0
-    } else if time_of_day >= 19.0 && time_of_day < 21.5 {
+    } else if (19.0..21.5).contains(&time_of_day) {
         let t = (time_of_day - 19.0) / 2.5;
         12_000.0 - t * 11_700.0
-    } else if time_of_day >= 4.5 && time_of_day < 6.0 {
+    } else if (4.5..6.0).contains(&time_of_day) {
         let t = (time_of_day - 4.5) / 1.5;
         300.0 + t * 11_700.0
     } else {
@@ -203,12 +203,11 @@ pub fn update_lighting_system(
     }
 
     for sky_dome_mat_handle in &sky_dome_query {
-        if let Some(material) = materials.get_mut(&sky_dome_mat_handle.0) {
-            if let Some(ref tex_handle) = material.base_color_texture {
-                if let Some(mut image) = images.get_mut(tex_handle) {
-                    update_sky_gradient(time_of_day, &mut *image);
-                }
-            }
+        if let Some(material) = materials.get_mut(&sky_dome_mat_handle.0)
+            && let Some(ref tex_handle) = material.base_color_texture
+            && let Some(mut image) = images.get_mut(tex_handle)
+        {
+            update_sky_gradient(time_of_day, &mut image);
         }
     }
 
@@ -217,7 +216,7 @@ pub fn update_lighting_system(
             commands.entity(camera_entity).remove::<DistanceFog>();
             continue;
         }
-        let (fog_color, density) = if time_of_day >= 6.0 && time_of_day < 12.0 {
+        let (fog_color, density) = if (6.0..12.0).contains(&time_of_day) {
             let t = (time_of_day - 6.0) / 6.0;
             (
                 interpolate_color(
@@ -227,7 +226,7 @@ pub fn update_lighting_system(
                 ),
                 0.0003 - t * 0.0001,
             )
-        } else if time_of_day >= 12.0 && time_of_day < 19.0 {
+        } else if (12.0..19.0).contains(&time_of_day) {
             let t = (time_of_day - 12.0) / 7.0;
             (
                 interpolate_color(
@@ -237,7 +236,7 @@ pub fn update_lighting_system(
                 ),
                 0.0002 + t * 0.00015,
             )
-        } else if time_of_day >= 19.0 && time_of_day < 21.5 {
+        } else if (19.0..21.5).contains(&time_of_day) {
             let t = (time_of_day - 19.0) / 2.5;
             (
                 interpolate_color(
@@ -247,7 +246,7 @@ pub fn update_lighting_system(
                 ),
                 0.00035 + t * 0.00025,
             )
-        } else if time_of_day >= 4.5 && time_of_day < 6.0 {
+        } else if (4.5..6.0).contains(&time_of_day) {
             let t = (time_of_day - 4.5) / 1.5;
             (
                 interpolate_color(

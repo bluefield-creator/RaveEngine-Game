@@ -310,20 +310,20 @@ pub fn manage_winit_performance(
 
     let mut is_active = is_fullscreen || is_mouse_active;
 
-    if let Some(ds) = drag_state {
-        if ds.active {
-            is_active = true;
-        }
+    if let Some(ds) = drag_state
+        && ds.active
+    {
+        is_active = true;
     }
-    if let Some(pds) = part_drag_state {
-        if pds.active {
-            is_active = true;
-        }
+    if let Some(pds) = part_drag_state
+        && pds.active
+    {
+        is_active = true;
     }
-    if let Some(ps) = physics_state {
-        if *ps == crate::common::game::physics::PhysicsSimulationState::Running {
-            is_active = true;
-        }
+    if let Some(ps) = physics_state
+        && *ps == crate::common::game::physics::PhysicsSimulationState::Running
+    {
+        is_active = true;
     }
 
     for (entity, transform) in &camera_query {
@@ -355,9 +355,11 @@ mod tests {
 
     #[test]
     fn disables_contact_shadows_without_changing_the_render_layout() {
-        let mut settings = GraphicsSettings::default();
-        settings.contact_shadows = false;
-        settings.contact_shadow_length = 1.25;
+        let settings = GraphicsSettings {
+            contact_shadows: false,
+            contact_shadow_length: 1.25,
+            ..Default::default()
+        };
 
         let contact_shadows = contact_shadow_settings(&settings);
 

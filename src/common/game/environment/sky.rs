@@ -1,5 +1,5 @@
-use bevy::prelude::*;
 use bevy::asset::RenderAssetUsages;
+use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 
 #[derive(Component)]
@@ -61,53 +61,59 @@ pub fn setup_sky(
 ) {
     let sky_gradient_image = generate_sky_gradient_image();
     let sky_texture_handle = images.add(sky_gradient_image);
-    
+
     let sun_rotation = Quat::from_euler(EulerRot::XYZ, -1.2, 0.3, 0.0);
     let sun_dir = sun_rotation.mul_vec3(Vec3::Z);
     let sun_position = sun_dir * 450.0;
 
-    let sky_dome = commands.spawn((
-        Mesh3d(meshes.add(Sphere::new(500.0))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color_texture: Some(sky_texture_handle),
-            unlit: true,
-            cull_mode: None,
-            fog_enabled: false,
-            ..default()
-        })),
-        Transform::from_xyz(0.0, 0.0, 0.0),
-        bevy::light::NotShadowCaster,
-        bevy::light::NotShadowReceiver,
-        SkyDome,
-    )).id();
+    let sky_dome = commands
+        .spawn((
+            Mesh3d(meshes.add(Sphere::new(500.0))),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                base_color_texture: Some(sky_texture_handle),
+                unlit: true,
+                cull_mode: None,
+                fog_enabled: false,
+                ..default()
+            })),
+            Transform::from_xyz(0.0, 0.0, 0.0),
+            bevy::light::NotShadowCaster,
+            bevy::light::NotShadowReceiver,
+            SkyDome,
+        ))
+        .id();
 
-    let sun_disk = commands.spawn((
-        Mesh3d(meshes.add(Sphere::new(15.0))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgb(5.0, 5.0, 4.0),
-            unlit: true,
-            fog_enabled: false,
-            ..default()
-        })),
-        Transform::from_translation(sun_position),
-        bevy::light::NotShadowCaster,
-        bevy::light::NotShadowReceiver,
-        SunDisk,
-    )).id();
+    let sun_disk = commands
+        .spawn((
+            Mesh3d(meshes.add(Sphere::new(15.0))),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                base_color: Color::srgb(5.0, 5.0, 4.0),
+                unlit: true,
+                fog_enabled: false,
+                ..default()
+            })),
+            Transform::from_translation(sun_position),
+            bevy::light::NotShadowCaster,
+            bevy::light::NotShadowReceiver,
+            SunDisk,
+        ))
+        .id();
 
-    let moon_disk = commands.spawn((
-        Mesh3d(meshes.add(Sphere::new(10.0))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgb(3.0, 3.0, 4.0),
-            unlit: true,
-            fog_enabled: false,
-            ..default()
-        })),
-        Transform::from_translation(-sun_position),
-        bevy::light::NotShadowCaster,
-        bevy::light::NotShadowReceiver,
-        MoonDisk,
-    )).id();
+    let moon_disk = commands
+        .spawn((
+            Mesh3d(meshes.add(Sphere::new(10.0))),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                base_color: Color::srgb(3.0, 3.0, 4.0),
+                unlit: true,
+                fog_enabled: false,
+                ..default()
+            })),
+            Transform::from_translation(-sun_position),
+            bevy::light::NotShadowCaster,
+            bevy::light::NotShadowReceiver,
+            MoonDisk,
+        ))
+        .id();
 
     commands.entity(sky_dome).add_child(sun_disk);
     commands.entity(sky_dome).add_child(moon_disk);

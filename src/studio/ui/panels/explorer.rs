@@ -251,7 +251,7 @@ fn draw_entity_node(
     dragged_entity: &mut ResMut<HierarchyDraggedEntity>,
     history: &mut ResMut<crate::studio::tools::UndoRedoHistory>,
     active_editor: &mut ResMut<ActiveScriptEditor>,
-    workspace_tex: egui::TextureId,
+    _workspace_tex: egui::TextureId,
     brick_tex: egui::TextureId,
     script_tex: egui::TextureId,
     localscript_tex: egui::TextureId,
@@ -287,9 +287,9 @@ fn draw_entity_node(
         Some(brick_tex)
     };
 
-    let is_script_disabled = if let Some(ref s) = s_opt {
+    let is_script_disabled = if let Some(s) = s_opt {
         !s.enabled
-    } else if let Some(ref l) = l_opt {
+    } else if let Some(l) = l_opt {
         !l.enabled
     } else {
         false
@@ -343,10 +343,10 @@ fn draw_entity_node(
 
                 if label_res.double_clicked() {
                     let mut is_script = false;
-                    if let Ok((_, _, _, _, _, s, l, m)) = explorer_query.get(entity) {
-                        if s.is_some() || l.is_some() || m.is_some() {
-                            is_script = true;
-                        }
+                    if let Ok((_, _, _, _, _, s, l, m)) = explorer_query.get(entity)
+                        && (s.is_some() || l.is_some() || m.is_some())
+                    {
+                        is_script = true;
                     }
                     if is_script {
                         if !active_editor.open_entities.contains(&entity) {
@@ -395,69 +395,68 @@ fn draw_entity_node(
                     dragged_entity.entity = Some(entity);
                 }
 
-                if let Some(dragged) = dragged_entity.entity {
-                    if dragged != entity && !is_descendant(entity, dragged, explorer_query) {
-                        if label_res.hovered() {
-                            ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
-                        }
-                        if ui.input(|i| i.pointer.any_released()) && label_res.hovered() {
-                            if let (
-                                Ok((_, _, _, _, _, _, _, parent_global, _, _, _, _, _)),
-                                Ok((_, _, _, _, _, _, _, child_global, _, _, _, _, _)),
-                            ) = (entities_query.get(entity), entities_query.get(dragged))
-                            {
-                                let parent_rotation = parent_global.rotation();
-                                let parent_translation = parent_global.translation();
+                if let Some(dragged) = dragged_entity.entity
+                    && dragged != entity
+                    && !is_descendant(entity, dragged, explorer_query)
+                {
+                    if label_res.hovered() {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+                    }
+                    if ui.input(|i| i.pointer.any_released()) && label_res.hovered() {
+                        if let (
+                            Ok((_, _, _, _, _, _, _, parent_global, _, _, _, _, _)),
+                            Ok((_, _, _, _, _, _, _, child_global, _, _, _, _, _)),
+                        ) = (entities_query.get(entity), entities_query.get(dragged))
+                        {
+                            let parent_rotation = parent_global.rotation();
+                            let parent_translation = parent_global.translation();
 
-                                let child_scale = child_global.scale();
-                                let child_rotation = child_global.rotation();
-                                let child_translation = child_global.translation();
+                            let child_scale = child_global.scale();
+                            let child_rotation = child_global.rotation();
+                            let child_translation = child_global.translation();
 
-                                let local_scale = child_scale;
-                                let local_rotation = parent_rotation.inverse() * child_rotation;
-                                let local_translation = parent_rotation
-                                    .inverse()
-                                    .mul_vec3(child_translation - parent_translation);
+                            let local_scale = child_scale;
+                            let local_rotation = parent_rotation.inverse() * child_rotation;
+                            let local_translation = parent_rotation
+                                .inverse()
+                                .mul_vec3(child_translation - parent_translation);
 
-                                let old_parent = entities_query.get(dragged).ok().and_then(
-                                    |(_, _, _, child_of_opt, _, _, _, _, _, _, _, _, _)| {
-                                        child_of_opt.map(|co| co.parent())
-                                    },
-                                );
-                                let old_transform = entities_query
-                                    .get(dragged)
-                                    .ok()
-                                    .map(|(_, t, _, _, _, _, _, _, _, _, _, _, _)| *t)
-                                    .unwrap_or(Transform::IDENTITY);
+                            let old_parent = entities_query.get(dragged).ok().and_then(
+                                |(_, _, _, child_of_opt, _, _, _, _, _, _, _, _, _)| {
+                                    child_of_opt.map(|co| co.parent())
+                                },
+                            );
+                            let old_transform = entities_query
+                                .get(dragged)
+                                .ok()
+                                .map(|(_, t, _, _, _, _, _, _, _, _, _, _, _)| *t)
+                                .unwrap_or(Transform::IDENTITY);
 
-                                let new_transform = Transform {
-                                    translation: local_translation,
-                                    rotation: local_rotation,
-                                    scale: local_scale,
-                                };
+                            let new_transform = Transform {
+                                translation: local_translation,
+                                rotation: local_rotation,
+                                scale: local_scale,
+                            };
 
-                                if let Ok(mut d_cmd) = commands.get_entity(dragged) {
-                                    d_cmd.insert(new_transform);
-                                    d_cmd.remove::<ChildOf>();
-                                }
-
-                                history.push_command(
-                                    crate::studio::tools::UndoCommand::ParentChange {
-                                        entity: dragged,
-                                        old_parent,
-                                        new_parent: Some(entity),
-                                        old_transform,
-                                        new_transform,
-                                    },
-                                );
+                            if let Ok(mut d_cmd) = commands.get_entity(dragged) {
+                                d_cmd.insert(new_transform);
+                                d_cmd.remove::<ChildOf>();
                             }
-                            if commands.get_entity(dragged).is_ok() {
-                                if let Ok(mut p_cmd) = commands.get_entity(entity) {
-                                    p_cmd.add_child(dragged);
-                                }
-                            }
-                            dragged_entity.entity = None;
+
+                            history.push_command(crate::studio::tools::UndoCommand::ParentChange {
+                                entity: dragged,
+                                old_parent,
+                                new_parent: Some(entity),
+                                old_transform,
+                                new_transform,
+                            });
                         }
+                        if commands.get_entity(dragged).is_ok()
+                            && let Ok(mut p_cmd) = commands.get_entity(entity)
+                        {
+                            p_cmd.add_child(dragged);
+                        }
+                        dragged_entity.entity = None;
                     }
                 }
             });
@@ -493,7 +492,7 @@ fn draw_entity_node(
                         dragged_entity,
                         history,
                         active_editor,
-                        workspace_tex,
+                        _workspace_tex,
                         brick_tex,
                         script_tex,
                         localscript_tex,
@@ -546,10 +545,10 @@ fn draw_entity_node(
 
         if label_res.double_clicked() {
             let mut is_script = false;
-            if let Ok((_, _, _, _, _, s, l, m)) = explorer_query.get(entity) {
-                if s.is_some() || l.is_some() || m.is_some() {
-                    is_script = true;
-                }
+            if let Ok((_, _, _, _, _, s, l, m)) = explorer_query.get(entity)
+                && (s.is_some() || l.is_some() || m.is_some())
+            {
+                is_script = true;
             }
             if is_script {
                 if !active_editor.open_entities.contains(&entity) {
@@ -596,66 +595,67 @@ fn draw_entity_node(
             dragged_entity.entity = Some(entity);
         }
 
-        if let Some(dragged) = dragged_entity.entity {
-            if dragged != entity && !is_descendant(entity, dragged, explorer_query) {
-                if label_res.hovered() {
-                    ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
-                }
-                if ui.input(|i| i.pointer.any_released()) && label_res.hovered() {
-                    if let (
-                        Ok((_, _, _, _, _, _, _, parent_global, _, _, _, _, _)),
-                        Ok((_, _, _, _, _, _, _, child_global, _, _, _, _, _)),
-                    ) = (entities_query.get(entity), entities_query.get(dragged))
-                    {
-                        let parent_rotation = parent_global.rotation();
-                        let parent_translation = parent_global.translation();
+        if let Some(dragged) = dragged_entity.entity
+            && dragged != entity
+            && !is_descendant(entity, dragged, explorer_query)
+        {
+            if label_res.hovered() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+            }
+            if ui.input(|i| i.pointer.any_released()) && label_res.hovered() {
+                if let (
+                    Ok((_, _, _, _, _, _, _, parent_global, _, _, _, _, _)),
+                    Ok((_, _, _, _, _, _, _, child_global, _, _, _, _, _)),
+                ) = (entities_query.get(entity), entities_query.get(dragged))
+                {
+                    let parent_rotation = parent_global.rotation();
+                    let parent_translation = parent_global.translation();
 
-                        let child_scale = child_global.scale();
-                        let child_rotation = child_global.rotation();
-                        let child_translation = child_global.translation();
+                    let child_scale = child_global.scale();
+                    let child_rotation = child_global.rotation();
+                    let child_translation = child_global.translation();
 
-                        let local_scale = child_scale;
-                        let local_rotation = parent_rotation.inverse() * child_rotation;
-                        let local_translation = parent_rotation
-                            .inverse()
-                            .mul_vec3(child_translation - parent_translation);
+                    let local_scale = child_scale;
+                    let local_rotation = parent_rotation.inverse() * child_rotation;
+                    let local_translation = parent_rotation
+                        .inverse()
+                        .mul_vec3(child_translation - parent_translation);
 
-                        let old_parent = entities_query.get(dragged).ok().and_then(
-                            |(_, _, _, child_of_opt, _, _, _, _, _, _, _, _, _)| {
-                                child_of_opt.map(|co| co.parent())
-                            },
-                        );
-                        let old_transform = entities_query
-                            .get(dragged)
-                            .ok()
-                            .map(|(_, t, _, _, _, _, _, _, _, _, _, _, _)| *t)
-                            .unwrap_or(Transform::IDENTITY);
+                    let old_parent = entities_query.get(dragged).ok().and_then(
+                        |(_, _, _, child_of_opt, _, _, _, _, _, _, _, _, _)| {
+                            child_of_opt.map(|co| co.parent())
+                        },
+                    );
+                    let old_transform = entities_query
+                        .get(dragged)
+                        .ok()
+                        .map(|(_, t, _, _, _, _, _, _, _, _, _, _, _)| *t)
+                        .unwrap_or(Transform::IDENTITY);
 
-                        let new_transform = Transform {
-                            translation: local_translation,
-                            rotation: local_rotation,
-                            scale: local_scale,
-                        };
+                    let new_transform = Transform {
+                        translation: local_translation,
+                        rotation: local_rotation,
+                        scale: local_scale,
+                    };
 
-                        if let Ok(mut d_cmd) = commands.get_entity(dragged) {
-                            d_cmd.insert(new_transform);
-                        }
-
-                        history.push_command(crate::studio::tools::UndoCommand::ParentChange {
-                            entity: dragged,
-                            old_parent,
-                            new_parent: Some(entity),
-                            old_transform,
-                            new_transform,
-                        });
+                    if let Ok(mut d_cmd) = commands.get_entity(dragged) {
+                        d_cmd.insert(new_transform);
                     }
-                    if commands.get_entity(dragged).is_ok() {
-                        if let Ok(mut p_cmd) = commands.get_entity(entity) {
-                            p_cmd.add_child(dragged);
-                        }
-                    }
-                    dragged_entity.entity = None;
+
+                    history.push_command(crate::studio::tools::UndoCommand::ParentChange {
+                        entity: dragged,
+                        old_parent,
+                        new_parent: Some(entity),
+                        old_transform,
+                        new_transform,
+                    });
                 }
+                if commands.get_entity(dragged).is_ok()
+                    && let Ok(mut p_cmd) = commands.get_entity(entity)
+                {
+                    p_cmd.add_child(dragged);
+                }
+                dragged_entity.entity = None;
             }
         }
     }

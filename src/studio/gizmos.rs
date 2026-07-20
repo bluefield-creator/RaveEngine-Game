@@ -1,7 +1,7 @@
-use bevy::prelude::*;
-use bevy::picking::mesh_picking::ray_cast::SimplifiedMesh;
 use crate::common::game::bricks::components::{Brick, BrickShape, BrickShapeComponent};
-use crate::studio::tools::{Selection, ToolState, HoverState, DragState};
+use crate::studio::tools::{DragState, HoverState, Selection, ToolState};
+use bevy::picking::mesh_picking::ray_cast::SimplifiedMesh;
+use bevy::prelude::*;
 
 #[derive(Component)]
 pub struct ToolGizmo {
@@ -89,7 +89,7 @@ pub(crate) fn update_gizmos(
     mut gizmo_assets: Local<Option<GizmoAssets>>,
     mut previous_configuration: Local<Option<GizmoConfiguration>>,
 ) {
-    let playtesting_active = playtest.map_or(false, |p| p.active);
+    let playtesting_active = playtest.is_some_and(|p| p.active);
     let configuration = GizmoConfiguration {
         selected_entity: selection.entity,
         tool: *tool_state.get(),
@@ -115,8 +115,10 @@ pub(crate) fn update_gizmos(
         return;
     }
 
-    let Some(selected_entity) = selection.entity else { return };
-    if brick_physics.get(selected_entity).map_or(false, |p| p.locked) {
+    let Some(selected_entity) = selection.entity else {
+        return;
+    };
+    if brick_physics.get(selected_entity).is_ok_and(|p| p.locked) {
         return;
     }
     let tool = *tool_state.get();
@@ -266,49 +268,6 @@ pub fn sync_gizmos(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn reuses_gizmo_assets() {
-        let mut cache = None;
-        let mut meshes = Assets::<Mesh>::default();
-        let mut materials = Assets::<StandardMaterial>::default();
-
-        ensure_gizmo_assets(&mut cache, &mut meshes, &mut materials);
-        let mesh_count = meshes.len();
-        let material_count = materials.len();
-        ensure_gizmo_assets(&mut cache, &mut meshes, &mut materials);
-
-        assert_eq!(meshes.len(), mesh_count);
-        assert_eq!(materials.len(), material_count);
-        assert_eq!(mesh_count, 4);
-        assert_eq!(material_count, 3);
-    }
-
-    #[test]
-    fn rebuilds_only_when_configuration_changes() {
-        let configuration = GizmoConfiguration {
-            selected_entity: Some(Entity::from_bits(1)),
-            tool: ToolState::Move,
-            physics_state: crate::common::game::physics::PhysicsSimulationState::Stopped,
-            playtesting: false,
-        };
-        let mut previous = None;
-
-        assert!(configuration_changed(&mut previous, configuration));
-        assert!(!configuration_changed(&mut previous, configuration));
-        assert!(configuration_changed(
-            &mut previous,
-            GizmoConfiguration {
-                tool: ToolState::Rotate,
-                ..configuration
-            },
-        ));
-    }
-}
-
 fn draw_outline_recursive(
     entity: Entity,
     bricks: &Query<
@@ -385,7 +344,7 @@ pub fn draw_selection_outline(
     if *physics_state == crate::common::game::physics::PhysicsSimulationState::Running {
         return;
     }
-    let playtesting_active = playtest.map_or(false, |p| p.active);
+    let playtesting_active = playtest.is_some_and(|p| p.active);
     if playtesting_active {
         return;
     }
@@ -396,7 +355,14 @@ pub fn draw_selection_outline(
 
 fn draw_hover_outline_recursive(
     entity: Entity,
-    bricks: &Query<(&GlobalTransform, Option<&BrickShapeComponent>, Option<&Children>), With<Brick>>,
+    bricks: &Query<
+        (
+            &GlobalTransform,
+            Option<&BrickShapeComponent>,
+            Option<&Children>,
+        ),
+        With<Brick>,
+    >,
     gizmos: &mut Gizmos,
 ) {
     if let Ok((global_transform, shape_opt, children_opt)) = bricks.get(entity) {
@@ -419,10 +385,16 @@ fn draw_hover_outline_recursive(
                 let isometry_xy = Isometry3d::new(translation, rotation);
                 gizmos.ellipse(isometry_xy, half_size_xy, Color::srgba(0.6, 0.8, 1.0, 0.35));
                 let half_size_yz = Vec2::new(scale.z * base_radius, scale.y * base_radius);
-                let isometry_yz = Isometry3d::new(translation, rotation * Quat::from_rotation_y(std::f32::consts::FRAC_PI_2));
+                let isometry_yz = Isometry3d::new(
+                    translation,
+                    rotation * Quat::from_rotation_y(std::f32::consts::FRAC_PI_2),
+                );
                 gizmos.ellipse(isometry_yz, half_size_yz, Color::srgba(0.6, 0.8, 1.0, 0.35));
                 let half_size_xz = Vec2::new(scale.x * base_radius, scale.z * base_radius);
-                let isometry_xz = Isometry3d::new(translation, rotation * Quat::from_rotation_x(std::f32::consts::FRAC_PI_2));
+                let isometry_xz = Isometry3d::new(
+                    translation,
+                    rotation * Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+                );
                 gizmos.ellipse(isometry_xz, half_size_xz, Color::srgba(0.6, 0.8, 1.0, 0.35));
             }
         }
@@ -439,16 +411,66 @@ pub fn draw_hover_outline(
     hover_state: Res<crate::studio::tools::HoverState>,
     physics_state: Res<crate::common::game::physics::PhysicsSimulationState>,
     playtest: Option<Res<crate::client::PlaytestState>>,
-    bricks: Query<(&GlobalTransform, Option<&BrickShapeComponent>, Option<&Children>), With<Brick>>,
+    bricks: Query<
+        (
+            &GlobalTransform,
+            Option<&BrickShapeComponent>,
+            Option<&Children>,
+        ),
+        With<Brick>,
+    >,
     mut gizmos: Gizmos,
 ) {
     if *physics_state == crate::common::game::physics::PhysicsSimulationState::Running {
         return;
     }
-    if playtest.map_or(false, |p| p.active) {
+    if playtest.is_some_and(|p| p.active) {
         return;
     }
     if let Some(hovered) = hover_state.hovered_brick {
         draw_hover_outline_recursive(hovered, &bricks, &mut gizmos);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reuses_gizmo_assets() {
+        let mut cache = None;
+        let mut meshes = Assets::<Mesh>::default();
+        let mut materials = Assets::<StandardMaterial>::default();
+
+        ensure_gizmo_assets(&mut cache, &mut meshes, &mut materials);
+        let mesh_count = meshes.len();
+        let material_count = materials.len();
+        ensure_gizmo_assets(&mut cache, &mut meshes, &mut materials);
+
+        assert_eq!(meshes.len(), mesh_count);
+        assert_eq!(materials.len(), material_count);
+        assert_eq!(mesh_count, 4);
+        assert_eq!(material_count, 3);
+    }
+
+    #[test]
+    fn rebuilds_only_when_configuration_changes() {
+        let configuration = GizmoConfiguration {
+            selected_entity: Some(Entity::from_bits(1)),
+            tool: ToolState::Move,
+            physics_state: crate::common::game::physics::PhysicsSimulationState::Stopped,
+            playtesting: false,
+        };
+        let mut previous = None;
+
+        assert!(configuration_changed(&mut previous, configuration));
+        assert!(!configuration_changed(&mut previous, configuration));
+        assert!(configuration_changed(
+            &mut previous,
+            GizmoConfiguration {
+                tool: ToolState::Rotate,
+                ..configuration
+            },
+        ));
     }
 }

@@ -1,7 +1,7 @@
-use bevy::prelude::*;
 use bevy::pbr::MaterialExtension;
-use bevy::shader::ShaderRef;
+use bevy::prelude::*;
 use bevy::render::render_resource::AsBindGroup;
+use bevy::shader::ShaderRef;
 
 #[derive(Resource)]
 pub struct StudsAssets {
@@ -19,8 +19,7 @@ pub struct StudsExtension {
     pub inlet_texture: Handle<Image>,
 }
 
-impl MapSamplers for StudsExtension {
-}
+impl MapSamplers for StudsExtension {}
 
 impl MaterialExtension for StudsExtension {
     fn fragment_shader() -> ShaderRef {
@@ -28,10 +27,7 @@ impl MaterialExtension for StudsExtension {
     }
 }
 
-pub fn setup_studs(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-) {
+pub fn setup_studs(mut commands: Commands, asset_server: Res<AssetServer>) {
     let stud = asset_server.load("content/game/studs/stud.png");
     let inlet = asset_server.load("content/game/studs/inlet.png");
     commands.insert_resource(StudsAssets { stud, inlet });
@@ -46,23 +42,28 @@ pub fn configure_studs_samplers(
         return;
     }
     let Some(assets) = stud_assets else { return };
-    if let Some(mut stud_image) = images.get_mut(&assets.stud) {
-        if !matches!(stud_image.sampler, bevy::image::ImageSampler::Descriptor(_)) {
-            stud_image.sampler = bevy::image::ImageSampler::Descriptor(bevy::image::ImageSamplerDescriptor {
+    if let Some(mut stud_image) = images.get_mut(&assets.stud)
+        && !matches!(stud_image.sampler, bevy::image::ImageSampler::Descriptor(_))
+    {
+        stud_image.sampler =
+            bevy::image::ImageSampler::Descriptor(bevy::image::ImageSamplerDescriptor {
                 address_mode_u: bevy::image::ImageAddressMode::Repeat,
                 address_mode_v: bevy::image::ImageAddressMode::Repeat,
                 ..default()
             });
-        }
     }
-    if let Some(mut inlet_image) = images.get_mut(&assets.inlet) {
-        if !matches!(inlet_image.sampler, bevy::image::ImageSampler::Descriptor(_)) {
-            inlet_image.sampler = bevy::image::ImageSampler::Descriptor(bevy::image::ImageSamplerDescriptor {
+    if let Some(mut inlet_image) = images.get_mut(&assets.inlet)
+        && !matches!(
+            inlet_image.sampler,
+            bevy::image::ImageSampler::Descriptor(_)
+        )
+    {
+        inlet_image.sampler =
+            bevy::image::ImageSampler::Descriptor(bevy::image::ImageSamplerDescriptor {
                 address_mode_u: bevy::image::ImageAddressMode::Repeat,
                 address_mode_v: bevy::image::ImageAddressMode::Repeat,
                 ..default()
             });
-        }
     }
     *configured = true;
 }

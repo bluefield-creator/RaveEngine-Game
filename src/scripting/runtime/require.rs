@@ -1,8 +1,8 @@
+use crate::scripting::userdata::instance::Instance;
 use bevy::prelude::*;
 use mlua::prelude::*;
-use crate::scripting::userdata::instance::Instance;
-use std::sync::{Arc, Mutex};
 use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
 
 pub struct ModuleCache {
     pub cached_results: HashMap<Entity, LuaValue>,
@@ -18,18 +18,28 @@ pub fn register_require(lua: &Lua) -> Result<(), mlua::Error> {
                 if let Ok(inst) = ud.borrow::<Instance>() {
                     inst
                 } else {
-                    return Err(mlua::Error::RuntimeError("require expects an Instance representing a ModuleScript".to_string()));
+                    return Err(mlua::Error::RuntimeError(
+                        "require expects an Instance representing a ModuleScript".to_string(),
+                    ));
                 }
             }
-            _ => return Err(mlua::Error::RuntimeError("require expects an Instance representing a ModuleScript".to_string())),
+            _ => {
+                return Err(mlua::Error::RuntimeError(
+                    "require expects an Instance representing a ModuleScript".to_string(),
+                ));
+            }
         };
 
         let world = unsafe { crate::scripting::vm::server_vm::world_from_lua_shared(lua)? };
 
-        let module_comp = world.get::<crate::scripting::ecs::ModuleScript>(instance.entity)
-            .ok_or_else(|| mlua::Error::RuntimeError("Provided Instance is not a ModuleScript".to_string()))?;
+        let module_comp = world
+            .get::<crate::scripting::ecs::ModuleScript>(instance.entity)
+            .ok_or_else(|| {
+                mlua::Error::RuntimeError("Provided Instance is not a ModuleScript".to_string())
+            })?;
 
-        let cache_ref = lua.app_data_ref::<crate::scripting::runtime::require::ModuleCacheRef>()
+        let cache_ref = lua
+            .app_data_ref::<crate::scripting::runtime::require::ModuleCacheRef>()
             .ok_or_else(|| mlua::Error::RuntimeError("ModuleCacheRef not set".into()))?;
         {
             let mut cache = cache_ref.0.lock().expect("ModuleCache lock poisoned");
@@ -37,7 +47,9 @@ pub fn register_require(lua: &Lua) -> Result<(), mlua::Error> {
                 return Ok(val.clone());
             }
             if cache.loading_modules.contains(&instance.entity) {
-                return Err(mlua::Error::RuntimeError("Cyclic require dependency detected for ModuleScript".to_string()));
+                return Err(mlua::Error::RuntimeError(
+                    "Cyclic require dependency detected for ModuleScript".to_string(),
+                ));
             }
             cache.loading_modules.insert(instance.entity);
         }

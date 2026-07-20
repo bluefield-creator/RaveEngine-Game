@@ -183,11 +183,10 @@ pub fn draw_top_bar(
                                         if let Some(mat) = studs_materials.get(&studs_mat_handle.0) {
                                             current_color = mat.base.base_color;
                                         }
-                                    } else if let Some(mat_handle) = mat_opt {
-                                        if let Some(mat) = materials.get(&mat_handle.0) {
+                                    } else if let Some(mat_handle) = mat_opt
+                                        && let Some(mat) = materials.get(&mat_handle.0) {
                                             current_color = mat.base_color;
                                         }
-                                    }
                                     let (physics_enabled, bounciness, player_can_collide, friction, gravity_scale, mass) = if let Some(phys) = phys_opt {
                                         (phys.enabled, phys.bounciness, phys.player_can_collide, phys.friction, phys.gravity_scale, phys.mass)
                                     } else {
@@ -229,11 +228,10 @@ pub fn draw_top_bar(
                                 }
                                 if let Some(script_type) = script_type_opt {
                                     let mut parent_name = None;
-                                    if let Some(child_of) = child_of_opt {
-                                        if let Ok((_, p_name, _, _, _, _, _, _)) = explorer_query.get(child_of.parent()) {
+                                    if let Some(child_of) = child_of_opt
+                                        && let Ok((_, p_name, _, _, _, _, _, _)) = explorer_query.get(child_of.parent()) {
                                             parent_name = Some(p_name.to_string());
                                         }
-                                    }
                                     scripts_data.push(crate::common::core::vrtx::VrtxScript {
                                         node_id: node_ids.get(&entity).copied().unwrap_or((bricks_data.len() + scripts_data.len()) as u64),
                                         parent_node_id: child_of_opt.and_then(|parent| node_ids.get(&parent.parent()).copied()),
@@ -479,8 +477,8 @@ pub fn draw_top_bar(
                                 ("Sphere", crate::common::game::bricks::components::BrickShape::Sphere),
                             ];
                             for (item, shape) in items {
-                                if item.to_lowercase().contains(&search_query.to_lowercase()) {
-                                    if ui.button(item).clicked() {
+                                if item.to_lowercase().contains(&search_query.to_lowercase())
+                                    && ui.button(item).clicked() {
                                         let mut spawn_pos = Vec3::new(0.0, 0.14, 0.0);
                                         if let Some(cam_t) = camera_transform {
                                             let camera_pos = cam_t.translation;
@@ -560,7 +558,6 @@ pub fn draw_top_bar(
 
                                         ui.memory_mut(|mem| mem.close_popup(popup_id));
                                     }
-                                }
                             }
 
                             let script_items = [
@@ -569,8 +566,8 @@ pub fn draw_top_bar(
                                 ("ModuleScript", 2),
                             ];
                             for (item, script_type) in script_items {
-                                if item.to_lowercase().contains(&search_query.to_lowercase()) {
-                                    if ui.button(item).clicked() {
+                                if item.to_lowercase().contains(&search_query.to_lowercase())
+                                    && ui.button(item).clicked() {
                                         let new_entity = match script_type {
                                             0 => commands.spawn((
                                                 Name::new(item),
@@ -604,7 +601,6 @@ pub fn draw_top_bar(
 
                                         ui.memory_mut(|mem| mem.close_popup(popup_id));
                                     }
-                                }
                             }
                         },
                     );
@@ -691,18 +687,16 @@ pub fn draw_top_bar(
                                     }
                                 }
                                 let new_script_entity = cmd.id();
-                                if let Some(ref p_name) = script_data.parent_name {
-                                    if let Some(&parent_entity) = named_entities.get(p_name) {
+                                if let Some(ref p_name) = script_data.parent_name
+                                    && let Some(&parent_entity) = named_entities.get(p_name) {
                                         commands.entity(parent_entity).add_child(new_script_entity);
                                     }
-                                }
                             }
 
-                            if let Some(gravity_val) = playtest_backup.gravity.take() {
-                                if let Some(g) = gravity {
+                            if let Some(gravity_val) = playtest_backup.gravity.take()
+                                && let Some(g) = gravity {
                                     g.0 = gravity_val;
                                 }
-                            }
                             if let Some(ps_val) = playtest_backup.players_service.take() {
                                 if let Some(ps) = players_service {
                                     **ps = ps_val.clone();
@@ -768,11 +762,10 @@ pub fn draw_top_bar(
                                 }
                                 if let Some(script_type) = script_type_opt {
                                     let mut parent_name = None;
-                                    if let Some(child_of) = child_of_opt {
-                                        if let Ok((_, p_name, _, _, _, _, _, _)) = explorer_query.get(child_of.parent()) {
+                                    if let Some(child_of) = child_of_opt
+                                        && let Ok((_, p_name, _, _, _, _, _, _)) = explorer_query.get(child_of.parent()) {
                                             parent_name = Some(p_name.to_string());
                                         }
-                                    }
                                     backup_scripts.push(crate::common::core::vrtx::VrtxScript {
                                         node_id: backup_scripts.len() as u64,
                                         parent_node_id: None,
@@ -805,11 +798,10 @@ pub fn draw_top_bar(
                                         if let Some(mat) = studs_materials.get(&studs_material_handle.0) {
                                             current_color = mat.base.base_color;
                                         }
-                                    } else if let Some(ref mat_handle) = b.standard_material {
-                                        if let Some(mat) = materials.get(&mat_handle.0) {
+                                    } else if let Some(ref mat_handle) = b.standard_material
+                                        && let Some(mat) = materials.get(&mat_handle.0) {
                                             current_color = mat.base_color;
                                         }
-                                    }
                                     let (physics_enabled, bounciness, player_can_collide, friction, gravity_scale, mass) = if let Some(phys) = b.physics {
                                         (phys.enabled, phys.bounciness, phys.player_can_collide, phys.friction, phys.gravity_scale, phys.mass)
                                     } else {

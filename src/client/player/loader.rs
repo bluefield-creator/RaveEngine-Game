@@ -1,10 +1,10 @@
-use std::path::Path;
+use super::{CameraSettings, Player, PlayerCamera, PlayerController};
+use avian3d::prelude::*;
+use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
 use bevy::render::mesh::Indices;
-use bevy::asset::RenderAssetUsages;
-use avian3d::prelude::*;
+use std::path::Path;
 use tobj::LoadOptions;
-use super::{Player, PlayerController, CameraSettings, PlayerCamera};
 
 #[derive(Resource)]
 pub struct PlayerCharacterAssets {
@@ -52,10 +52,7 @@ pub fn load_obj_file(
             if !tobj_mesh.normals.is_empty() {
                 let mut normals = Vec::new();
                 for i in 0..tobj_mesh.normals.len() / 3 {
-                    normals.push([
-                        tobj_mesh.normals[3 * i + 1],
-                        tobj_mesh.normals[3 * i + 2],
-                    ]);
+                    normals.push([tobj_mesh.normals[3 * i + 1], tobj_mesh.normals[3 * i + 2]]);
                 }
                 bevy_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
             }
@@ -63,10 +60,7 @@ pub fn load_obj_file(
             if !tobj_mesh.texcoords.is_empty() {
                 let mut uvs = Vec::new();
                 for i in 0..tobj_mesh.texcoords.len() / 2 {
-                    uvs.push([
-                        tobj_mesh.texcoords[2 * i],
-                        tobj_mesh.texcoords[2 * i + 1],
-                    ]);
+                    uvs.push([tobj_mesh.texcoords[2 * i], tobj_mesh.texcoords[2 * i + 1]]);
                 }
                 bevy_mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
             }
@@ -75,26 +69,26 @@ pub fn load_obj_file(
             let mesh_handle = meshes.add(bevy_mesh);
 
             let mut mat_handle = Handle::default();
-            if let Some(mat_id) = tobj_mesh.material_id {
-                if mat_id < tobj_materials.len() {
-                    let tobj_mat = &tobj_materials[mat_id];
-                    let base_color = if let Some(kd) = tobj_mat.diffuse {
-                        Color::Srgba(Srgba::new(kd[0], kd[1], kd[2], 1.0))
-                    } else {
-                        Color::WHITE
-                    };
-                    let roughness = if let Some(ns) = tobj_mat.shininess {
-                        (1.0 - (ns / 1000.0)).clamp(0.0, 1.0)
-                    } else {
-                        0.5
-                    };
-                    let std_mat = StandardMaterial {
-                        base_color,
-                        perceptual_roughness: roughness,
-                        ..default()
-                    };
-                    mat_handle = materials.add(std_mat);
-                }
+            if let Some(mat_id) = tobj_mesh.material_id
+                && mat_id < tobj_materials.len()
+            {
+                let tobj_mat = &tobj_materials[mat_id];
+                let base_color = if let Some(kd) = tobj_mat.diffuse {
+                    Color::Srgba(Srgba::new(kd[0], kd[1], kd[2], 1.0))
+                } else {
+                    Color::WHITE
+                };
+                let roughness = if let Some(ns) = tobj_mat.shininess {
+                    (1.0 - (ns / 1000.0)).clamp(0.0, 1.0)
+                } else {
+                    0.5
+                };
+                let std_mat = StandardMaterial {
+                    base_color,
+                    perceptual_roughness: roughness,
+                    ..default()
+                };
+                mat_handle = materials.add(std_mat);
             }
 
             if mat_handle == Handle::default() {
@@ -113,10 +107,7 @@ pub fn load_obj_file(
     parts
 }
 
-pub fn spawn_player(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-) {
+pub fn spawn_player(mut commands: Commands, asset_server: Res<AssetServer>) {
     let player_id = commands
         .spawn((
             Name::new("Player"),
@@ -144,8 +135,7 @@ pub fn spawn_player(
     let child_id = commands
         .spawn((
             WorldAssetRoot(avatar_scene),
-            Transform::from_translation(Vec3::new(0.0, -0.7, 0.0))
-                .with_scale(Vec3::splat(0.28)),
+            Transform::from_translation(Vec3::new(0.0, -0.7, 0.0)).with_scale(Vec3::splat(0.28)),
             GlobalTransform::default(),
             Visibility::Inherited,
         ))

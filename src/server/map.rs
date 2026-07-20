@@ -1,19 +1,21 @@
-use bevy::prelude::*;
-use lightyear::prelude::Replicate;
-use avian3d::prelude::*;
 use crate::common::core::vrtx::VrtxFileState;
-use crate::common::game::bricks::components::{Brick, BrickShape, BrickShapeComponent, BrickPhysics, BrickColor};
+use crate::common::game::bricks::components::{
+    Brick, BrickColor, BrickPhysics, BrickShape, BrickShapeComponent,
+};
 use crate::common::net::components::NetworkTransform;
 use crate::server::ServerSettings;
+use avian3d::prelude::*;
+use bevy::prelude::*;
+use lightyear::prelude::Replicate;
 
-pub fn load_fallback_map(
-    commands: &mut Commands,
-) {
+pub fn load_fallback_map(commands: &mut Commands) {
     commands.spawn((
         Transform::from_xyz(0.0, -0.14, 0.0).with_scale(Vec3::new(25.0, 1.0, 50.0)),
         Name::new("Baseplate"),
         Brick,
-        BrickShapeComponent { shape: BrickShape::Block },
+        BrickShapeComponent {
+            shape: BrickShape::Block,
+        },
         BrickPhysics {
             enabled: false,
             locked: true,
@@ -23,7 +25,9 @@ pub fn load_fallback_map(
             gravity_scale: 1.0,
             mass: 1.0,
         },
-        BrickColor { color: Color::srgb(0.28, 0.62, 0.32) },
+        BrickColor {
+            color: Color::srgb(0.28, 0.62, 0.32),
+        },
         NetworkTransform {
             translation: Vec3::new(0.0, -0.14, 0.0),
             rotation: Quat::IDENTITY,
@@ -41,12 +45,16 @@ pub fn load_fallback_map(
         Transform::from_xyz(0.0, 0.14, 0.0),
         Name::new("Part0"),
         Brick,
-        BrickShapeComponent { shape: BrickShape::Block },
+        BrickShapeComponent {
+            shape: BrickShape::Block,
+        },
         BrickPhysics {
             enabled: true,
             ..default()
         },
-        BrickColor { color: Color::srgb(0.84, 0.24, 0.16) },
+        BrickColor {
+            color: Color::srgb(0.84, 0.24, 0.16),
+        },
         NetworkTransform {
             translation: Vec3::new(0.0, 0.14, 0.0),
             rotation: Quat::IDENTITY,
@@ -62,13 +70,10 @@ pub fn load_fallback_map(
     ));
 }
 
-pub fn load_map(
-    mut commands: Commands,
-    settings: Res<ServerSettings>,
-) {
+pub fn load_map(mut commands: Commands, settings: Res<ServerSettings>) {
     let mut loaded = false;
     info!("Loading map: {}", settings.map_path);
-    
+
     let loaded_state = VrtxFileState::load_from_file(&settings.map_path).ok();
 
     if let Some(state) = loaded_state {
@@ -113,27 +118,24 @@ pub fn load_map(
                 }
                 _ => {
                     cmd.insert((
-                        crate::scripting::ecs::ModuleScript {
-                            code: script.code,
-                        },
+                        crate::scripting::ecs::ModuleScript { code: script.code },
                         lightyear::prelude::Replicate::default(),
                     ));
                 }
             }
             let new_script_entity = cmd.id();
             let mut parented = false;
-            if let Some(parent_id) = script.parent_node_id {
-                if let Some(&parent_entity) = node_id_to_entity.get(&parent_id) {
-                    commands.entity(parent_entity).add_child(new_script_entity);
-                    parented = true;
-                }
+            if let Some(parent_id) = script.parent_node_id
+                && let Some(&parent_entity) = node_id_to_entity.get(&parent_id)
+            {
+                commands.entity(parent_entity).add_child(new_script_entity);
+                parented = true;
             }
-            if !parented {
-                if let Some(ref p_name) = script.parent_name {
-                    if let Some(&parent_entity) = name_to_entity.get(p_name) {
-                        commands.entity(parent_entity).add_child(new_script_entity);
-                    }
-                }
+            if !parented
+                && let Some(ref p_name) = script.parent_name
+                && let Some(&parent_entity) = name_to_entity.get(p_name)
+            {
+                commands.entity(parent_entity).add_child(new_script_entity);
             }
         }
         loaded = true;
@@ -146,14 +148,13 @@ pub fn load_map(
     }
 }
 
-pub fn spawn_brick_entity(commands: &mut Commands, brick: crate::common::core::vrtx::VrtxBrick) -> Entity {
+pub fn spawn_brick_entity(
+    commands: &mut Commands,
+    brick: crate::common::core::vrtx::VrtxBrick,
+) -> Entity {
     let collider = match brick.shape {
-        BrickShape::Block => {
-            Collider::cuboid(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28)
-        }
-        BrickShape::Sphere => {
-            Collider::sphere(1.0 * 0.28)
-        }
+        BrickShape::Block => Collider::cuboid(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28),
+        BrickShape::Sphere => Collider::sphere(1.0 * 0.28),
     };
 
     let body_type = if brick.physics_enabled {
@@ -168,35 +169,38 @@ pub fn spawn_brick_entity(commands: &mut Commands, brick: crate::common::core::v
         CollisionLayers::from_bits(0b0100, 0xFFFF_FFFD)
     };
 
-    commands.spawn((
-        brick.transform,
-        Name::new(brick.name.clone()),
-        Brick,
-        BrickShapeComponent { shape: brick.shape },
-        BrickPhysics {
-            enabled: brick.physics_enabled,
-            locked: false,
-            bounciness: brick.bounciness,
-            player_can_collide: brick.player_can_collide,
-            friction: brick.friction,
-            gravity_scale: brick.gravity_scale,
-            mass: brick.mass,
-        },
-        BrickColor { color: brick.color },
-        NetworkTransform {
-            translation: brick.transform.translation,
-            rotation: brick.transform.rotation,
-            scale: brick.transform.scale,
-        },
-        body_type,
-        collider,
-        layers,
-    )).insert((
-        Friction::new(brick.friction),
-        Restitution::new(brick.bounciness),
-        GravityScale(brick.gravity_scale),
-        Mass(brick.mass),
-        SleepingDisabled,
-        Replicate::default(),
-    )).id()
+    commands
+        .spawn((
+            brick.transform,
+            Name::new(brick.name.clone()),
+            Brick,
+            BrickShapeComponent { shape: brick.shape },
+            BrickPhysics {
+                enabled: brick.physics_enabled,
+                locked: false,
+                bounciness: brick.bounciness,
+                player_can_collide: brick.player_can_collide,
+                friction: brick.friction,
+                gravity_scale: brick.gravity_scale,
+                mass: brick.mass,
+            },
+            BrickColor { color: brick.color },
+            NetworkTransform {
+                translation: brick.transform.translation,
+                rotation: brick.transform.rotation,
+                scale: brick.transform.scale,
+            },
+            body_type,
+            collider,
+            layers,
+        ))
+        .insert((
+            Friction::new(brick.friction),
+            Restitution::new(brick.bounciness),
+            GravityScale(brick.gravity_scale),
+            Mass(brick.mass),
+            SleepingDisabled,
+            Replicate::default(),
+        ))
+        .id()
 }

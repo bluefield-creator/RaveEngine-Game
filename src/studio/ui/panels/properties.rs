@@ -99,10 +99,10 @@ pub fn draw_properties(
 
     let mut script_entity = None;
     let ent = selected_entities[0];
-    if let Ok((_, _, _, _, _, s, l, m)) = explorer_query.get(ent) {
-        if s.is_some() || l.is_some() || m.is_some() {
-            script_entity = Some(ent);
-        }
+    if let Ok((_, _, _, _, _, s, l, m)) = explorer_query.get(ent)
+        && (s.is_some() || l.is_some() || m.is_some())
+    {
+        script_entity = Some(ent);
     }
 
     if let Some(entity) = script_entity {
@@ -112,11 +112,11 @@ pub fn draw_properties(
             .unwrap_or_else(|_| "Script".to_string());
         let (code, script_type, mut enabled) =
             if let Ok((_, _, _, _, _, s, l, m)) = explorer_query.get(entity) {
-                if let Some(ref script) = s {
+                if let Some(script) = s {
                     (script.code.clone(), "Script", script.enabled)
-                } else if let Some(ref script) = l {
+                } else if let Some(script) = l {
                     (script.code.clone(), "LocalScript", script.enabled)
-                } else if let Some(ref script) = m {
+                } else if let Some(script) = m {
                     (script.code.clone(), "ModuleScript", true)
                 } else {
                     ("".to_string(), "Script", true)
@@ -178,11 +178,9 @@ pub fn draw_properties(
                         if res.changed() {
                             ui.data_mut(|d| d.insert_temp(name_id, name_edit.clone()));
                             commands.entity(entity).insert(Name::new(name_edit.clone()));
-                        } else if !res.has_focus() {
-                            if name_edit != name_str {
-                                name_edit = name_str.clone();
-                                ui.data_mut(|d| d.insert_temp(name_id, name_edit.clone()));
-                            }
+                        } else if !res.has_focus() && name_edit != name_str {
+                            name_edit = name_str.clone();
+                            ui.data_mut(|d| d.insert_temp(name_id, name_edit.clone()));
                         }
                         ui.end_row();
 
@@ -204,25 +202,25 @@ pub fn draw_properties(
                                     .color(egui::Color32::from_rgb(60, 60, 60))
                                     .size(13.0),
                             );
-                            if ui.checkbox(&mut enabled, "").changed() {
-                                if let Ok((_, _, _, _, _, s, l, _)) = explorer_query.get(entity) {
-                                    if s.is_some() {
-                                        commands.entity(entity).insert(
-                                            crate::scripting::ecs::ServerScript {
-                                                code: code.clone(),
-                                                enabled,
-                                                started: false,
-                                            },
-                                        );
-                                    } else if l.is_some() {
-                                        commands.entity(entity).insert(
-                                            crate::scripting::ecs::LocalScript {
-                                                code: code.clone(),
-                                                enabled,
-                                                started: false,
-                                            },
-                                        );
-                                    }
+                            if ui.checkbox(&mut enabled, "").changed()
+                                && let Ok((_, _, _, _, _, s, l, _)) = explorer_query.get(entity)
+                            {
+                                if s.is_some() {
+                                    commands.entity(entity).insert(
+                                        crate::scripting::ecs::ServerScript {
+                                            code: code.clone(),
+                                            enabled,
+                                            started: false,
+                                        },
+                                    );
+                                } else if l.is_some() {
+                                    commands.entity(entity).insert(
+                                        crate::scripting::ecs::LocalScript {
+                                            code: code.clone(),
+                                            enabled,
+                                            started: false,
+                                        },
+                                    );
                                 }
                             }
                             ui.end_row();
@@ -330,14 +328,30 @@ pub fn draw_properties(
                 first_color = mat.base.base_color;
                 is_extended = true;
             }
-        } else if let Some(mat_handle) = first_mat_opt {
-            if let Some(mat) = materials.get(&mat_handle.0) {
-                first_color = mat.base_color;
-            }
+        } else if let Some(mat_handle) = first_mat_opt
+            && let Some(mat) = materials.get(&mat_handle.0)
+        {
+            first_color = mat.base_color;
         }
 
-        let (first_phys_enabled, first_locked, first_bounciness, first_player_can_collide, first_friction, first_gravity_scale, first_mass) = if let Some(phys) = first_phys_opt {
-            (phys.enabled, phys.locked, phys.bounciness, phys.player_can_collide, phys.friction, phys.gravity_scale, phys.mass)
+        let (
+            first_phys_enabled,
+            first_locked,
+            first_bounciness,
+            first_player_can_collide,
+            first_friction,
+            first_gravity_scale,
+            first_mass,
+        ) = if let Some(phys) = first_phys_opt {
+            (
+                phys.enabled,
+                phys.locked,
+                phys.bounciness,
+                phys.player_can_collide,
+                phys.friction,
+                phys.gravity_scale,
+                phys.mass,
+            )
         } else {
             (true, false, 0.3, true, 0.3, 1.0, 1.0)
         };
@@ -444,26 +458,60 @@ pub fn draw_properties(
                 if let Some(mat) = studs_materials.get(&studs_mat_handle.0) {
                     color = mat.base.base_color;
                 }
-            } else if let Some(mat_handle) = mat_opt {
-                if let Some(mat) = materials.get(&mat_handle.0) {
-                    color = mat.base_color;
-                }
+            } else if let Some(mat_handle) = mat_opt
+                && let Some(mat) = materials.get(&mat_handle.0)
+            {
+                color = mat.base_color;
             }
-            if color != first_color { all_color_same = false; }
-            if (color.to_srgba().alpha - first_alpha).abs() > 0.001 { all_transparency_same = false; }
-            
-            let (phys_enabled, locked, bounciness, player_can_collide, friction, gravity_scale, mass) = if let Some(phys) = phys_opt {
-                (phys.enabled, phys.locked, phys.bounciness, phys.player_can_collide, phys.friction, phys.gravity_scale, phys.mass)
+            if color != first_color {
+                all_color_same = false;
+            }
+            if (color.to_srgba().alpha - first_alpha).abs() > 0.001 {
+                all_transparency_same = false;
+            }
+
+            let (
+                phys_enabled,
+                locked,
+                bounciness,
+                player_can_collide,
+                friction,
+                gravity_scale,
+                mass,
+            ) = if let Some(phys) = phys_opt {
+                (
+                    phys.enabled,
+                    phys.locked,
+                    phys.bounciness,
+                    phys.player_can_collide,
+                    phys.friction,
+                    phys.gravity_scale,
+                    phys.mass,
+                )
             } else {
                 (true, false, 0.3, true, 0.3, 1.0, 1.0)
             };
-            if phys_enabled != first_phys_enabled { all_phys_enabled_same = false; }
-            if locked != first_locked { all_locked_same = false; }
-            if (bounciness - first_bounciness).abs() > 0.001 { all_bounciness_same = false; }
-            if player_can_collide != first_player_can_collide { all_player_can_collide_same = false; }
-            if (friction - first_friction).abs() > 0.001 { all_friction_same = false; }
-            if (gravity_scale - first_gravity_scale).abs() > 0.001 { all_gravity_scale_same = false; }
-            if (mass - first_mass).abs() > 0.001 { all_mass_same = false; }
+            if phys_enabled != first_phys_enabled {
+                all_phys_enabled_same = false;
+            }
+            if locked != first_locked {
+                all_locked_same = false;
+            }
+            if (bounciness - first_bounciness).abs() > 0.001 {
+                all_bounciness_same = false;
+            }
+            if player_can_collide != first_player_can_collide {
+                all_player_can_collide_same = false;
+            }
+            if (friction - first_friction).abs() > 0.001 {
+                all_friction_same = false;
+            }
+            if (gravity_scale - first_gravity_scale).abs() > 0.001 {
+                all_gravity_scale_same = false;
+            }
+            if (mass - first_mass).abs() > 0.001 {
+                all_mass_same = false;
+            }
         }
     }
 
@@ -612,19 +660,17 @@ pub fn draw_properties(
                                     for &entity in selected_entities {
                                         if let Ok((_, _, _, _, _, _, _, _, _, mat_opt, studs_mat_opt, _, _)) = properties_query.get_mut(entity) {
                                             if is_extended {
-                                                if let Some(studs_mat_handle) = studs_mat_opt {
-                                                    if let Some(mut mat) = studs_materials.get_mut(&studs_mat_handle.0) {
+                                                if let Some(studs_mat_handle) = studs_mat_opt
+                                                    && let Some(mut mat) = studs_materials.get_mut(&studs_mat_handle.0) {
                                                         mat.base.base_color = new_color;
                                                         mat.base.alpha_mode = new_alpha_mode;
                                                     }
-                                                }
                                             } else {
-                                                if let Some(mat_handle) = mat_opt {
-                                                    if let Some(mut mat) = materials.get_mut(&mat_handle.0) {
+                                                if let Some(mat_handle) = mat_opt
+                                                    && let Some(mut mat) = materials.get_mut(&mat_handle.0) {
                                                         mat.base_color = new_color;
                                                         mat.alpha_mode = new_alpha_mode;
                                                     }
-                                                }
                                             }
                                             if let Ok(mut bc) = brick_colors.get_mut(entity) {
                                                 bc.color = new_color;
@@ -648,29 +694,26 @@ pub fn draw_properties(
                                                     if let Some(mat) = studs_materials.get(&studs_mat_handle.0) {
                                                         current_color = mat.base.base_color;
                                                     }
-                                                } else if let Some(mat_handle) = mat_opt {
-                                                    if let Some(mat) = materials.get(&mat_handle.0) {
+                                                } else if let Some(mat_handle) = mat_opt
+                                                    && let Some(mat) = materials.get(&mat_handle.0) {
                                                         current_color = mat.base_color;
                                                     }
-                                                }
                                                 let mut srgba = current_color.to_srgba();
                                                 srgba.alpha = 1.0 - transparency;
                                                 let new_color = Color::Srgba(srgba);
                                                 let new_alpha_mode = if srgba.alpha < 1.0 { AlphaMode::Blend } else { AlphaMode::Opaque };
                                                 if is_extended {
-                                                    if let Some(studs_mat_handle) = studs_mat_opt {
-                                                        if let Some(mut mat) = studs_materials.get_mut(&studs_mat_handle.0) {
+                                                    if let Some(studs_mat_handle) = studs_mat_opt
+                                                        && let Some(mut mat) = studs_materials.get_mut(&studs_mat_handle.0) {
                                                             mat.base.base_color = new_color;
                                                             mat.base.alpha_mode = new_alpha_mode;
                                                         }
-                                                    }
                                                 } else {
-                                                    if let Some(mat_handle) = mat_opt {
-                                                        if let Some(mut mat) = materials.get_mut(&mat_handle.0) {
+                                                    if let Some(mat_handle) = mat_opt
+                                                        && let Some(mut mat) = materials.get_mut(&mat_handle.0) {
                                                             mat.base_color = new_color;
                                                             mat.alpha_mode = new_alpha_mode;
                                                         }
-                                                    }
                                                 }
                                                 if let Ok(mut bc) = brick_colors.get_mut(entity) {
                                                     bc.color = new_color;
@@ -692,29 +735,26 @@ pub fn draw_properties(
                                                     if let Some(mat) = studs_materials.get(&studs_mat_handle.0) {
                                                         current_color = mat.base.base_color;
                                                     }
-                                                } else if let Some(mat_handle) = mat_opt {
-                                                    if let Some(mat) = materials.get(&mat_handle.0) {
+                                                } else if let Some(mat_handle) = mat_opt
+                                                    && let Some(mat) = materials.get(&mat_handle.0) {
                                                         current_color = mat.base_color;
                                                     }
-                                                }
                                                 let mut srgba = current_color.to_srgba();
                                                 srgba.alpha = 1.0 - transparency;
                                                 let new_color = Color::Srgba(srgba);
                                                 let new_alpha_mode = if srgba.alpha < 1.0 { AlphaMode::Blend } else { AlphaMode::Opaque };
                                                 if is_extended {
-                                                    if let Some(studs_mat_handle) = studs_mat_opt {
-                                                        if let Some(mut mat) = studs_materials.get_mut(&studs_mat_handle.0) {
+                                                    if let Some(studs_mat_handle) = studs_mat_opt
+                                                        && let Some(mut mat) = studs_materials.get_mut(&studs_mat_handle.0) {
                                                             mat.base.base_color = new_color;
                                                             mat.base.alpha_mode = new_alpha_mode;
                                                         }
-                                                    }
                                                 } else {
-                                                    if let Some(mat_handle) = mat_opt {
-                                                        if let Some(mut mat) = materials.get_mut(&mat_handle.0) {
+                                                    if let Some(mat_handle) = mat_opt
+                                                        && let Some(mut mat) = materials.get_mut(&mat_handle.0) {
                                                             mat.base_color = new_color;
                                                             mat.alpha_mode = new_alpha_mode;
                                                         }
-                                                    }
                                                 }
                                                 if let Ok(mut bc) = brick_colors.get_mut(entity) {
                                                     bc.color = new_color;
@@ -785,15 +825,14 @@ pub fn draw_properties(
                                     }
                                     None
                                 };
-                                if let Some(res) = checkbox_res {
-                                    if res.changed() {
+                                if let Some(res) = checkbox_res
+                                    && res.changed() {
                                         for &entity in selected_entities {
                                             if let Ok((_, _, _, _, _, _, _, _, _, _, _, Some(mut phys), _)) = properties_query.get_mut(entity) {
                                                 phys.enabled = enabled;
                                             }
                                         }
                                     }
-                                }
                                 ui.end_row();
 
                                 ui.label(egui::RichText::new("Player can collide").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
@@ -823,8 +862,8 @@ pub fn draw_properties(
                                     }
                                     None
                                 };
-                                if let Some(res) = can_collide_checkbox_res {
-                                    if res.changed() {
+                                if let Some(res) = can_collide_checkbox_res
+                                    && res.changed() {
                                         for &entity in selected_entities {
                                             if let Ok((_, _, _, _, _, _, _, _, _, _, _, Some(mut phys), _)) = properties_query.get_mut(entity) {
                                                 phys.player_can_collide = player_can_collide;
@@ -837,7 +876,6 @@ pub fn draw_properties(
                                             }
                                         }
                                     }
-                                }
                                 ui.end_row();
 
                                 ui.label(egui::RichText::new("Locked").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
@@ -861,15 +899,14 @@ pub fn draw_properties(
                                     }
                                     None
                                 };
-                                if let Some(res) = locked_checkbox_res {
-                                    if res.changed() {
+                                if let Some(res) = locked_checkbox_res
+                                    && res.changed() {
                                         for &entity in selected_entities {
                                             if let Ok((_, _, _, _, _, _, _, _, _, _, _, Some(mut phys), _)) = properties_query.get_mut(entity) {
                                                 phys.locked = locked;
                                             }
                                         }
                                     }
-                                }
                                 ui.end_row();
 
                                 ui.label(egui::RichText::new("Friction").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
@@ -1112,11 +1149,9 @@ pub fn draw_players_properties(
                                 .range(0.0..=10.0),
                         )
                         .changed()
+                        && let Ok(mut shared) = crate::studio::tools::SHARED_PLAYERS_SERVICE.write()
                     {
-                        if let Ok(mut shared) = crate::studio::tools::SHARED_PLAYERS_SERVICE.write()
-                        {
-                            shared.gravity_scale = service.gravity_scale;
-                        }
+                        shared.gravity_scale = service.gravity_scale;
                     }
                 } else {
                     ui.label(
@@ -1140,11 +1175,9 @@ pub fn draw_players_properties(
                                 .range(0.0..=1.0),
                         )
                         .changed()
+                        && let Ok(mut shared) = crate::studio::tools::SHARED_PLAYERS_SERVICE.write()
                     {
-                        if let Ok(mut shared) = crate::studio::tools::SHARED_PLAYERS_SERVICE.write()
-                        {
-                            shared.friction = service.friction;
-                        }
+                        shared.friction = service.friction;
                     }
                 } else {
                     ui.label(
@@ -1168,11 +1201,9 @@ pub fn draw_players_properties(
                                 .range(0.0..=1.0),
                         )
                         .changed()
+                        && let Ok(mut shared) = crate::studio::tools::SHARED_PLAYERS_SERVICE.write()
                     {
-                        if let Ok(mut shared) = crate::studio::tools::SHARED_PLAYERS_SERVICE.write()
-                        {
-                            shared.bounciness = service.bounciness;
-                        }
+                        shared.bounciness = service.bounciness;
                     }
                 } else {
                     ui.label(

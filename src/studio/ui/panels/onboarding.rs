@@ -347,8 +347,7 @@ pub fn draw_onboarding(
                             )
                         }).inner;
 
-                        if login_btn.clicked() {
-                        }
+                        login_btn.clicked();
 
                         ui.add_space(14.0);
 
