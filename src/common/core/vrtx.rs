@@ -1,6 +1,6 @@
-use std::fs::File;
-use std::io::{Read, Write, BufReader, BufWriter};
 use bevy::prelude::*;
+use std::fs::File;
+use std::io::{BufReader, BufWriter, Read, Write};
 
 pub const CURRENT_VRTX_VERSION: u32 = 6;
 
@@ -75,7 +75,10 @@ impl<'a> GodotParser<'a> {
 
     fn read_u32(&mut self) -> std::io::Result<u32> {
         if self.offset + 4 > self.data.len() {
-            return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "Unexpected EOF"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "Unexpected EOF",
+            ));
         }
         let val = u32::from_le_bytes([
             self.data[self.offset],
@@ -89,7 +92,10 @@ impl<'a> GodotParser<'a> {
 
     fn read_f32(&mut self) -> std::io::Result<f32> {
         if self.offset + 4 > self.data.len() {
-            return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "Unexpected EOF"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "Unexpected EOF",
+            ));
         }
         let val = f32::from_le_bytes([
             self.data[self.offset],
@@ -103,7 +109,10 @@ impl<'a> GodotParser<'a> {
 
     fn read_f64(&mut self) -> std::io::Result<f64> {
         if self.offset + 8 > self.data.len() {
-            return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "Unexpected EOF"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "Unexpected EOF",
+            ));
         }
         let val = f64::from_le_bytes([
             self.data[self.offset],
@@ -121,7 +130,10 @@ impl<'a> GodotParser<'a> {
 
     fn read_bytes(&mut self, len: usize) -> std::io::Result<&'a [u8]> {
         if self.offset + len > self.data.len() {
-            return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "Unexpected EOF"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "Unexpected EOF",
+            ));
         }
         let slice = &self.data[self.offset..self.offset + len];
         self.offset += len;
@@ -135,7 +147,10 @@ impl<'a> GodotParser<'a> {
         let flags = (type_header >> 16) & 0xFF;
         let is_64 = flags == 1;
 
-        trace!("parse_variant at offset {}: type_id={}, flags={}, is_64={}", start_offset, type_id, flags, is_64);
+        trace!(
+            "parse_variant at offset {}: type_id={}, flags={}, is_64={}",
+            start_offset, type_id, flags, is_64
+        );
 
         let var = match type_id {
             0 | 25 | 26 => Ok(GodotVariant::Nil),
@@ -174,8 +189,16 @@ impl<'a> GodotParser<'a> {
                 Ok(GodotVariant::String(string))
             }
             5 => {
-                let x = if is_64 { self.read_f64()? as f32 } else { self.read_f32()? };
-                let y = if is_64 { self.read_f64()? as f32 } else { self.read_f32()? };
+                let x = if is_64 {
+                    self.read_f64()? as f32
+                } else {
+                    self.read_f32()?
+                };
+                let y = if is_64 {
+                    self.read_f64()? as f32
+                } else {
+                    self.read_f32()?
+                };
                 Ok(GodotVariant::Vector2(Vec2::new(x, y)))
             }
             6 => {
@@ -192,9 +215,21 @@ impl<'a> GodotParser<'a> {
                 Ok(GodotVariant::Nil)
             }
             9 => {
-                let x = if is_64 { self.read_f64()? as f32 } else { self.read_f32()? };
-                let y = if is_64 { self.read_f64()? as f32 } else { self.read_f32()? };
-                let z = if is_64 { self.read_f64()? as f32 } else { self.read_f32()? };
+                let x = if is_64 {
+                    self.read_f64()? as f32
+                } else {
+                    self.read_f32()?
+                };
+                let y = if is_64 {
+                    self.read_f64()? as f32
+                } else {
+                    self.read_f32()?
+                };
+                let z = if is_64 {
+                    self.read_f64()? as f32
+                } else {
+                    self.read_f32()?
+                };
                 Ok(GodotVariant::Vector3(Vec3::new(x, y, z)))
             }
             10 => {
@@ -202,31 +237,59 @@ impl<'a> GodotParser<'a> {
                 Ok(GodotVariant::Nil)
             }
             11 => {
-                let _bytes = if is_64 { self.read_bytes(32)? } else { self.read_bytes(16)? };
+                let _bytes = if is_64 {
+                    self.read_bytes(32)?
+                } else {
+                    self.read_bytes(16)?
+                };
                 Ok(GodotVariant::Nil)
             }
             12 => {
-                let _bytes = if is_64 { self.read_bytes(32)? } else { self.read_bytes(16)? };
+                let _bytes = if is_64 {
+                    self.read_bytes(32)?
+                } else {
+                    self.read_bytes(16)?
+                };
                 Ok(GodotVariant::Nil)
             }
             13 => {
-                let _bytes = if is_64 { self.read_bytes(32)? } else { self.read_bytes(16)? };
+                let _bytes = if is_64 {
+                    self.read_bytes(32)?
+                } else {
+                    self.read_bytes(16)?
+                };
                 Ok(GodotVariant::Nil)
             }
             14 => {
-                let _bytes = if is_64 { self.read_bytes(48)? } else { self.read_bytes(24)? };
+                let _bytes = if is_64 {
+                    self.read_bytes(48)?
+                } else {
+                    self.read_bytes(24)?
+                };
                 Ok(GodotVariant::Nil)
             }
             15 => {
-                let _bytes = if is_64 { self.read_bytes(72)? } else { self.read_bytes(36)? };
+                let _bytes = if is_64 {
+                    self.read_bytes(72)?
+                } else {
+                    self.read_bytes(36)?
+                };
                 Ok(GodotVariant::Nil)
             }
             16 => {
-                let _bytes = if is_64 { self.read_bytes(96)? } else { self.read_bytes(48)? };
+                let _bytes = if is_64 {
+                    self.read_bytes(96)?
+                } else {
+                    self.read_bytes(48)?
+                };
                 Ok(GodotVariant::Nil)
             }
             17 => {
-                let _bytes = if is_64 { self.read_bytes(128)? } else { self.read_bytes(64)? };
+                let _bytes = if is_64 {
+                    self.read_bytes(128)?
+                } else {
+                    self.read_bytes(64)?
+                };
                 Ok(GodotVariant::Nil)
             }
             18 => {
@@ -270,12 +333,18 @@ impl<'a> GodotParser<'a> {
             27 => {
                 let count_header = self.read_u32()?;
                 let count = count_header & 0x7FFFFFFF;
-                trace!("parse_variant at offset {}: parsing dictionary with {} elements", start_offset, count);
+                trace!(
+                    "parse_variant at offset {}: parsing dictionary with {} elements",
+                    start_offset, count
+                );
                 let mut dict = std::collections::HashMap::new();
                 for i in 0..count {
                     let key_var = self.parse_variant()?;
                     let val_var = self.parse_variant()?;
-                    trace!("parse_variant dictionary element {}: key={:?}, val_type={:?}", i, key_var, val_var);
+                    trace!(
+                        "parse_variant dictionary element {}: key={:?}, val_type={:?}",
+                        i, key_var, val_var
+                    );
                     if let GodotVariant::String(key_str) = key_var {
                         dict.insert(key_str, val_var);
                     }
@@ -285,7 +354,10 @@ impl<'a> GodotParser<'a> {
             28 => {
                 let count_header = self.read_u32()?;
                 let count = count_header & 0x7FFFFFFF;
-                trace!("parse_variant at offset {}: parsing array with {} elements", start_offset, count);
+                trace!(
+                    "parse_variant at offset {}: parsing array with {} elements",
+                    start_offset, count
+                );
                 let mut arr = Vec::with_capacity(count as usize);
                 for _ in 0..count {
                     let val_var = self.parse_variant()?;
@@ -294,7 +366,10 @@ impl<'a> GodotParser<'a> {
                 Ok(GodotVariant::Array(arr))
             }
             _ => {
-                error!("parse_variant at offset {}: Unsupported Godot variant type: {}", start_offset, type_id);
+                error!(
+                    "parse_variant at offset {}: Unsupported Godot variant type: {}",
+                    start_offset, type_id
+                );
                 Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     format!("Unsupported Godot variant type: {}", type_id),
@@ -303,7 +378,10 @@ impl<'a> GodotParser<'a> {
         };
 
         if let Ok(ref _value) = var {
-            trace!("parse_variant at offset {} successfully parsed", start_offset);
+            trace!(
+                "parse_variant at offset {} successfully parsed",
+                start_offset
+            );
         }
         var
     }
@@ -311,34 +389,57 @@ impl<'a> GodotParser<'a> {
 
 fn decompress_gcpf_file(data: &[u8]) -> std::io::Result<Vec<u8>> {
     if data.len() < 16 {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "GCPF: File too short"));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "GCPF: File too short",
+        ));
     }
     if &data[0..4] != b"GCPF" {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "GCPF: Invalid magic"));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "GCPF: Invalid magic",
+        ));
     }
 
     let comp_mode = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
     let block_size = u32::from_le_bytes([data[8], data[9], data[10], data[11]]) as usize;
     let uncompressed_size = u32::from_le_bytes([data[12], data[13], data[14], data[15]]) as usize;
 
-    debug!("GCPF decompress: mode={}, block_size={}, uncompressed_size={}", comp_mode, block_size, uncompressed_size);
+    debug!(
+        "GCPF decompress: mode={}, block_size={}, uncompressed_size={}",
+        comp_mode, block_size, uncompressed_size
+    );
 
     if block_size == 0 {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "GCPF: Block size is zero"));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "GCPF: Block size is zero",
+        ));
     }
 
     let num_blocks = (uncompressed_size + block_size - 1) / block_size;
     let header_size = 16 + num_blocks * 4;
-    debug!("GCPF decompress: num_blocks={}, header_size={}", num_blocks, header_size);
+    debug!(
+        "GCPF decompress: num_blocks={}, header_size={}",
+        num_blocks, header_size
+    );
 
     if data.len() < header_size {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "GCPF: Header size exceeds file length"));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "GCPF: Header size exceeds file length",
+        ));
     }
 
     let mut block_sizes = Vec::with_capacity(num_blocks);
     for i in 0..num_blocks {
         let offset = 16 + i * 4;
-        let size = u32::from_le_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]]) as usize;
+        let size = u32::from_le_bytes([
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+        ]) as usize;
         block_sizes.push(size);
     }
 
@@ -346,32 +447,36 @@ fn decompress_gcpf_file(data: &[u8]) -> std::io::Result<Vec<u8>> {
     let mut uncompressed_data = Vec::with_capacity(uncompressed_size);
 
     for (i, size) in block_sizes.into_iter().enumerate() {
-        trace!("GCPF decompressing block {}: offset={}, size={}", i, current_offset, size);
+        trace!(
+            "GCPF decompressing block {}: offset={}, size={}",
+            i, current_offset, size
+        );
         if current_offset + size > data.len() {
-            if current_offset + 4 == data.len() && &data[current_offset..current_offset + 4] == b"GCPF" {
+            if current_offset + 4 == data.len()
+                && &data[current_offset..current_offset + 4] == b"GCPF"
+            {
                 debug!("GCPF footer magic reached, stopping decompression cleanly");
                 break;
             }
-            return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "GCPF: Block data truncated"));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "GCPF: Block data truncated",
+            ));
         }
         let compressed_block = &data[current_offset..current_offset + size];
         current_offset += size;
 
         let decompressed_block = match comp_mode {
-            0 | 2 => {
-                zstd::decode_all(compressed_block)?
-            }
-            _ => {
-                match zstd::decode_all(compressed_block) {
-                    Ok(decoded) => decoded,
-                    Err(_) => {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
-                            format!("GCPF: Unsupported compression mode {}", comp_mode),
-                        ));
-                    }
+            0 | 2 => zstd::decode_all(compressed_block)?,
+            _ => match zstd::decode_all(compressed_block) {
+                Ok(decoded) => decoded,
+                Err(_) => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("GCPF: Unsupported compression mode {}", comp_mode),
+                    ));
                 }
-            }
+            },
         };
         uncompressed_data.extend_from_slice(&decompressed_block);
     }
@@ -390,7 +495,9 @@ fn collect_bricks_recursive(
 ) {
     for node in nodes {
         if let GodotVariant::Array(data) = node {
-            if data.len() < 10 { continue; }
+            if data.len() < 10 {
+                continue;
+            }
 
             let name = match &data[0] {
                 GodotVariant::String(s) => s.clone(),
@@ -443,20 +550,34 @@ fn collect_bricks_recursive(
                 crate::common::game::bricks::components::BrickShape::Block
             };
 
-            let is_standard_brick = data.len() >= 15 && match &data[0] {
-                GodotVariant::String(s) => {
-                    s != "NPC" && s != "UIImage" && s != "UIButton" && s != "UIText" && s != "Decal" &&
-                    s != "RemoteEvent" && s != "Terrain" && s != "Model" && s != "Weld" &&
-                    s != "Hinge" && s != "Label3D" && s != "Sound" && s != "Script" && s != "LocalScript"
-                }
-                _ => false,
-            };
+            let is_standard_brick = data.len() >= 15
+                && match &data[0] {
+                    GodotVariant::String(s) => {
+                        s != "NPC"
+                            && s != "UIImage"
+                            && s != "UIButton"
+                            && s != "UIText"
+                            && s != "Decal"
+                            && s != "RemoteEvent"
+                            && s != "Terrain"
+                            && s != "Model"
+                            && s != "Weld"
+                            && s != "Hinge"
+                            && s != "Label3D"
+                            && s != "Sound"
+                            && s != "Script"
+                            && s != "LocalScript"
+                    }
+                    _ => false,
+                };
 
             let bevy_scale = if is_standard_brick {
                 match shape {
-                    crate::common::game::bricks::components::BrickShape::Block => {
-                        Vec3::new(local_scale.x / 4.0, local_scale.y / 1.0, local_scale.z / 2.0)
-                    }
+                    crate::common::game::bricks::components::BrickShape::Block => Vec3::new(
+                        local_scale.x / 4.0,
+                        local_scale.y / 1.0,
+                        local_scale.z / 2.0,
+                    ),
                     crate::common::game::bricks::components::BrickShape::Sphere => {
                         local_scale / 2.0
                     }
@@ -471,7 +592,10 @@ fn collect_bricks_recursive(
                 scale: bevy_scale,
             };
 
-            let global_translation = parent_transform.translation + parent_transform.rotation.mul_vec3(local_transform.translation * 0.28);
+            let global_translation = parent_transform.translation
+                + parent_transform
+                    .rotation
+                    .mul_vec3(local_transform.translation * 0.28);
             let global_rotation = parent_transform.rotation * local_transform.rotation;
             let global_scale = parent_transform.scale * local_transform.scale;
 
@@ -500,8 +624,18 @@ fn collect_bricks_recursive(
 
             let is_custom_node = match &data[0] {
                 GodotVariant::String(s) => {
-                    s == "RemoteEvent" || s == "Terrain" || s == "NPC" || s == "Model" || s == "Weld" ||
-                    s == "Decal" || s == "Terrain" || s == "Hinge" || s == "Label3D" || s == "Sound" || s == "Script" || s == "LocalScript"
+                    s == "RemoteEvent"
+                        || s == "Terrain"
+                        || s == "NPC"
+                        || s == "Model"
+                        || s == "Weld"
+                        || s == "Decal"
+                        || s == "Terrain"
+                        || s == "Hinge"
+                        || s == "Label3D"
+                        || s == "Sound"
+                        || s == "Script"
+                        || s == "LocalScript"
                 }
                 _ => false,
             };
@@ -509,13 +643,21 @@ fn collect_bricks_recursive(
             let children_var = if is_custom_node {
                 match &data[0] {
                     GodotVariant::String(s) => {
-                        if s == "Model" { data.get(5) }
-                        else if s == "Script" || s == "LocalScript" { data.get(4) }
-                        else if s == "Weld" { data.get(8) }
-                        else if s == "Decal" || s == "Terrain" { data.get(7) }
-                        else if s == "NPC" { data.get(16) }
-                        else if s == "Hinge" || s == "Label3D" || s == "Sound" { data.get(10) }
-                        else { None }
+                        if s == "Model" {
+                            data.get(5)
+                        } else if s == "Script" || s == "LocalScript" {
+                            data.get(4)
+                        } else if s == "Weld" {
+                            data.get(8)
+                        } else if s == "Decal" || s == "Terrain" {
+                            data.get(7)
+                        } else if s == "NPC" {
+                            data.get(16)
+                        } else if s == "Hinge" || s == "Label3D" || s == "Sound" {
+                            data.get(10)
+                        } else {
+                            None
+                        }
                     }
                     _ => None,
                 }
@@ -531,18 +673,37 @@ fn collect_bricks_recursive(
 }
 
 fn parse_godot_vrtx(decompressed: &[u8]) -> std::io::Result<VrtxFileState> {
-    debug!("Parsing Godot VRTX, decompressed length={}", decompressed.len());
+    debug!(
+        "Parsing Godot VRTX, decompressed length={}",
+        decompressed.len()
+    );
     if decompressed.len() >= 4 {
-        let first_u32 = u32::from_le_bytes([decompressed[0], decompressed[1], decompressed[2], decompressed[3]]);
-        debug!("First 4 bytes of decompressed payload: {} (0x{:X})", first_u32, first_u32);
+        let first_u32 = u32::from_le_bytes([
+            decompressed[0],
+            decompressed[1],
+            decompressed[2],
+            decompressed[3],
+        ]);
+        debug!(
+            "First 4 bytes of decompressed payload: {} (0x{:X})",
+            first_u32, first_u32
+        );
     }
 
     let mut parser = GodotParser::new(decompressed);
 
     if decompressed.len() >= 8 {
-        let prefix = u32::from_le_bytes([decompressed[0], decompressed[1], decompressed[2], decompressed[3]]) as usize;
+        let prefix = u32::from_le_bytes([
+            decompressed[0],
+            decompressed[1],
+            decompressed[2],
+            decompressed[3],
+        ]) as usize;
         if prefix == decompressed.len() - 4 {
-            debug!("Detected Godot store_var length prefix: {} bytes. Skipping prefix.", prefix);
+            debug!(
+                "Detected Godot store_var length prefix: {} bytes. Skipping prefix.",
+                prefix
+            );
             parser.offset = 4;
         }
     }
@@ -567,9 +728,14 @@ fn parse_godot_vrtx(decompressed: &[u8]) -> std::io::Result<VrtxFileState> {
             bloom: true,
         };
 
-        let camera_transform = Transform::from_xyz(-10.0, 10.0, -10.0).looking_at(Vec3::ZERO, Vec3::Y);
+        let camera_transform =
+            Transform::from_xyz(-10.0, 10.0, -10.0).looking_at(Vec3::ZERO, Vec3::Y);
 
-        debug!("Parsing complete: version={}, bricks={}", version, bricks.len());
+        debug!(
+            "Parsing complete: version={}, bricks={}",
+            version,
+            bricks.len()
+        );
         Ok(VrtxFileState {
             version,
             gravity,
@@ -709,9 +875,12 @@ impl VrtxFileState {
 
             let (gravity, settings, camera_transform, count) = if version >= 1 {
                 debug!("load_from_file: Parsing version 1/2/3/4 header");
-                let mut gx = [0u8; 4]; reader.read_exact(&mut gx)?;
-                let mut gy = [0u8; 4]; reader.read_exact(&mut gy)?;
-                let mut gz = [0u8; 4]; reader.read_exact(&mut gz)?;
+                let mut gx = [0u8; 4];
+                reader.read_exact(&mut gx)?;
+                let mut gy = [0u8; 4];
+                reader.read_exact(&mut gy)?;
+                let mut gz = [0u8; 4];
+                reader.read_exact(&mut gz)?;
                 let gravity = Vec3::new(
                     f32::from_le_bytes(gx),
                     f32::from_le_bytes(gy),
@@ -726,19 +895,26 @@ impl VrtxFileState {
                     bloom: settings_bytes[2] != 0,
                 };
 
-                let mut cx = [0u8; 4]; reader.read_exact(&mut cx)?;
-                let mut cy = [0u8; 4]; reader.read_exact(&mut cy)?;
-                let mut cz = [0u8; 4]; reader.read_exact(&mut cz)?;
+                let mut cx = [0u8; 4];
+                reader.read_exact(&mut cx)?;
+                let mut cy = [0u8; 4];
+                reader.read_exact(&mut cy)?;
+                let mut cz = [0u8; 4];
+                reader.read_exact(&mut cz)?;
                 let camera_translation = Vec3::new(
                     f32::from_le_bytes(cx),
                     f32::from_le_bytes(cy),
                     f32::from_le_bytes(cz),
                 );
 
-                let mut crx = [0u8; 4]; reader.read_exact(&mut crx)?;
-                let mut cry = [0u8; 4]; reader.read_exact(&mut cry)?;
-                let mut crz = [0u8; 4]; reader.read_exact(&mut crz)?;
-                let mut crw = [0u8; 4]; reader.read_exact(&mut crw)?;
+                let mut crx = [0u8; 4];
+                reader.read_exact(&mut crx)?;
+                let mut cry = [0u8; 4];
+                reader.read_exact(&mut cry)?;
+                let mut crz = [0u8; 4];
+                reader.read_exact(&mut crz)?;
+                let mut crw = [0u8; 4];
+                reader.read_exact(&mut crw)?;
                 let camera_rotation = Quat::from_xyzw(
                     f32::from_le_bytes(crx),
                     f32::from_le_bytes(cry),
@@ -759,9 +935,12 @@ impl VrtxFileState {
                 (gravity, settings, camera_transform, count)
             } else if version == 0 {
                 debug!("load_from_file: Parsing version 0 header");
-                let mut gx = [0u8; 4]; reader.read_exact(&mut gx)?;
-                let mut gy = [0u8; 4]; reader.read_exact(&mut gy)?;
-                let mut gz = [0u8; 4]; reader.read_exact(&mut gz)?;
+                let mut gx = [0u8; 4];
+                reader.read_exact(&mut gx)?;
+                let mut gy = [0u8; 4];
+                reader.read_exact(&mut gy)?;
+                let mut gz = [0u8; 4];
+                reader.read_exact(&mut gz)?;
                 let gravity = Vec3::new(
                     f32::from_le_bytes(gx),
                     f32::from_le_bytes(gy),
@@ -774,7 +953,8 @@ impl VrtxFileState {
                     bloom: true,
                 };
 
-                let camera_transform = Transform::from_xyz(-10.0, 10.0, -10.0).looking_at(Vec3::ZERO, Vec3::Y);
+                let camera_transform =
+                    Transform::from_xyz(-10.0, 10.0, -10.0).looking_at(Vec3::ZERO, Vec3::Y);
 
                 let mut count_bytes = [0u8; 4];
                 reader.read_exact(&mut count_bytes)?;
@@ -799,27 +979,39 @@ impl VrtxFileState {
                 let name = String::from_utf8(name_bytes)
                     .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
                 let (node_id, parent_node_id) = if version >= 6 {
-                    let mut id = [0u8; 8]; reader.read_exact(&mut id)?;
-                    let mut parent = [0u8; 8]; reader.read_exact(&mut parent)?;
+                    let mut id = [0u8; 8];
+                    reader.read_exact(&mut id)?;
+                    let mut parent = [0u8; 8];
+                    reader.read_exact(&mut parent)?;
                     let parent = u64::from_le_bytes(parent);
-                    (u64::from_le_bytes(id), (parent != u64::MAX).then_some(parent))
+                    (
+                        u64::from_le_bytes(id),
+                        (parent != u64::MAX).then_some(parent),
+                    )
                 } else {
                     (bricks.len() as u64, None)
                 };
 
-                let mut tx = [0u8; 4]; reader.read_exact(&mut tx)?;
-                let mut ty = [0u8; 4]; reader.read_exact(&mut ty)?;
-                let mut tz = [0u8; 4]; reader.read_exact(&mut tz)?;
+                let mut tx = [0u8; 4];
+                reader.read_exact(&mut tx)?;
+                let mut ty = [0u8; 4];
+                reader.read_exact(&mut ty)?;
+                let mut tz = [0u8; 4];
+                reader.read_exact(&mut tz)?;
                 let translation = Vec3::new(
                     f32::from_le_bytes(tx),
                     f32::from_le_bytes(ty),
                     f32::from_le_bytes(tz),
                 );
 
-                let mut rx = [0u8; 4]; reader.read_exact(&mut rx)?;
-                let mut ry = [0u8; 4]; reader.read_exact(&mut ry)?;
-                let mut rz = [0u8; 4]; reader.read_exact(&mut rz)?;
-                let mut rw = [0u8; 4]; reader.read_exact(&mut rw)?;
+                let mut rx = [0u8; 4];
+                reader.read_exact(&mut rx)?;
+                let mut ry = [0u8; 4];
+                reader.read_exact(&mut ry)?;
+                let mut rz = [0u8; 4];
+                reader.read_exact(&mut rz)?;
+                let mut rw = [0u8; 4];
+                reader.read_exact(&mut rw)?;
                 let rotation = Quat::from_xyzw(
                     f32::from_le_bytes(rx),
                     f32::from_le_bytes(ry),
@@ -827,9 +1019,12 @@ impl VrtxFileState {
                     f32::from_le_bytes(rw),
                 );
 
-                let mut sx = [0u8; 4]; reader.read_exact(&mut sx)?;
-                let mut sy = [0u8; 4]; reader.read_exact(&mut sy)?;
-                let mut sz = [0u8; 4]; reader.read_exact(&mut sz)?;
+                let mut sx = [0u8; 4];
+                reader.read_exact(&mut sx)?;
+                let mut sy = [0u8; 4];
+                reader.read_exact(&mut sy)?;
+                let mut sz = [0u8; 4];
+                reader.read_exact(&mut sz)?;
                 let scale = Vec3::new(
                     f32::from_le_bytes(sx),
                     f32::from_le_bytes(sy),
@@ -856,10 +1051,14 @@ impl VrtxFileState {
                     }
                 };
 
-                let mut cr = [0u8; 4]; reader.read_exact(&mut cr)?;
-                let mut cg = [0u8; 4]; reader.read_exact(&mut cg)?;
-                let mut cb = [0u8; 4]; reader.read_exact(&mut cb)?;
-                let mut ca = [0u8; 4]; reader.read_exact(&mut ca)?;
+                let mut cr = [0u8; 4];
+                reader.read_exact(&mut cr)?;
+                let mut cg = [0u8; 4];
+                reader.read_exact(&mut cg)?;
+                let mut cb = [0u8; 4];
+                reader.read_exact(&mut cb)?;
+                let mut ca = [0u8; 4];
+                reader.read_exact(&mut ca)?;
                 let color = Color::Srgba(Srgba::new(
                     f32::from_le_bytes(cr),
                     f32::from_le_bytes(cg),
@@ -928,10 +1127,15 @@ impl VrtxFileState {
                         reader.read_exact(&mut name_bytes)?;
                         let name = String::from_utf8(name_bytes).unwrap_or_default();
                         let (node_id, parent_node_id) = if version >= 6 {
-                            let mut id = [0u8; 8]; reader.read_exact(&mut id)?;
-                            let mut parent = [0u8; 8]; reader.read_exact(&mut parent)?;
+                            let mut id = [0u8; 8];
+                            reader.read_exact(&mut id)?;
+                            let mut parent = [0u8; 8];
+                            reader.read_exact(&mut parent)?;
                             let parent = u64::from_le_bytes(parent);
-                            (u64::from_le_bytes(id), (parent != u64::MAX).then_some(parent))
+                            (
+                                u64::from_le_bytes(id),
+                                (parent != u64::MAX).then_some(parent),
+                            )
                         } else {
                             ((bricks.len() + scripts.len()) as u64, None)
                         };
@@ -979,7 +1183,11 @@ impl VrtxFileState {
                 }
             }
 
-            debug!("load_from_file: Successfully parsed {} bricks and {} scripts from standard VRTX file", bricks.len(), scripts.len());
+            debug!(
+                "load_from_file: Successfully parsed {} bricks and {} scripts from standard VRTX file",
+                bricks.len(),
+                scripts.len()
+            );
             Ok(Self {
                 version,
                 gravity,
@@ -991,9 +1199,15 @@ impl VrtxFileState {
         } else if data.len() >= 4 && &data[0..4] == b"GCPF" {
             debug!("load_from_file: Detected legacy GCPF (Godot) file format");
             let decompressed = decompress_gcpf_file(&data)?;
-            debug!("load_from_file: Successfully decompressed GCPF file into {} bytes", decompressed.len());
+            debug!(
+                "load_from_file: Successfully decompressed GCPF file into {} bytes",
+                decompressed.len()
+            );
             let parsed_state = parse_godot_vrtx(&decompressed)?;
-            debug!("load_from_file: Successfully parsed Godot VRTX map with {} bricks", parsed_state.bricks.len());
+            debug!(
+                "load_from_file: Successfully parsed Godot VRTX map with {} bricks",
+                parsed_state.bricks.len()
+            );
             Ok(parsed_state)
         } else {
             error!("load_from_file: Unknown or invalid file signature");
@@ -1015,16 +1229,34 @@ mod hierarchy_tests {
         let state = VrtxFileState {
             version: CURRENT_VRTX_VERSION,
             gravity: Vec3::new(0.0, -9.8, 0.0),
-            settings: VrtxSettings { ssao: true, contact_shadows: false, bloom: true },
+            settings: VrtxSettings {
+                ssao: true,
+                contact_shadows: false,
+                bloom: true,
+            },
             camera_transform: Transform::IDENTITY,
             bricks: vec![VrtxBrick {
-                node_id: 10, parent_node_id: None, name: "Duplicate".into(), transform: Transform::IDENTITY,
-                shape: crate::common::game::bricks::components::BrickShape::Block, color: Color::WHITE,
-                physics_enabled: true, bounciness: 0.3, player_can_collide: true, friction: 0.3, gravity_scale: 1.0, mass: 1.0,
+                node_id: 10,
+                parent_node_id: None,
+                name: "Duplicate".into(),
+                transform: Transform::IDENTITY,
+                shape: crate::common::game::bricks::components::BrickShape::Block,
+                color: Color::WHITE,
+                physics_enabled: true,
+                bounciness: 0.3,
+                player_can_collide: true,
+                friction: 0.3,
+                gravity_scale: 1.0,
+                mass: 1.0,
             }],
             scripts: vec![VrtxScript {
-                node_id: 11, parent_node_id: Some(10), name: "Duplicate".into(), script_type: 0,
-                code: "print('ok')".into(), parent_name: None, enabled: true,
+                node_id: 11,
+                parent_node_id: Some(10),
+                name: "Duplicate".into(),
+                script_type: 0,
+                code: "print('ok')".into(),
+                parent_name: None,
+                enabled: true,
             }],
         };
         state.save_to_file(path.to_str().unwrap()).unwrap();

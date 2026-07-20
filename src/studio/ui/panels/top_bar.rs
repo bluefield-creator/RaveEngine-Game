@@ -1,10 +1,10 @@
-use bevy::prelude::*;
-use bevy_egui::egui;
-use crate::studio::tools::{ToolState, SnapConfig, Selection};
+use crate::common::game::bricks::data::BrickSpawnerCount;
 use crate::common::game::bricks::data::spawn_brick;
 use crate::common::game::bricks::studs::StudsAssets;
-use crate::common::game::bricks::data::BrickSpawnerCount;
+use crate::studio::tools::{Selection, SnapConfig, ToolState};
 use bevy::pbr::ExtendedMaterial;
+use bevy::prelude::*;
+use bevy_egui::egui;
 
 #[allow(deprecated)]
 pub fn draw_top_bar(
@@ -14,7 +14,11 @@ pub fn draw_top_bar(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
-    studs_materials: &mut ResMut<Assets<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
+    studs_materials: &mut ResMut<
+        Assets<
+            ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>,
+        >,
+    >,
     studs_assets: &StudsAssets,
     count: &mut ResMut<BrickSpawnerCount>,
     snap_config: &mut ResMut<SnapConfig>,
@@ -30,44 +34,64 @@ pub fn draw_top_bar(
     _action_writer: &mut MessageWriter<crate::studio::tools::UndoRedoAction>,
     history: &mut ResMut<crate::studio::tools::UndoRedoHistory>,
     physics_state: crate::common::game::physics::PhysicsSimulationState,
-    physics_action_writer: &mut MessageWriter<crate::common::game::physics::PhysicsSimulationAction>,
+    physics_action_writer: &mut MessageWriter<
+        crate::common::game::physics::PhysicsSimulationAction,
+    >,
     settings_window: &mut ResMut<crate::studio::ui::SettingsWindow>,
     graphics_settings: &mut crate::studio::ui::GraphicsSettings,
     gravity: &mut Option<ResMut<avian3d::prelude::Gravity>>,
     camera_transform_query: &mut Query<&mut Transform, With<Camera3d>>,
-    entities_query: &mut Query<(
-        Entity,
-        &mut Transform,
-        &Name,
-        Option<&ChildOf>,
-        Option<&Children>,
-        Option<&crate::common::game::bricks::components::Brick>,
-        Option<&mut crate::common::game::bricks::components::BrickShapeComponent>,
-        &GlobalTransform,
-        Option<&Mesh3d>,
-        Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
-        Option<&mut crate::common::game::bricks::components::BrickPhysics>,
-    ), Without<Camera3d>>,
+    entities_query: &mut Query<
+        (
+            Entity,
+            &mut Transform,
+            &Name,
+            Option<&ChildOf>,
+            Option<&Children>,
+            Option<&crate::common::game::bricks::components::Brick>,
+            Option<&mut crate::common::game::bricks::components::BrickShapeComponent>,
+            &GlobalTransform,
+            Option<&Mesh3d>,
+            Option<&MeshMaterial3d<StandardMaterial>>,
+            Option<
+                &MeshMaterial3d<
+                    ExtendedMaterial<
+                        StandardMaterial,
+                        crate::common::game::bricks::studs::StudsExtension,
+                    >,
+                >,
+            >,
+            Option<&mut crate::common::game::bricks::components::BrickPhysics>,
+        ),
+        Without<Camera3d>,
+    >,
     onboarding_data: &mut crate::studio::ui::panels::onboarding::OnboardingData,
     _play_processes: &mut ResMut<crate::studio::ui::resources::PlayInClientProcesses>,
     playtest_state: &mut ResMut<crate::client::PlaytestState>,
     playtest_backup: &mut ResMut<crate::studio::ui::resources::PlaytestBackup>,
-    playtest_client_query: &Query<Entity, With<crate::studio::ui::resources::InEditorPlaytestClient>>,
-    selection: &Selection,
-    explorer_query: &Query<(
+    playtest_client_query: &Query<
         Entity,
-        &Name,
-        Option<&ChildOf>,
-        Option<&Children>,
-        Option<&crate::common::game::bricks::components::Brick>,
-        Option<&crate::scripting::ecs::ServerScript>,
-        Option<&crate::scripting::ecs::LocalScript>,
-        Option<&crate::scripting::ecs::ModuleScript>,
-    ), Without<Camera3d>>,
+        With<crate::studio::ui::resources::InEditorPlaytestClient>,
+    >,
+    selection: &Selection,
+    explorer_query: &Query<
+        (
+            Entity,
+            &Name,
+            Option<&ChildOf>,
+            Option<&Children>,
+            Option<&crate::common::game::bricks::components::Brick>,
+            Option<&crate::scripting::ecs::ServerScript>,
+            Option<&crate::scripting::ecs::LocalScript>,
+            Option<&crate::scripting::ecs::ModuleScript>,
+        ),
+        Without<Camera3d>,
+    >,
     onboarding_active: bool,
     players_service: &mut Option<ResMut<crate::studio::tools::PlayersService>>,
-    lighting_service: &mut Option<ResMut<crate::common::game::environment::lighting::LightingService>>,
+    lighting_service: &mut Option<
+        ResMut<crate::common::game::environment::lighting::LightingService>,
+    >,
     file_dialog_state: &crate::studio::ui::resources::FileDialogState,
     actions: &mut crate::studio::ui::resources::EditorActionQueue,
     layout: &crate::studio::ui::resources::EditorLayoutState,
@@ -218,7 +242,7 @@ pub fn draw_top_bar(
                             }
                             ui.close_menu();
                         }
-                        
+
                         let is_open = file_dialog_state.is_open.load(std::sync::atomic::Ordering::Relaxed);
                         if ui.add_enabled(!is_open, egui::Button::new("Save As…\tCtrl+Shift+S")).clicked() {
                             file_dialog_state.is_open.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -311,8 +335,10 @@ pub fn draw_top_bar(
             });
         });
 
-    let (bottom_sep, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
-    ui.painter().rect_filled(bottom_sep, 0.0, egui::Color32::from_rgb(212, 212, 212));
+    let (bottom_sep, _) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
+    ui.painter()
+        .rect_filled(bottom_sep, 0.0, egui::Color32::from_rgb(212, 212, 212));
 
     egui::Frame::NONE
         .inner_margin(egui::Margin::symmetric(12, 8))
@@ -834,8 +860,10 @@ pub fn draw_top_bar(
             });
         });
 
-    let (bottom_sep, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
-    ui.painter().rect_filled(bottom_sep, 0.0, egui::Color32::from_rgb(180, 180, 180));
+    let (bottom_sep, _) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
+    ui.painter()
+        .rect_filled(bottom_sep, 0.0, egui::Color32::from_rgb(180, 180, 180));
 }
 
 #[allow(deprecated)]
@@ -850,11 +878,8 @@ fn ribbonbutton(
     let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
 
     if selected {
-        ui.painter().rect_filled(
-            rect,
-            4.0,
-            egui::Color32::from_rgb(204, 232, 255),
-        );
+        ui.painter()
+            .rect_filled(rect, 4.0, egui::Color32::from_rgb(204, 232, 255));
         ui.painter().rect_stroke(
             rect,
             4.0,
@@ -862,11 +887,8 @@ fn ribbonbutton(
             egui::StrokeKind::Inside,
         );
     } else if response.hovered() {
-        ui.painter().rect_filled(
-            rect,
-            4.0,
-            egui::Color32::from_rgb(224, 238, 249),
-        );
+        ui.painter()
+            .rect_filled(rect, 4.0, egui::Color32::from_rgb(224, 238, 249));
         ui.painter().rect_stroke(
             rect,
             4.0,
