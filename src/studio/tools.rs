@@ -465,6 +465,7 @@ fn compute_resize(
 pub fn select_brick(
     mut clicks: MessageReader<Pointer<Click>>,
     bricks: Query<Entity, With<Brick>>,
+    brick_physics: Query<&crate::common::game::bricks::components::BrickPhysics>,
     gizmos: Query<Entity, With<ToolGizmo>>,
     mut selection: ResMut<Selection>,
     mut context_menu: ResMut<CanvasContextMenu>,
@@ -484,6 +485,10 @@ pub fn select_brick(
         let target = click.event_target();
         if click.button == PointerButton::Primary {
             if bricks.get(target).is_ok() {
+                let locked = brick_physics.get(target).map_or(false, |p| p.locked);
+                if locked && !shift && !ctrl {
+                    continue;
+                }
                 if shift {
                     if !selection.entities.contains(&target) {
                         selection.entities.push(target);
@@ -925,6 +930,7 @@ pub fn handle_marquee_selection(
     mut selection: ResMut<Selection>,
     camera_query: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
     bricks_query: Query<(Entity, &GlobalTransform), With<Brick>>,
+    brick_physics: Query<&crate::common::game::bricks::components::BrickPhysics>,
 ) {
     let Ok(window) = windows.single() else { return };
 
@@ -961,6 +967,9 @@ pub fn handle_marquee_selection(
 
                 let mut selected_entities = Vec::new();
                 for (entity, global_transform) in &bricks_query {
+                    if brick_physics.get(entity).map_or(false, |p| p.locked) {
+                        continue;
+                    }
                     let world_pos = global_transform.translation();
                     if let Ok(screen_pos) = camera.world_to_viewport(camera_transform, world_pos) {
                         if screen_pos.x >= min_x && screen_pos.x <= max_x && screen_pos.y >= min_y && screen_pos.y <= max_y {

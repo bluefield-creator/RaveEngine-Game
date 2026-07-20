@@ -260,6 +260,7 @@ pub fn draw_onboarding(
                                     crate::common::game::bricks::components::BrickShapeComponent { shape: crate::common::game::bricks::components::BrickShape::Block },
                                     crate::common::game::bricks::components::BrickPhysics {
                                         enabled: false,
+                                        locked: true,
                                         bounciness: 0.3,
                                         player_can_collide: true,
                                         friction: 0.3,

@@ -22,6 +22,7 @@ pub struct BrickShapeComponent {
 #[reflect(Component)]
 pub struct BrickPhysics {
     pub enabled: bool,
+    pub locked: bool,
     pub bounciness: f32,
     pub player_can_collide: bool,
     pub friction: f32,
@@ -33,6 +34,7 @@ impl Default for BrickPhysics {
     fn default() -> Self {
         Self {
             enabled: true,
+            locked: false,
             bounciness: 0.3,
             player_can_collide: true,
             friction: 0.3,

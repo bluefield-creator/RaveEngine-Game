@@ -197,6 +197,7 @@ pub fn draw_properties(
         first_color,
         is_extended,
         first_phys_enabled,
+        first_locked,
         first_bounciness,
         first_player_can_collide,
         first_friction,
@@ -224,10 +225,10 @@ pub fn draw_properties(
             }
         }
 
-        let (first_phys_enabled, first_bounciness, first_player_can_collide, first_friction, first_gravity_scale, first_mass) = if let Some(phys) = first_phys_opt {
-            (phys.enabled, phys.bounciness, phys.player_can_collide, phys.friction, phys.gravity_scale, phys.mass)
+        let (first_phys_enabled, first_locked, first_bounciness, first_player_can_collide, first_friction, first_gravity_scale, first_mass) = if let Some(phys) = first_phys_opt {
+            (phys.enabled, phys.locked, phys.bounciness, phys.player_can_collide, phys.friction, phys.gravity_scale, phys.mass)
         } else {
-            (true, 0.3, true, 0.3, 1.0, 1.0)
+            (true, false, 0.3, true, 0.3, 1.0, 1.0)
         };
 
         (
@@ -237,6 +238,7 @@ pub fn draw_properties(
             first_color,
             is_extended,
             first_phys_enabled,
+            first_locked,
             first_bounciness,
             first_player_can_collide,
             first_friction,
@@ -264,6 +266,7 @@ pub fn draw_properties(
     let mut all_transparency_same = true;
     let mut all_shape_same = true;
     let mut all_phys_enabled_same = true;
+    let mut all_locked_same = true;
     let mut all_bounciness_same = true;
     let mut all_player_can_collide_same = true;
     let mut all_friction_same = true;
@@ -302,12 +305,13 @@ pub fn draw_properties(
             if color != first_color { all_color_same = false; }
             if (color.to_srgba().alpha - first_alpha).abs() > 0.001 { all_transparency_same = false; }
             
-            let (phys_enabled, bounciness, player_can_collide, friction, gravity_scale, mass) = if let Some(phys) = phys_opt {
-                (phys.enabled, phys.bounciness, phys.player_can_collide, phys.friction, phys.gravity_scale, phys.mass)
+            let (phys_enabled, locked, bounciness, player_can_collide, friction, gravity_scale, mass) = if let Some(phys) = phys_opt {
+                (phys.enabled, phys.locked, phys.bounciness, phys.player_can_collide, phys.friction, phys.gravity_scale, phys.mass)
             } else {
-                (true, 0.3, true, 0.3, 1.0, 1.0)
+                (true, false, 0.3, true, 0.3, 1.0, 1.0)
             };
             if phys_enabled != first_phys_enabled { all_phys_enabled_same = false; }
+            if locked != first_locked { all_locked_same = false; }
             if (bounciness - first_bounciness).abs() > 0.001 { all_bounciness_same = false; }
             if player_can_collide != first_player_can_collide { all_player_can_collide_same = false; }
             if (friction - first_friction).abs() > 0.001 { all_friction_same = false; }
@@ -683,6 +687,38 @@ pub fn draw_properties(
                                                     CollisionLayers::from_bits(0b0100, 0xFFFF_FFFD)
                                                 };
                                                 commands.entity(entity).insert(layers);
+                                            }
+                                        }
+                                    }
+                                }
+                                ui.end_row();
+
+                                ui.label(egui::RichText::new("Locked").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
+                                let mut locked = first_locked;
+                                let locked_checkbox_res = if all_locked_same {
+                                    Some(ui.checkbox(&mut locked, ""))
+                                } else {
+                                    let mut clicked = false;
+                                    ui.horizontal(|ui| {
+                                        if ui.button("Mixed (Click to set)").clicked() {
+                                            clicked = true;
+                                            locked = true;
+                                        }
+                                    });
+                                    if clicked {
+                                        for &entity in selected_entities {
+                                            if let Ok((_, _, _, _, _, _, _, _, _, _, _, Some(mut phys))) = properties_query.get_mut(entity) {
+                                                phys.locked = locked;
+                                            }
+                                        }
+                                    }
+                                    None
+                                };
+                                if let Some(res) = locked_checkbox_res {
+                                    if res.changed() {
+                                        for &entity in selected_entities {
+                                            if let Ok((_, _, _, _, _, _, _, _, _, _, _, Some(mut phys))) = properties_query.get_mut(entity) {
+                                                phys.locked = locked;
                                             }
                                         }
                                     }

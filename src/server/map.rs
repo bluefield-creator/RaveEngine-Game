@@ -16,6 +16,7 @@ pub fn load_fallback_map(
         BrickShapeComponent { shape: BrickShape::Block },
         BrickPhysics {
             enabled: false,
+            locked: true,
             bounciness: 0.3,
             player_can_collide: true,
             friction: 0.3,
@@ -43,11 +44,7 @@ pub fn load_fallback_map(
         BrickShapeComponent { shape: BrickShape::Block },
         BrickPhysics {
             enabled: true,
-            bounciness: 0.3,
-            player_can_collide: true,
-            friction: 0.3,
-            gravity_scale: 1.0,
-            mass: 1.0,
+            ..default()
         },
         BrickColor { color: Color::srgb(0.84, 0.24, 0.16) },
         NetworkTransform {
@@ -156,6 +153,7 @@ pub fn spawn_brick_entity(commands: &mut Commands, brick: crate::common::core::v
         BrickShapeComponent { shape: brick.shape },
         BrickPhysics {
             enabled: brick.physics_enabled,
+            locked: false,
             bounciness: brick.bounciness,
             player_can_collide: brick.player_can_collide,
             friction: brick.friction,

@@ -164,6 +164,7 @@ pub fn handle_file_dialog_results(
                             crate::common::game::bricks::components::BrickShapeComponent { shape: brick.shape },
                             crate::common::game::bricks::components::BrickPhysics {
                                 enabled: brick.physics_enabled,
+                                locked: false,
                                 bounciness: brick.bounciness,
                                 player_can_collide: brick.player_can_collide,
                                 friction: brick.friction,

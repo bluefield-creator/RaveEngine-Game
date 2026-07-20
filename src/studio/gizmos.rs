@@ -62,6 +62,7 @@ pub(crate) fn update_gizmos(
     physics_state: Res<crate::common::game::physics::PhysicsSimulationState>,
     playtest: Option<Res<crate::client::PlaytestState>>,
     gizmos: Query<Entity, With<ToolGizmo>>,
+    brick_physics: Query<&crate::common::game::bricks::components::BrickPhysics>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut gizmo_assets: Local<Option<GizmoAssets>>,
@@ -94,6 +95,9 @@ pub(crate) fn update_gizmos(
     }
 
     let Some(selected_entity) = selection.entity else { return };
+    if brick_physics.get(selected_entity).map_or(false, |p| p.locked) {
+        return;
+    }
     let tool = *tool_state.get();
 
     if tool == ToolState::None { return; }
