@@ -248,10 +248,12 @@ pub fn draw_onboarding(
                                 version: crate::common::core::vrtx::CURRENT_VRTX_VERSION,
                                 gravity: Vec3::new(0.0, -186.9 * 0.28, 0.0),
                                 settings: crate::common::core::vrtx::VrtxSettings {
-                                    ssao: false,
-                                    contact_shadows: false,
+                                    ssao: true,
+                                    contact_shadows: true,
                                     bloom: true,
+                                    ..default()
                                 },
+                                lighting: default(),
                                 camera_transform: Transform::from_xyz(-10.0, 10.0, -10.0).looking_at(Vec3::ZERO, Vec3::Y),
                                 bricks,
                                 scripts: Vec::new(),

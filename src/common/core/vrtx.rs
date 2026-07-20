@@ -2,7 +2,13 @@ use bevy::prelude::*;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Write};
 
-pub const CURRENT_VRTX_VERSION: u32 = 6;
+pub const CURRENT_VRTX_VERSION: u32 = 7;
+
+fn read_f32(reader: &mut impl Read) -> std::io::Result<f32> {
+    let mut bytes = [0; 4];
+    reader.read_exact(&mut bytes)?;
+    Ok(f32::from_le_bytes(bytes))
+}
 
 #[derive(Debug, Clone)]
 pub struct VrtxBrick {
@@ -34,8 +40,61 @@ pub struct VrtxScript {
 #[derive(Debug, Clone)]
 pub struct VrtxSettings {
     pub ssao: bool,
+    pub ssao_quality: crate::common::core::performance::AmbientOcclusionQuality,
     pub contact_shadows: bool,
+    pub contact_shadow_length: f32,
     pub bloom: bool,
+    pub bloom_intensity: f32,
+    pub shadow_quality: crate::common::core::performance::ShadowQuality,
+    pub soft_shadows: bool,
+    pub anti_aliasing: crate::common::core::performance::AntiAliasing,
+    pub exposure_ev100: f32,
+}
+
+impl Default for VrtxSettings {
+    fn default() -> Self {
+        Self::from_graphics(&crate::common::core::performance::GraphicsSettings::default())
+    }
+}
+
+impl VrtxSettings {
+    pub fn from_graphics(settings: &crate::common::core::performance::GraphicsSettings) -> Self {
+        Self {
+            ssao: settings.ssao,
+            ssao_quality: settings.ssao_quality,
+            contact_shadows: settings.contact_shadows,
+            contact_shadow_length: settings.contact_shadow_length,
+            bloom: settings.bloom,
+            bloom_intensity: settings.bloom_intensity,
+            shadow_quality: settings.shadow_quality,
+            soft_shadows: settings.soft_shadows,
+            anti_aliasing: settings.anti_aliasing,
+            exposure_ev100: settings.exposure_ev100,
+        }
+    }
+
+    pub fn apply_to(&self, settings: &mut crate::common::core::performance::GraphicsSettings) {
+        settings.ssao = self.ssao;
+        settings.ssao_quality = self.ssao_quality;
+        settings.contact_shadows = self.contact_shadows;
+        settings.contact_shadow_length = self.contact_shadow_length;
+        settings.bloom = self.bloom;
+        settings.bloom_intensity = self.bloom_intensity;
+        settings.shadow_quality = self.shadow_quality;
+        settings.soft_shadows = self.soft_shadows;
+        settings.anti_aliasing = if self.ssao
+            && matches!(
+                self.anti_aliasing,
+                crate::common::core::performance::AntiAliasing::Msaa2
+                    | crate::common::core::performance::AntiAliasing::Msaa4
+                    | crate::common::core::performance::AntiAliasing::Msaa8
+            ) {
+            crate::common::core::performance::AntiAliasing::Fxaa
+        } else {
+            self.anti_aliasing
+        };
+        settings.exposure_ev100 = self.exposure_ev100;
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -43,6 +102,7 @@ pub struct VrtxFileState {
     pub version: u32,
     pub gravity: Vec3,
     pub settings: VrtxSettings,
+    pub lighting: crate::common::game::environment::lighting::LightingService,
     pub camera_transform: Transform,
     pub bricks: Vec<VrtxBrick>,
     pub scripts: Vec<VrtxScript>,
@@ -726,6 +786,7 @@ fn parse_godot_vrtx(decompressed: &[u8]) -> std::io::Result<VrtxFileState> {
             ssao: false,
             contact_shadows: false,
             bloom: true,
+            ..default()
         };
 
         let camera_transform =
@@ -740,6 +801,7 @@ fn parse_godot_vrtx(decompressed: &[u8]) -> std::io::Result<VrtxFileState> {
             version,
             gravity,
             settings,
+            lighting: default(),
             camera_transform,
             bricks,
             scripts: Vec::new(),
@@ -770,6 +832,33 @@ impl VrtxFileState {
             if self.settings.contact_shadows { 1 } else { 0 },
             if self.settings.bloom { 1 } else { 0 },
         ])?;
+
+        if self.version >= 7 {
+            writer.write_all(&[
+                self.settings.ssao_quality.as_u8(),
+                self.settings.shadow_quality.as_u8(),
+                if self.settings.soft_shadows { 1 } else { 0 },
+                self.settings.anti_aliasing.as_u8(),
+            ])?;
+            writer.write_all(&self.settings.contact_shadow_length.to_le_bytes())?;
+            writer.write_all(&self.settings.bloom_intensity.to_le_bytes())?;
+            writer.write_all(&self.settings.exposure_ev100.to_le_bytes())?;
+
+            writer.write_all(&self.lighting.time_of_day.to_le_bytes())?;
+            writer.write_all(&self.lighting.sun_intensity.to_le_bytes())?;
+            writer.write_all(&self.lighting.ambient_intensity.to_le_bytes())?;
+            writer.write_all(&[
+                if self.lighting.shadows_enabled { 1 } else { 0 },
+                if self.lighting.fog_enabled { 1 } else { 0 },
+            ])?;
+            writer.write_all(&self.lighting.fog_density.to_le_bytes())?;
+            for value in self.lighting.sun_tint.to_srgba().to_f32_array() {
+                writer.write_all(&value.to_le_bytes())?;
+            }
+            for value in self.lighting.ambient_tint.to_srgba().to_f32_array() {
+                writer.write_all(&value.to_le_bytes())?;
+            }
+        }
 
         writer.write_all(&self.camera_transform.translation.x.to_le_bytes())?;
         writer.write_all(&self.camera_transform.translation.y.to_le_bytes())?;
@@ -873,7 +962,7 @@ impl VrtxFileState {
             let version = u32::from_le_bytes(version_bytes);
             debug!("load_from_file: VRTX format version is {}", version);
 
-            let (gravity, settings, camera_transform, count) = if version >= 1 {
+            let (gravity, settings, lighting, camera_transform, count) = if version >= 1 {
                 debug!("load_from_file: Parsing version 1/2/3/4 header");
                 let mut gx = [0u8; 4];
                 reader.read_exact(&mut gx)?;
@@ -889,11 +978,51 @@ impl VrtxFileState {
 
                 let mut settings_bytes = [0u8; 3];
                 reader.read_exact(&mut settings_bytes)?;
-                let settings = VrtxSettings {
+                let mut settings = VrtxSettings {
                     ssao: settings_bytes[0] != 0,
                     contact_shadows: settings_bytes[1] != 0,
                     bloom: settings_bytes[2] != 0,
+                    ..default()
                 };
+                let mut lighting =
+                    crate::common::game::environment::lighting::LightingService::default();
+                if version >= 7 {
+                    let mut quality_bytes = [0; 4];
+                    reader.read_exact(&mut quality_bytes)?;
+                    settings.ssao_quality =
+                        crate::common::core::performance::AmbientOcclusionQuality::from_u8(
+                            quality_bytes[0],
+                        );
+                    settings.shadow_quality =
+                        crate::common::core::performance::ShadowQuality::from_u8(quality_bytes[1]);
+                    settings.soft_shadows = quality_bytes[2] != 0;
+                    settings.anti_aliasing =
+                        crate::common::core::performance::AntiAliasing::from_u8(quality_bytes[3]);
+                    settings.contact_shadow_length = read_f32(&mut reader)?;
+                    settings.bloom_intensity = read_f32(&mut reader)?;
+                    settings.exposure_ev100 = read_f32(&mut reader)?;
+
+                    lighting.time_of_day = read_f32(&mut reader)?;
+                    lighting.sun_intensity = read_f32(&mut reader)?;
+                    lighting.ambient_intensity = read_f32(&mut reader)?;
+                    let mut lighting_flags = [0; 2];
+                    reader.read_exact(&mut lighting_flags)?;
+                    lighting.shadows_enabled = lighting_flags[0] != 0;
+                    lighting.fog_enabled = lighting_flags[1] != 0;
+                    lighting.fog_density = read_f32(&mut reader)?;
+                    lighting.sun_tint = Color::srgba(
+                        read_f32(&mut reader)?,
+                        read_f32(&mut reader)?,
+                        read_f32(&mut reader)?,
+                        read_f32(&mut reader)?,
+                    );
+                    lighting.ambient_tint = Color::srgba(
+                        read_f32(&mut reader)?,
+                        read_f32(&mut reader)?,
+                        read_f32(&mut reader)?,
+                        read_f32(&mut reader)?,
+                    );
+                }
 
                 let mut cx = [0u8; 4];
                 reader.read_exact(&mut cx)?;
@@ -932,7 +1061,7 @@ impl VrtxFileState {
                 reader.read_exact(&mut count_bytes)?;
                 let count = u32::from_le_bytes(count_bytes);
 
-                (gravity, settings, camera_transform, count)
+                (gravity, settings, lighting, camera_transform, count)
             } else if version == 0 {
                 debug!("load_from_file: Parsing version 0 header");
                 let mut gx = [0u8; 4];
@@ -951,7 +1080,9 @@ impl VrtxFileState {
                     ssao: false,
                     contact_shadows: false,
                     bloom: true,
+                    ..default()
                 };
+                let lighting = default();
 
                 let camera_transform =
                     Transform::from_xyz(-10.0, 10.0, -10.0).looking_at(Vec3::ZERO, Vec3::Y);
@@ -960,7 +1091,7 @@ impl VrtxFileState {
                 reader.read_exact(&mut count_bytes)?;
                 let count = u32::from_le_bytes(count_bytes);
 
-                (gravity, settings, camera_transform, count)
+                (gravity, settings, lighting, camera_transform, count)
             } else {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
@@ -1192,6 +1323,7 @@ impl VrtxFileState {
                 version,
                 gravity,
                 settings,
+                lighting,
                 camera_transform,
                 bricks,
                 scripts,
@@ -1224,15 +1356,25 @@ mod hierarchy_tests {
     use super::*;
 
     #[test]
-    fn version_six_round_trips_node_hierarchy() {
-        let path = std::env::temp_dir().join(format!("rave-vrtx-v6-{}.vrtx", std::process::id()));
+    fn current_version_round_trips_project_state() {
+        let path = std::env::temp_dir().join(format!("rave-vrtx-v7-{}.vrtx", std::process::id()));
         let state = VrtxFileState {
             version: CURRENT_VRTX_VERSION,
             gravity: Vec3::new(0.0, -9.8, 0.0),
             settings: VrtxSettings {
                 ssao: true,
+                ssao_quality: crate::common::core::performance::AmbientOcclusionQuality::Ultra,
                 contact_shadows: false,
+                contact_shadow_length: 0.8,
                 bloom: true,
+                bloom_intensity: 0.12,
+                ..default()
+            },
+            lighting: crate::common::game::environment::lighting::LightingService {
+                time_of_day: 17.5,
+                sun_intensity: 1.4,
+                fog_density: 0.7,
+                ..default()
             },
             camera_transform: Transform::IDENTITY,
             bricks: vec![VrtxBrick {
@@ -1266,5 +1408,25 @@ mod hierarchy_tests {
         assert_eq!(loaded.bricks[0].node_id, 10);
         assert_eq!(loaded.scripts[0].parent_node_id, Some(10));
         assert_eq!(loaded.bricks[0].name, loaded.scripts[0].name);
+        assert_eq!(loaded.lighting.time_of_day, 17.5);
+        assert_eq!(loaded.lighting.sun_intensity, 1.4);
+        assert_eq!(loaded.lighting.fog_density, 0.7);
+        assert_eq!(
+            loaded.settings.ssao_quality,
+            crate::common::core::performance::AmbientOcclusionQuality::Ultra
+        );
+        assert_eq!(loaded.settings.contact_shadow_length, 0.8);
+        assert_eq!(loaded.settings.bloom_intensity, 0.12);
+
+        let legacy_path =
+            std::env::temp_dir().join(format!("rave-vrtx-v6-{}.vrtx", std::process::id()));
+        let mut legacy = state;
+        legacy.version = 6;
+        legacy.save_to_file(legacy_path.to_str().unwrap()).unwrap();
+        let loaded_legacy = VrtxFileState::load_from_file(legacy_path.to_str().unwrap()).unwrap();
+        std::fs::remove_file(legacy_path).unwrap();
+        assert_eq!(loaded_legacy.version, 6);
+        assert_eq!(loaded_legacy.lighting.time_of_day, 12.0);
+        assert_eq!(loaded_legacy.bricks[0].node_id, 10);
     }
 }

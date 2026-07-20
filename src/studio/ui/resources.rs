@@ -393,6 +393,7 @@ pub fn handle_file_dialog_results(
     file_dialog_state: Res<FileDialogState>,
     mut onboarding_data: ResMut<crate::studio::ui::panels::onboarding::OnboardingData>,
     mut graphics_settings: ResMut<crate::common::core::performance::GraphicsSettings>,
+    mut lighting_service: ResMut<crate::common::game::environment::lighting::LightingService>,
     mut gravity: Option<ResMut<avian3d::prelude::Gravity>>,
     mut camera_transform_query: Query<&mut Transform, With<Camera3d>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -485,9 +486,11 @@ pub fn handle_file_dialog_results(
                             commands.entity(entity).try_despawn();
                         }
                     }
-                    graphics_settings.ssao = state.settings.ssao;
-                    graphics_settings.contact_shadows = state.settings.contact_shadows;
-                    graphics_settings.bloom = state.settings.bloom;
+                    state.settings.apply_to(&mut graphics_settings);
+                    *lighting_service = state.lighting;
+                    if let Ok(mut shared) = crate::studio::tools::SHARED_LIGHTING_SERVICE.write() {
+                        *shared = lighting_service.time_of_day;
+                    }
                     if let Some(ref mut g) = gravity {
                         g.0 = state.gravity;
                     }
@@ -721,11 +724,10 @@ pub fn handle_file_dialog_results(
                 let state = crate::common::core::vrtx::VrtxFileState {
                     version: crate::common::core::vrtx::CURRENT_VRTX_VERSION,
                     gravity: gravity_val,
-                    settings: crate::common::core::vrtx::VrtxSettings {
-                        ssao: graphics_settings.ssao,
-                        contact_shadows: graphics_settings.contact_shadows,
-                        bloom: graphics_settings.bloom,
-                    },
+                    settings: crate::common::core::vrtx::VrtxSettings::from_graphics(
+                        &graphics_settings,
+                    ),
+                    lighting: (*lighting_service).clone(),
                     camera_transform: cam_transform,
                     bricks: bricks_data,
                     scripts: scripts_data,
@@ -770,6 +772,8 @@ pub fn update_studio_window_title(
 
 pub fn track_document_changes(
     mut document: ResMut<DocumentState>,
+    graphics_settings: Res<crate::common::core::performance::GraphicsSettings>,
+    lighting_service: Res<crate::common::game::environment::lighting::LightingService>,
     changed: Query<
         (),
         (
@@ -791,7 +795,7 @@ pub fn track_document_changes(
         *initialized = true;
         return;
     }
-    if !changed.is_empty() {
+    if !changed.is_empty() || graphics_settings.is_changed() || lighting_service.is_changed() {
         document.dirty = true;
     }
 }

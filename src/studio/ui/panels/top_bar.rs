@@ -258,11 +258,13 @@ pub fn draw_top_bar(
                             let state = crate::common::core::vrtx::VrtxFileState {
                                 version: crate::common::core::vrtx::CURRENT_VRTX_VERSION,
                                 gravity: gravity_val,
-                                settings: crate::common::core::vrtx::VrtxSettings {
-                                    ssao: graphics_settings.ssao,
-                                    contact_shadows: graphics_settings.contact_shadows,
-                                    bloom: graphics_settings.bloom,
-                                },
+                                settings: crate::common::core::vrtx::VrtxSettings::from_graphics(
+                                    graphics_settings,
+                                ),
+                                lighting: lighting_service
+                                    .as_ref()
+                                    .map(|service| (**service).clone())
+                                    .unwrap_or_default(),
                                 camera_transform: cam_transform,
                                 bricks: bricks_data,
                                 scripts: scripts_data,
@@ -787,11 +789,13 @@ pub fn draw_top_bar(
                             let state = crate::common::core::vrtx::VrtxFileState {
                                 version: crate::common::core::vrtx::CURRENT_VRTX_VERSION,
                                 gravity: Vec3::new(0.0, -186.9 * 0.28, 0.0),
-                                settings: crate::common::core::vrtx::VrtxSettings {
-                                    ssao: graphics_settings.ssao,
-                                    contact_shadows: graphics_settings.contact_shadows,
-                                    bloom: graphics_settings.bloom,
-                                },
+                                settings: crate::common::core::vrtx::VrtxSettings::from_graphics(
+                                    graphics_settings,
+                                ),
+                                lighting: lighting_service
+                                    .as_ref()
+                                    .map(|service| (**service).clone())
+                                    .unwrap_or_default(),
                                 camera_transform: Transform::IDENTITY,
                                 bricks: playtest_backup.bricks.iter().map(|b| {
                                     let mut current_color = Color::Srgba(Srgba::new(0.84, 0.24, 0.16, 1.0));
