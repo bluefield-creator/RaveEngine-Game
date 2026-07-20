@@ -115,64 +115,9 @@ fn handle_physics_simulation_actions(
                                 Restitution::new(0.0),
                                 layers,
                             ));
-        }
-    }
-}
-
-pub fn sync_brick_physics_changes(
-    mut query: Query<(
-        Entity,
-        &crate::common::game::bricks::components::BrickPhysics,
-        &crate::common::game::bricks::components::BrickShapeComponent,
-        Option<&mut RigidBody>,
-        Option<&mut Collider>,
-        Option<&mut Friction>,
-        Option<&mut Restitution>,
-        Option<&mut GravityScale>,
-        Option<&mut Mass>,
-        Option<&mut CollisionLayers>,
-    ), Or<(Changed<crate::common::game::bricks::components::BrickPhysics>, Changed<crate::common::game::bricks::components::BrickShapeComponent>)>>,
-) {
-    for (_entity, physics, shape, rigid_body, collider, friction, restitution, gravity_scale, mass, layers) in query.iter_mut() {
-        if let Some(mut rb) = rigid_body {
-            let new_body = if physics.enabled { RigidBody::Dynamic } else { RigidBody::Static };
-            if *rb != new_body {
-                *rb = new_body;
-            }
-        }
-        if let Some(mut col) = collider {
-            let new_collider = match shape.shape {
-                crate::common::game::bricks::components::BrickShape::Block => Collider::cuboid(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28),
-                crate::common::game::bricks::components::BrickShape::Sphere => Collider::sphere(1.0 * 0.28),
-            };
-            let _ = (col, new_collider);
-        }
-        if let Some(mut f) = friction {
-            let new_f = Friction::new(physics.friction);
-            if *f != new_f { *f = new_f; }
-        }
-        if let Some(mut r) = restitution {
-            let new_r = Restitution::new(physics.bounciness);
-            if *r != new_r { *r = new_r; }
-        }
-        if let Some(mut g) = gravity_scale {
-            let new_g = GravityScale(physics.gravity_scale);
-            if *g != new_g { *g = new_g; }
-        }
-        if let Some(mut m) = mass {
-            let new_m = Mass(physics.mass);
-            if *m != new_m { *m = new_m; }
-        }
-        if let Some(mut cl) = layers {
-            let new_layers = if physics.player_can_collide {
-                CollisionLayers::from_bits(0b0001, 0xFFFF_FFFF)
-            } else {
-                CollisionLayers::from_bits(0b0100, 0xFFFF_FFFD)
-            };
-            if *cl != new_layers { *cl = new_layers; }
-        }
-    }
-}
+                        }
+                    }
+                }
             }
             PhysicsSimulationAction::Stop => {
                 if *state == PhysicsSimulationState::Running {
@@ -326,6 +271,63 @@ fn handle_newly_spawned_bricks(
                     Restitution::new(0.0),
                     layers,
                 ));
+            }
+        }
+    }
+}
+
+pub fn sync_brick_physics_changes(
+    mut commands: Commands,
+    query: Query<(
+        Entity,
+        &crate::common::game::bricks::components::BrickPhysics,
+        Option<&Friction>,
+        Option<&Restitution>,
+        Option<&GravityScale>,
+        Option<&Mass>,
+        Option<&RigidBody>,
+        Option<&CollisionLayers>,
+    ), Or<(Changed<crate::common::game::bricks::components::BrickPhysics>, Changed<crate::common::game::bricks::components::BrickShapeComponent>)>>,
+) {
+    for (entity, physics, friction, restitution, gravity_scale, mass, rigid_body, layers) in &query {
+        if let Some(rb) = rigid_body {
+            let new_body = if physics.enabled { RigidBody::Dynamic } else { RigidBody::Static };
+            if *rb != new_body {
+                commands.entity(entity).insert(new_body);
+            }
+        }
+        if let Some(f) = friction {
+            let new_f = Friction::new(physics.friction);
+            if *f != new_f {
+                commands.entity(entity).insert(new_f);
+            }
+        }
+        if let Some(r) = restitution {
+            let new_r = Restitution::new(physics.bounciness);
+            if *r != new_r {
+                commands.entity(entity).insert(new_r);
+            }
+        }
+        if let Some(g) = gravity_scale {
+            let new_g = GravityScale(physics.gravity_scale);
+            if *g != new_g {
+                commands.entity(entity).insert(new_g);
+            }
+        }
+        if let Some(m) = mass {
+            let new_m = Mass(physics.mass);
+            if *m != new_m {
+                commands.entity(entity).insert(new_m);
+            }
+        }
+        if let Some(cl) = layers {
+            let new_layers = if physics.player_can_collide {
+                CollisionLayers::from_bits(0b0001, 0xFFFF_FFFF)
+            } else {
+                CollisionLayers::from_bits(0b0100, 0xFFFF_FFFD)
+            };
+            if *cl != new_layers {
+                commands.entity(entity).insert(new_layers);
             }
         }
     }
