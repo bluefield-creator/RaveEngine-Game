@@ -1,6 +1,5 @@
 use bevy::prelude::*;
 use mlua::prelude::*;
-use mlua::LuaThreadStatus;
 
 pub fn setup_globals(lua: &Lua) -> Result<(), mlua::Error> {
     let task_table = lua.create_table()?;

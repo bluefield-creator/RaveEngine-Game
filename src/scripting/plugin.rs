@@ -228,7 +228,7 @@ pub fn discover_and_run_local_scripts(world: &mut World) {
     }
 }
 
-pub fn detect_touched_collisions(world: &mut World) {
+pub fn detect_touched_collisions(world: &mut World, mut previous_contacts: Local<std::collections::HashSet<(Entity, Entity)>>) {
     let mut collisions = Vec::new();
     let mut query = world.query::<(Entity, &CollidingEntities)>();
     for (entity, colliding) in query.iter(world) {
@@ -246,7 +246,13 @@ pub fn detect_touched_collisions(world: &mut World) {
 
         {
             let registry = server_vm.registry.lock().expect("ScriptRegistry lock poisoned");
+            let mut new_pairs = std::collections::HashSet::new();
             for &(entity, other) in &collisions {
+                let pair = if entity < other { (entity, other) } else { (other, entity) };
+                if previous_contacts.contains(&pair) {
+                    continue;
+                }
+                new_pairs.insert(pair);
                 if let Some(keys) = registry.connections.get(&(entity, "Touched")) {
                     for key in keys {
                         if let Ok(func) = server_vm.lua.registry_value::<LuaFunction>(&**key) {
@@ -266,6 +272,7 @@ pub fn detect_touched_collisions(world: &mut World) {
                     }
                 }
             }
+            *previous_contacts = new_pairs;
         }
 
         world.insert_resource(server_vm);
@@ -276,7 +283,13 @@ pub fn detect_touched_collisions(world: &mut World) {
 
         {
             let registry = client_vm.registry.lock().expect("ScriptRegistry lock poisoned");
+            let mut new_pairs = std::collections::HashSet::new();
             for &(entity, other) in &collisions {
+                let pair = if entity < other { (entity, other) } else { (other, entity) };
+                if previous_contacts.contains(&pair) {
+                    continue;
+                }
+                new_pairs.insert(pair);
                 if let Some(keys) = registry.connections.get(&(entity, "Touched")) {
                     for key in keys {
                         if let Ok(func) = client_vm.lua.registry_value::<LuaFunction>(&**key) {
@@ -296,6 +309,7 @@ pub fn detect_touched_collisions(world: &mut World) {
                     }
                 }
             }
+            *previous_contacts = new_pairs;
         }
 
         world.insert_resource(client_vm);
