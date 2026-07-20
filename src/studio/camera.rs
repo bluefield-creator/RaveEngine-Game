@@ -114,11 +114,12 @@ pub fn disable_camera_on_ui_interaction(
     let camera_moving = right_mouse_held || movement_keys_held;
 
     if let Ok(ctx) = contexts.ctx_mut() {
-        let wants_input = ctx.egui_wants_pointer_input() || ctx.egui_wants_keyboard_input() || hover_state.is_hovering_ui || onboarding_active || playtesting_active;
+        let disable_camera = ctx.egui_wants_keyboard_input() || onboarding_active || playtesting_active;
+        let disable_picking = ctx.egui_wants_pointer_input() || ctx.egui_wants_keyboard_input() || hover_state.is_hovering_ui || onboarding_active || playtesting_active;
         for mut state in &mut camera_query {
-            state.enabled = !wants_input;
+            state.enabled = !disable_camera;
         }
-        picking_settings.is_enabled = !wants_input && !camera_moving;
+        picking_settings.is_enabled = !disable_picking && !camera_moving;
     }
 }
 
