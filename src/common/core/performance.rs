@@ -1,10 +1,7 @@
 use bevy::anti_alias::fxaa::Fxaa;
 use bevy::camera::Exposure;
 use bevy::camera_controller::free_camera::FreeCamera;
-use bevy::light::{
-    CascadeShadowConfig, CascadeShadowConfigBuilder, DirectionalLightShadowMap,
-    ShadowFilteringMethod,
-};
+use bevy::light::{DirectionalLightShadowMap, ShadowFilteringMethod};
 use bevy::pbr::{
     ContactShadows, ScreenSpaceAmbientOcclusion, ScreenSpaceAmbientOcclusionQualityLevel,
 };
@@ -97,19 +94,10 @@ impl ShadowQuality {
 
     fn map_size(self) -> usize {
         match self {
-            Self::Low => 1024,
-            Self::Medium => 2048,
-            Self::High => 4096,
-            Self::Ultra => 8192,
-        }
-    }
-
-    fn cascade_settings(self) -> (usize, f32) {
-        match self {
-            Self::Low => (2, 180.0),
-            Self::Medium => (3, 350.0),
-            Self::High => (4, 600.0),
-            Self::Ultra => (4, 1000.0),
+            Self::Low => 512,
+            Self::Medium => 1024,
+            Self::High => 2048,
+            Self::Ultra => 4096,
         }
     }
 }
@@ -179,7 +167,6 @@ pub fn apply_graphics_settings(
     mut commands: Commands,
     camera_query: Query<(Entity, &Camera), With<Camera3d>>,
     mut shadow_map: Option<ResMut<DirectionalLightShadowMap>>,
-    mut cascade_query: Query<&mut CascadeShadowConfig, With<DirectionalLight>>,
 ) {
     if !settings.is_changed() {
         return;
@@ -268,17 +255,6 @@ pub fn apply_graphics_settings(
 
     if let Some(ref mut shadow_map) = shadow_map {
         shadow_map.size = settings.shadow_quality.map_size();
-    }
-    let (num_cascades, maximum_distance) = settings.shadow_quality.cascade_settings();
-    for mut cascade in &mut cascade_query {
-        *cascade = CascadeShadowConfigBuilder {
-            num_cascades,
-            minimum_distance: 0.5,
-            maximum_distance,
-            first_cascade_far_bound: 30.0,
-            overlap_proportion: 0.2,
-        }
-        .build();
     }
 }
 

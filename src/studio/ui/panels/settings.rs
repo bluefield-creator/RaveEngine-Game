@@ -45,22 +45,22 @@ pub fn draw_settings_window(
                             ui.selectable_value(
                                 &mut graphics_settings.shadow_quality,
                                 ShadowQuality::Low,
-                                "Low (1024)",
+                                "Low (512)",
                             );
                             ui.selectable_value(
                                 &mut graphics_settings.shadow_quality,
                                 ShadowQuality::Medium,
-                                "Medium (2048)",
+                                "Medium (1024)",
                             );
                             ui.selectable_value(
                                 &mut graphics_settings.shadow_quality,
                                 ShadowQuality::High,
-                                "High (4096)",
+                                "High (2048)",
                             );
                             ui.selectable_value(
                                 &mut graphics_settings.shadow_quality,
                                 ShadowQuality::Ultra,
-                                "Ultra (8192)",
+                                "Ultra (4096)",
                             );
                         });
                     ui.end_row();
