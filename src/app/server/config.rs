@@ -6,7 +6,7 @@ pub struct ServerAppConfig {
 impl ServerAppConfig {
     pub fn from_env_and_args() -> Self {
         let mut port = 5000; //default
-        let mut map_path = "assets/maps/default.vrtx".to_string(); //Defalt
+        let mut map_path = "assets/maps/temp_playtest.vrtx".to_string();
 
         let args: Vec<String> = std::env::args().collect();
         for i in 0..args.len() {

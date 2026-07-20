@@ -22,8 +22,8 @@ pub struct OnboardingData {
 impl Default for OnboardingData {
     fn default() -> Self {
         let save_path = std::env::current_dir()
-            .map(|p| p.join("NewProject.rave").to_string_lossy().to_string())
-            .unwrap_or_else(|_| "NewProject.rave".to_string());
+            .map(|p| p.join("NewProject.vrtx").to_string_lossy().to_string())
+            .unwrap_or_else(|_| "NewProject.vrtx".to_string());
         Self {
             selected_template: SelectedTemplate::Empty,
             name: "New Project".to_string(),

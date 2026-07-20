@@ -77,7 +77,7 @@ fn main() {
     }
 
     let mut port = 5000;
-    let mut map_path = "assets/maps/default.vrtx".to_string();
+    let mut map_path = "assets/maps/temp_playtest.vrtx".to_string();
     #[cfg(feature = "bench")]
     let mut bench_mode = false;
     #[cfg(feature = "bench")]
