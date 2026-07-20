@@ -1047,6 +1047,11 @@ pub fn studio_ui(
                     *ui_state.selection = Selection::default();
                     *ui_state.active_editor = ActiveScriptEditor::default();
                     *ui_res.history = crate::studio::tools::UndoRedoHistory::default();
+                    *ui_state.graphics_settings = GraphicsSettings::default();
+                    if let Some(ref mut lighting) = ui_res.lighting_service {
+                        **lighting =
+                            crate::common::game::environment::lighting::LightingService::default();
+                    }
                     ui_state.onboarding_data.save_path.clear();
                     ui_state
                         .next_onboarding_state
@@ -1425,11 +1430,15 @@ pub fn studio_ui(
     }
 
     if ui_state.settings_window.open {
-        panels::draw_settings_window(
+        let changed = panels::draw_settings_window(
             ctx,
             &mut ui_state.settings_window.open,
-            &mut ui_state.graphics_settings,
+            ui_state.graphics_settings.bypass_change_detection(),
         );
+        if changed {
+            ui_state.graphics_settings.set_changed();
+            ui_state.document_state.dirty = true;
+        }
     }
 
     indicator::draw_indicator(ctx, &mut ui_state.cameraindicator, &mut queries.cameraquery);
