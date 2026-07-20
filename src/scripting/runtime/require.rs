@@ -24,9 +24,7 @@ pub fn register_require(lua: &Lua) -> Result<(), mlua::Error> {
             _ => return Err(mlua::Error::RuntimeError("require expects an Instance representing a ModuleScript".to_string())),
         };
 
-        let world_ref = lua.app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
-            .ok_or_else(|| mlua::Error::RuntimeError("WorldRef not set".into()))?;
-        let world = unsafe { &*world_ref.0 };
+        let world = unsafe { crate::scripting::vm::server_vm::world_from_lua_shared(lua)? };
 
         let module_comp = world.get::<crate::scripting::ecs::ModuleScript>(instance.entity)
             .ok_or_else(|| mlua::Error::RuntimeError("Provided Instance is not a ModuleScript".to_string()))?;

@@ -13,6 +13,18 @@ pub struct ServerScriptVM {
 
 pub struct WorldRef(pub *mut World);
 
+pub unsafe fn world_from_lua(lua: &Lua) -> Result<&mut World, mlua::Error> {
+    let ptr = *lua.app_data_ref::<usize>()
+        .ok_or_else(|| mlua::Error::RuntimeError("WorldRef not set".into()))? as *mut World;
+    Ok(unsafe { &mut *ptr })
+}
+
+pub unsafe fn world_from_lua_shared(lua: &Lua) -> Result<&World, mlua::Error> {
+    let ptr = *lua.app_data_ref::<usize>()
+        .ok_or_else(|| mlua::Error::RuntimeError("WorldRef not set".into()))? as *mut World;
+    Ok(unsafe { &*ptr })
+}
+
 impl ServerScriptVM {
     pub fn new() -> Self {
         let lua = Lua::new();

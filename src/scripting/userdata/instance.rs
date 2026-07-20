@@ -23,17 +23,13 @@ impl LuaUserData for Instance {
         });
 
         methods.add_meta_method(LuaMetaMethod::ToString, |lua, this, _: ()| {
-            let world_ref = lua.app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
-                .ok_or_else(|| mlua::Error::RuntimeError("WorldRef not set".into()))?;
-            let world = unsafe { &mut *world_ref.0 };
+            let world = unsafe { crate::scripting::vm::server_vm::world_from_lua(lua)? };
             let name = world.get::<Name>(this.entity).map(|n| n.as_str().to_string()).unwrap_or_else(|| "Instance".to_string());
             Ok(name)
         });
 
         methods.add_meta_method(LuaMetaMethod::Index, |lua, this, key: String| {
-            let world_ref = lua.app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
-                .ok_or_else(|| mlua::Error::RuntimeError("WorldRef not set".into()))?;
-            let world = unsafe { &mut *world_ref.0 };
+            let world = unsafe { crate::scripting::vm::server_vm::world_from_lua(lua)? };
 
             if world.get_entity(this.entity).is_err() {
                 return Err(mlua::Error::RuntimeError("Instance has been destroyed".to_string()));
@@ -236,9 +232,7 @@ impl LuaUserData for Instance {
                                 name_to_find = s.to_str()?.to_string();
                             }
                         }
-                        let world_ref = lua.app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
-                .ok_or_else(|| mlua::Error::RuntimeError("WorldRef not set".into()))?;
-                        let world = unsafe { &*world_ref.0 };
+                        let world = unsafe { crate::scripting::vm::server_vm::world_from_lua_shared(lua)? };
                         for child in &children_list {
                             if let Some(child_name) = world.get::<Name>(*child) {
                                 if child_name.as_str() == name_to_find {
@@ -252,9 +246,7 @@ impl LuaUserData for Instance {
                 "Clone" => {
                     let entity = this.entity;
                     Ok(LuaValue::Function(lua.create_function(move |lua, _: LuaMultiValue| {
-                        let world_ref = lua.app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
-                .ok_or_else(|| mlua::Error::RuntimeError("WorldRef not set".into()))?;
-                        let world = unsafe { &mut *world_ref.0 };
+                        let world = unsafe { crate::scripting::vm::server_vm::world_from_lua(lua)? };
                         if world.get_entity(entity).is_err() {
                             return Err(mlua::Error::RuntimeError("Instance to clone has been destroyed".to_string()));
                         }
@@ -280,9 +272,7 @@ impl LuaUserData for Instance {
                 "Destroy" => {
                     let entity = this.entity;
                     Ok(LuaValue::Function(lua.create_function(move |lua, _: LuaMultiValue| {
-                        let world_ref = lua.app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
-                .ok_or_else(|| mlua::Error::RuntimeError("WorldRef not set".into()))?;
-                        let world = unsafe { &mut *world_ref.0 };
+                        let world = unsafe { crate::scripting::vm::server_vm::world_from_lua(lua)? };
                         if world.get_entity(entity).is_ok() {
                             world.entity_mut(entity).despawn();
                         }
@@ -294,9 +284,7 @@ impl LuaUserData for Instance {
         });
 
         methods.add_meta_method(LuaMetaMethod::NewIndex, |lua, this, (key, value): (String, LuaValue)| {
-            let world_ref = lua.app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
-                .ok_or_else(|| mlua::Error::RuntimeError("WorldRef not set".into()))?;
-            let world = unsafe { &mut *world_ref.0 };
+            let world = unsafe { crate::scripting::vm::server_vm::world_from_lua(lua)? };
 
             if world.get_entity(this.entity).is_err() {
                 return Err(mlua::Error::RuntimeError("Instance has been destroyed".to_string()));

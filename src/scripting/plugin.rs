@@ -58,7 +58,7 @@ fn spawn_and_run_callback(
 
 pub fn server_scheduler_system(world: &mut World) {
     if let Some(server_vm) = world.remove_resource::<ServerScriptVM>() {
-        server_vm.lua.set_app_data(crate::scripting::vm::server_vm::WorldRef(world as *mut World));
+        server_vm.lua.set_app_data(world as *mut World as usize);
         {
             let mut scheduler = server_vm.scheduler.lock().expect("Lua scheduler lock poisoned");
             scheduler.run_tick(&server_vm.lua);
@@ -69,7 +69,7 @@ pub fn server_scheduler_system(world: &mut World) {
 
 pub fn client_scheduler_system(world: &mut World) {
     if let Some(client_vm) = world.remove_resource::<ClientScriptVM>() {
-        client_vm.lua.set_app_data(crate::scripting::vm::server_vm::WorldRef(world as *mut World));
+        client_vm.lua.set_app_data(world as *mut World as usize);
         {
             let mut scheduler = client_vm.scheduler.lock().expect("Lua scheduler lock poisoned");
             scheduler.run_tick(&client_vm.lua);
@@ -93,7 +93,7 @@ pub fn discover_and_run_server_scripts(world: &mut World) {
     }
 
     if let Some(server_vm) = world.remove_resource::<ServerScriptVM>() {
-        server_vm.lua.set_app_data(crate::scripting::vm::server_vm::WorldRef(world as *mut World));
+        server_vm.lua.set_app_data(world as *mut World as usize);
 
         for (entity, code) in scripts_to_run {
             match crate::scripting::vm::compiler::compile_code(&server_vm.lua, &code, "ServerScript") {
@@ -168,7 +168,7 @@ pub fn discover_and_run_local_scripts(world: &mut World) {
     }
 
     if let Some(client_vm) = world.remove_resource::<ClientScriptVM>() {
-        client_vm.lua.set_app_data(crate::scripting::vm::server_vm::WorldRef(world as *mut World));
+        client_vm.lua.set_app_data(world as *mut World as usize);
 
         for (entity, code) in scripts_to_run {
             match crate::scripting::vm::compiler::compile_code(&client_vm.lua, &code, "LocalScript") {
@@ -242,7 +242,7 @@ pub fn detect_touched_collisions(world: &mut World) {
     }
 
     if let Some(server_vm) = world.remove_resource::<ServerScriptVM>() {
-        server_vm.lua.set_app_data(crate::scripting::vm::server_vm::WorldRef(world as *mut World));
+        server_vm.lua.set_app_data(world as *mut World as usize);
 
         {
             let registry = server_vm.registry.lock().expect("ScriptRegistry lock poisoned");
@@ -272,7 +272,7 @@ pub fn detect_touched_collisions(world: &mut World) {
     }
 
     if let Some(client_vm) = world.remove_resource::<ClientScriptVM>() {
-        client_vm.lua.set_app_data(crate::scripting::vm::server_vm::WorldRef(world as *mut World));
+        client_vm.lua.set_app_data(world as *mut World as usize);
 
         {
             let registry = client_vm.registry.lock().expect("ScriptRegistry lock poisoned");
@@ -320,7 +320,7 @@ pub fn detect_player_added_events(
     }
 
     if let Some(server_vm) = world.remove_resource::<ServerScriptVM>() {
-        server_vm.lua.set_app_data(crate::scripting::vm::server_vm::WorldRef(world as *mut World));
+        server_vm.lua.set_app_data(world as *mut World as usize);
 
         {
             let registry = server_vm.registry.lock().expect("ScriptRegistry lock poisoned");
@@ -342,7 +342,7 @@ pub fn detect_player_added_events(
     }
 
     if let Some(client_vm) = world.remove_resource::<ClientScriptVM>() {
-        client_vm.lua.set_app_data(crate::scripting::vm::server_vm::WorldRef(world as *mut World));
+        client_vm.lua.set_app_data(world as *mut World as usize);
 
         {
             let registry = client_vm.registry.lock().expect("ScriptRegistry lock poisoned");
@@ -371,7 +371,7 @@ pub fn trigger_run_service_events(world: &mut World) {
     };
 
     if let Some(server_vm) = world.remove_resource::<ServerScriptVM>() {
-        server_vm.lua.set_app_data(crate::scripting::vm::server_vm::WorldRef(world as *mut World));
+        server_vm.lua.set_app_data(world as *mut World as usize);
 
         {
             let registry = server_vm.registry.lock().expect("ScriptRegistry lock poisoned");
@@ -398,7 +398,7 @@ pub fn trigger_run_service_events(world: &mut World) {
     }
 
     if let Some(client_vm) = world.remove_resource::<ClientScriptVM>() {
-        client_vm.lua.set_app_data(crate::scripting::vm::server_vm::WorldRef(world as *mut World));
+        client_vm.lua.set_app_data(world as *mut World as usize);
 
         {
             let registry = client_vm.registry.lock().expect("ScriptRegistry lock poisoned");
