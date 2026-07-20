@@ -37,7 +37,7 @@ fn spawn_and_run_callback(
             Ok(yielded_val) => {
                 if thread.status() == LuaThreadStatus::Resumable {
                     let wake = yielded_val.map(|sec| std::time::Instant::now() + std::time::Duration::from_secs_f64(sec as f64));
-                    let mut sched = scheduler.lock().unwrap();
+                    let mut sched = scheduler.lock().expect("Lua scheduler lock poisoned");
                     if let Ok(key) = lua.create_registry_value(thread) {
                         sched.tasks.push(crate::scripting::vm::scheduler::LuaTask {
                             thread_key: key,
@@ -57,7 +57,7 @@ pub fn server_scheduler_system(world: &mut World) {
     if let Some(server_vm) = world.remove_resource::<ServerScriptVM>() {
         server_vm.lua.set_app_data(crate::scripting::vm::server_vm::WorldRef(world as *mut World));
         {
-            let mut scheduler = server_vm.scheduler.lock().unwrap();
+            let mut scheduler = server_vm.scheduler.lock().expect("Lua scheduler lock poisoned");
             scheduler.run_tick(&server_vm.lua);
         }
         world.insert_resource(server_vm);
@@ -68,7 +68,7 @@ pub fn client_scheduler_system(world: &mut World) {
     if let Some(client_vm) = world.remove_resource::<ClientScriptVM>() {
         client_vm.lua.set_app_data(crate::scripting::vm::server_vm::WorldRef(world as *mut World));
         {
-            let mut scheduler = client_vm.scheduler.lock().unwrap();
+            let mut scheduler = client_vm.scheduler.lock().expect("Lua scheduler lock poisoned");
             scheduler.run_tick(&client_vm.lua);
         }
         world.insert_resource(client_vm);
@@ -118,7 +118,7 @@ pub fn discover_and_run_server_scripts(world: &mut World) {
                                 Ok(yielded_val) => {
                                     if thread.status() == LuaThreadStatus::Resumable {
                                         let wake = yielded_val.map(|sec| std::time::Instant::now() + std::time::Duration::from_secs_f64(sec as f64));
-                                        let mut scheduler = server_vm.scheduler.lock().unwrap();
+                                        let mut scheduler = server_vm.scheduler.lock().expect("Lua scheduler lock poisoned");
                                         if let Ok(key) = server_vm.lua.create_registry_value(thread) {
                                             scheduler.tasks.push(crate::scripting::vm::scheduler::LuaTask {
                                                 thread_key: key,
@@ -190,7 +190,7 @@ pub fn discover_and_run_local_scripts(world: &mut World) {
                                 Ok(yielded_val) => {
                                     if thread.status() == LuaThreadStatus::Resumable {
                                         let wake = yielded_val.map(|sec| std::time::Instant::now() + std::time::Duration::from_secs_f64(sec as f64));
-                                        let mut scheduler = client_vm.scheduler.lock().unwrap();
+                                        let mut scheduler = client_vm.scheduler.lock().expect("Lua scheduler lock poisoned");
                                         if let Ok(key) = client_vm.lua.create_registry_value(thread) {
                                             scheduler.tasks.push(crate::scripting::vm::scheduler::LuaTask {
                                                 thread_key: key,
@@ -236,7 +236,7 @@ pub fn detect_touched_collisions(world: &mut World) {
         server_vm.lua.set_app_data(crate::scripting::vm::server_vm::WorldRef(world as *mut World));
 
         {
-            let registry = server_vm.registry.lock().unwrap();
+            let registry = server_vm.registry.lock().expect("ScriptRegistry lock poisoned");
             for &(entity, other) in &collisions {
                 if let Some(keys) = registry.connections.get(&(entity, "Touched")) {
                     for key in keys {
@@ -266,7 +266,7 @@ pub fn detect_touched_collisions(world: &mut World) {
         client_vm.lua.set_app_data(crate::scripting::vm::server_vm::WorldRef(world as *mut World));
 
         {
-            let registry = client_vm.registry.lock().unwrap();
+            let registry = client_vm.registry.lock().expect("ScriptRegistry lock poisoned");
             for &(entity, other) in &collisions {
                 if let Some(keys) = registry.connections.get(&(entity, "Touched")) {
                     for key in keys {
@@ -314,7 +314,7 @@ pub fn detect_player_added_events(
         server_vm.lua.set_app_data(crate::scripting::vm::server_vm::WorldRef(world as *mut World));
 
         {
-            let registry = server_vm.registry.lock().unwrap();
+            let registry = server_vm.registry.lock().expect("ScriptRegistry lock poisoned");
             let players_entity = crate::scripting::userdata::instance::find_service_entity(world, "Workspace").unwrap_or(Entity::PLACEHOLDER);
             if let Some(keys) = registry.connections.get(&(players_entity, "PlayerAdded")) {
                 for key in keys {
@@ -336,7 +336,7 @@ pub fn detect_player_added_events(
         client_vm.lua.set_app_data(crate::scripting::vm::server_vm::WorldRef(world as *mut World));
 
         {
-            let registry = client_vm.registry.lock().unwrap();
+            let registry = client_vm.registry.lock().expect("ScriptRegistry lock poisoned");
             let players_entity = crate::scripting::userdata::instance::find_service_entity(world, "Workspace").unwrap_or(Entity::PLACEHOLDER);
             if let Some(keys) = registry.connections.get(&(players_entity, "PlayerAdded")) {
                 for key in keys {
@@ -365,7 +365,7 @@ pub fn trigger_run_service_events(world: &mut World) {
         server_vm.lua.set_app_data(crate::scripting::vm::server_vm::WorldRef(world as *mut World));
 
         {
-            let registry = server_vm.registry.lock().unwrap();
+            let registry = server_vm.registry.lock().expect("ScriptRegistry lock poisoned");
             let workspace_entity = crate::scripting::userdata::instance::find_service_entity(world, "Workspace").unwrap_or(Entity::PLACEHOLDER);
             
             if let Some(keys) = registry.connections.get(&(workspace_entity, "Heartbeat")) {
@@ -392,7 +392,7 @@ pub fn trigger_run_service_events(world: &mut World) {
         client_vm.lua.set_app_data(crate::scripting::vm::server_vm::WorldRef(world as *mut World));
 
         {
-            let registry = client_vm.registry.lock().unwrap();
+            let registry = client_vm.registry.lock().expect("ScriptRegistry lock poisoned");
             let workspace_entity = crate::scripting::userdata::instance::find_service_entity(world, "Workspace").unwrap_or(Entity::PLACEHOLDER);
             
             if let Some(keys) = registry.connections.get(&(workspace_entity, "Heartbeat")) {

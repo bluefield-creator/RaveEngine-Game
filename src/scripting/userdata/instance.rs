@@ -23,14 +23,16 @@ impl LuaUserData for Instance {
         });
 
         methods.add_meta_method(LuaMetaMethod::ToString, |lua, this, _: ()| {
-            let world_ref = lua.app_data_ref::<crate::scripting::vm::server_vm::WorldRef>().unwrap();
+            let world_ref = lua.app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
+                .ok_or_else(|| mlua::Error::RuntimeError("WorldRef not set".into()))?;
             let world = unsafe { &mut *world_ref.0 };
             let name = world.get::<Name>(this.entity).map(|n| n.as_str().to_string()).unwrap_or_else(|| "Instance".to_string());
             Ok(name)
         });
 
         methods.add_meta_method(LuaMetaMethod::Index, |lua, this, key: String| {
-            let world_ref = lua.app_data_ref::<crate::scripting::vm::server_vm::WorldRef>().unwrap();
+            let world_ref = lua.app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
+                .ok_or_else(|| mlua::Error::RuntimeError("WorldRef not set".into()))?;
             let world = unsafe { &mut *world_ref.0 };
 
             if world.get_entity(this.entity).is_err() {
@@ -234,7 +236,8 @@ impl LuaUserData for Instance {
                                 name_to_find = s.to_str()?.to_string();
                             }
                         }
-                        let world_ref = lua.app_data_ref::<crate::scripting::vm::server_vm::WorldRef>().unwrap();
+                        let world_ref = lua.app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
+                .ok_or_else(|| mlua::Error::RuntimeError("WorldRef not set".into()))?;
                         let world = unsafe { &*world_ref.0 };
                         for child in &children_list {
                             if let Some(child_name) = world.get::<Name>(*child) {
@@ -249,7 +252,8 @@ impl LuaUserData for Instance {
                 "Clone" => {
                     let entity = this.entity;
                     Ok(LuaValue::Function(lua.create_function(move |lua, _: LuaMultiValue| {
-                        let world_ref = lua.app_data_ref::<crate::scripting::vm::server_vm::WorldRef>().unwrap();
+                        let world_ref = lua.app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
+                .ok_or_else(|| mlua::Error::RuntimeError("WorldRef not set".into()))?;
                         let world = unsafe { &mut *world_ref.0 };
                         if world.get_entity(entity).is_err() {
                             return Err(mlua::Error::RuntimeError("Instance to clone has been destroyed".to_string()));
@@ -276,7 +280,8 @@ impl LuaUserData for Instance {
                 "Destroy" => {
                     let entity = this.entity;
                     Ok(LuaValue::Function(lua.create_function(move |lua, _: LuaMultiValue| {
-                        let world_ref = lua.app_data_ref::<crate::scripting::vm::server_vm::WorldRef>().unwrap();
+                        let world_ref = lua.app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
+                .ok_or_else(|| mlua::Error::RuntimeError("WorldRef not set".into()))?;
                         let world = unsafe { &mut *world_ref.0 };
                         if world.get_entity(entity).is_ok() {
                             world.entity_mut(entity).despawn();
@@ -289,7 +294,8 @@ impl LuaUserData for Instance {
         });
 
         methods.add_meta_method(LuaMetaMethod::NewIndex, |lua, this, (key, value): (String, LuaValue)| {
-            let world_ref = lua.app_data_ref::<crate::scripting::vm::server_vm::WorldRef>().unwrap();
+            let world_ref = lua.app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
+                .ok_or_else(|| mlua::Error::RuntimeError("WorldRef not set".into()))?;
             let world = unsafe { &mut *world_ref.0 };
 
             if world.get_entity(this.entity).is_err() {
@@ -487,8 +493,9 @@ pub struct RBXScriptSignal {
 impl LuaUserData for RBXScriptSignal {
     fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("Connect", |lua, this, callback: LuaFunction| {
-            let registry_ref = lua.app_data_ref::<ScriptRegistryRef>().unwrap();
-            let mut registry = registry_ref.0.lock().unwrap();
+            let registry_ref = lua.app_data_ref::<ScriptRegistryRef>()
+                .ok_or_else(|| mlua::Error::RuntimeError("ScriptRegistryRef not set".into()))?;
+            let mut registry = registry_ref.0.lock().expect("ScriptRegistry lock poisoned");
             let key = std::sync::Arc::new(lua.create_registry_value(callback)?);
             registry.connections.entry((this.entity, this.name))
                 .or_default()
@@ -500,7 +507,7 @@ impl LuaUserData for RBXScriptSignal {
             let name = this.name;
             let registry_ref_clone = (*registry_ref).clone();
             conn_table.set("Disconnect", lua.create_function(move |_, _: ()| {
-                let mut registry = registry_ref_clone.0.lock().unwrap();
+                let mut registry = registry_ref_clone.0.lock().expect("ScriptRegistry lock poisoned");
                 if let Some(conns) = registry.connections.get_mut(&(entity, name)) {
                     conns.retain(|k| k != &key_clone);
                 }
