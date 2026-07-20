@@ -243,6 +243,7 @@ fn draw_entity_node(
                 >,
             >,
             Option<&mut crate::common::game::bricks::components::BrickPhysics>,
+            Option<&crate::common::game::bricks::components::BrickColor>,
         ),
         Without<Camera3d>,
     >,
@@ -401,8 +402,8 @@ fn draw_entity_node(
                         }
                         if ui.input(|i| i.pointer.any_released()) && label_res.hovered() {
                             if let (
-                                Ok((_, _, _, _, _, _, _, parent_global, _, _, _, _)),
-                                Ok((_, _, _, _, _, _, _, child_global, _, _, _, _)),
+                                Ok((_, _, _, _, _, _, _, parent_global, _, _, _, _, _)),
+                                Ok((_, _, _, _, _, _, _, child_global, _, _, _, _, _)),
                             ) = (entities_query.get(entity), entities_query.get(dragged))
                             {
                                 let parent_rotation = parent_global.rotation();
@@ -419,14 +420,14 @@ fn draw_entity_node(
                                     .mul_vec3(child_translation - parent_translation);
 
                                 let old_parent = entities_query.get(dragged).ok().and_then(
-                                    |(_, _, _, child_of_opt, _, _, _, _, _, _, _, _)| {
+                                    |(_, _, _, child_of_opt, _, _, _, _, _, _, _, _, _)| {
                                         child_of_opt.map(|co| co.parent())
                                     },
                                 );
                                 let old_transform = entities_query
                                     .get(dragged)
                                     .ok()
-                                    .map(|(_, t, _, _, _, _, _, _, _, _, _, _)| *t)
+                                    .map(|(_, t, _, _, _, _, _, _, _, _, _, _, _)| *t)
                                     .unwrap_or(Transform::IDENTITY);
 
                                 let new_transform = Transform {
@@ -602,8 +603,8 @@ fn draw_entity_node(
                 }
                 if ui.input(|i| i.pointer.any_released()) && label_res.hovered() {
                     if let (
-                        Ok((_, _, _, _, _, _, _, parent_global, _, _, _, _)),
-                        Ok((_, _, _, _, _, _, _, child_global, _, _, _, _)),
+                        Ok((_, _, _, _, _, _, _, parent_global, _, _, _, _, _)),
+                        Ok((_, _, _, _, _, _, _, child_global, _, _, _, _, _)),
                     ) = (entities_query.get(entity), entities_query.get(dragged))
                     {
                         let parent_rotation = parent_global.rotation();
@@ -620,14 +621,14 @@ fn draw_entity_node(
                             .mul_vec3(child_translation - parent_translation);
 
                         let old_parent = entities_query.get(dragged).ok().and_then(
-                            |(_, _, _, child_of_opt, _, _, _, _, _, _, _, _)| {
+                            |(_, _, _, child_of_opt, _, _, _, _, _, _, _, _, _)| {
                                 child_of_opt.map(|co| co.parent())
                             },
                         );
                         let old_transform = entities_query
                             .get(dragged)
                             .ok()
-                            .map(|(_, t, _, _, _, _, _, _, _, _, _, _)| *t)
+                            .map(|(_, t, _, _, _, _, _, _, _, _, _, _, _)| *t)
                             .unwrap_or(Transform::IDENTITY);
 
                         let new_transform = Transform {
@@ -780,6 +781,7 @@ pub fn draw_explorer(
                 >,
             >,
             Option<&mut crate::common::game::bricks::components::BrickPhysics>,
+            Option<&crate::common::game::bricks::components::BrickColor>,
         ),
         Without<Camera3d>,
     >,
@@ -962,14 +964,14 @@ pub fn draw_explorer(
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
         }
         if ui.input(|i| i.pointer.any_released()) && header_res.hovered() {
-            if let Ok((_, _, _, child_of_opt, _, _, _, child_global, _, _, _, _)) =
+            if let Ok((_, _, _, child_of_opt, _, _, _, child_global, _, _, _, _, _)) =
                 entities_query.get(dragged)
             {
                 let old_parent = child_of_opt.map(|co| co.parent());
                 let old_transform = entities_query
                     .get(dragged)
                     .ok()
-                    .map(|(_, t, _, _, _, _, _, _, _, _, _, _)| *t)
+                    .map(|(_, t, _, _, _, _, _, _, _, _, _, _, _)| *t)
                     .unwrap_or(Transform::IDENTITY);
 
                 let new_transform = Transform {

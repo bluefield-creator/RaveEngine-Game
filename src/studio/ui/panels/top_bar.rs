@@ -103,6 +103,7 @@ pub fn draw_top_bar(
                 >,
             >,
             Option<&mut crate::common::game::bricks::components::BrickPhysics>,
+            Option<&crate::common::game::bricks::components::BrickColor>,
         ),
         Without<Camera3d>,
     >,
@@ -174,7 +175,7 @@ pub fn draw_top_bar(
                                 .filter(|(_, _, _, _, brick, server, local, module)| brick.is_some() || server.is_some() || local.is_some() || module.is_some())
                                 .enumerate().map(|(index, (entity, _, _, _, _, _, _, _))| (entity, index as u64)).collect();
                             let mut bricks_data = Vec::new();
-                            for (entity, transform, name, child_of, _, brick_opt, shape_opt, _, _, mat_opt, studs_mat_opt, phys_opt) in entities_query.iter() {
+                            for (entity, transform, name, child_of, _, brick_opt, shape_opt, _, _, mat_opt, studs_mat_opt, phys_opt, _) in entities_query.iter() {
                                 if brick_opt.is_some() {
                                     let shape = shape_opt.as_ref().map(|s| s.shape).unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
                                     let mut current_color = Color::Srgba(Srgba::new(0.84, 0.24, 0.16, 1.0));
@@ -549,6 +550,7 @@ pub fn draw_top_bar(
                                             }))),
                                             parent: None,
                                             physics: Some(crate::common::game::bricks::components::BrickPhysics::default()),
+                                            color: None,
                                         };
 
                                         history.push_command(crate::studio::tools::UndoCommand::Spawn {
@@ -645,7 +647,7 @@ pub fn draw_top_bar(
                                 commands.entity(client_entity).despawn();
                             }
 
-                            for (entity, _, _name, _, _, brick_opt, _, _, _, _, _, _) in entities_query.iter() {
+                            for (entity, _, _name, _, _, brick_opt, _, _, _, _, _, _, _) in entities_query.iter() {
                                 let name_str = _name.as_str();
                                 if brick_opt.is_some() || name_str == "Player" || name_str == "LocalPlayer" || name_str.starts_with("Player_") {
                                     commands.entity(entity).despawn();
@@ -737,7 +739,7 @@ pub fn draw_top_bar(
                             }
 
                             let mut backup_bricks = Vec::new();
-                            for (entity, _, _name, _, _, brick_opt, _, _, _, _, _, _) in entities_query.iter() {
+                            for (entity, _, _name, _, _, brick_opt, _, _, _, _, _, _, _) in entities_query.iter() {
                                 if brick_opt.is_some() {
                                     if let Some(data) = crate::common::game::bricks::data::capture_brick_data(entity, entities_query) {
                                         backup_bricks.push(data);

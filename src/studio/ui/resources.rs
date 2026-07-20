@@ -216,6 +216,7 @@ pub fn capture_editor_snapshot(
                 >,
             >,
             Option<&mut crate::common::game::bricks::components::BrickPhysics>,
+            Option<&crate::common::game::bricks::components::BrickColor>,
         ),
         Without<Camera3d>,
     >,

@@ -69,6 +69,7 @@ pub fn draw_properties(
                 >,
             >,
             Option<&mut crate::common::game::bricks::components::BrickPhysics>,
+            Option<&crate::common::game::bricks::components::BrickColor>,
         ),
         Without<Camera3d>,
     >,
@@ -313,6 +314,7 @@ pub fn draw_properties(
             first_mat_opt,
             first_studs_mat_opt,
             first_phys_opt,
+            _,
         )) = properties_query.get(first_entity)
         else {
             return;
@@ -397,6 +399,7 @@ pub fn draw_properties(
             mat_opt,
             studs_mat_opt,
             phys_opt,
+            _,
         )) = properties_query.get(entity)
         {
             if name.to_string() != first_name_str {
@@ -533,7 +536,7 @@ pub fn draw_properties(
                             });
                             if new_px.is_some() || new_py.is_some() || new_pz.is_some() {
                                 for &entity in selected_entities {
-                                    if let Ok((_, mut transform, _, _, _, _, _, _, _, _, _, _)) = properties_query.get_mut(entity) {
+                                    if let Ok((_, mut transform, _, _, _, _, _, _, _, _, _, _, _)) = properties_query.get_mut(entity) {
                                         if let Some(x) = new_px { transform.translation.x = x * 0.28; }
                                         if let Some(y) = new_py { transform.translation.y = y * 0.28; }
                                         if let Some(z) = new_pz { transform.translation.z = z * 0.28; }
@@ -554,7 +557,7 @@ pub fn draw_properties(
                             });
                             if new_sx.is_some() || new_sy.is_some() || new_sz.is_some() {
                                 for &entity in selected_entities {
-                                    if let Ok((_, mut transform, _, _, _, _, _, _, _, _, _, _)) = properties_query.get_mut(entity) {
+                                    if let Ok((_, mut transform, _, _, _, _, _, _, _, _, _, _, _)) = properties_query.get_mut(entity) {
                                         if let Some(x) = new_sx { transform.scale.x = x.max(0.01); }
                                         if let Some(y) = new_sy { transform.scale.y = y.max(0.01); }
                                         if let Some(z) = new_sz { transform.scale.z = z.max(0.01); }
@@ -579,7 +582,7 @@ pub fn draw_properties(
                                 let ry_val = new_ry.unwrap_or(rot_deg.y).to_radians();
                                 let rz_val = new_rz.unwrap_or(rot_deg.z).to_radians();
                                 for &entity in selected_entities {
-                                    if let Ok((_, mut transform, _, _, _, _, _, _, _, _, _, _)) = properties_query.get_mut(entity) {
+                                    if let Ok((_, mut transform, _, _, _, _, _, _, _, _, _, _, _)) = properties_query.get_mut(entity) {
                                         transform.rotation = Quat::from_euler(EulerRot::XYZ, rx_val, ry_val, rz_val);
                                     }
                                 }
@@ -607,7 +610,7 @@ pub fn draw_properties(
                                     let new_color = Color::Srgba(Srgba::new(color_array[0], color_array[1], color_array[2], color_array[3]));
                                     let new_alpha_mode = if new_color.alpha() < 1.0 { AlphaMode::Blend } else { AlphaMode::Opaque };
                                     for &entity in selected_entities {
-                                        if let Ok((_, _, _, _, _, _, _, _, _, mat_opt, studs_mat_opt, _)) = properties_query.get_mut(entity) {
+                                        if let Ok((_, _, _, _, _, _, _, _, _, mat_opt, studs_mat_opt, _, _)) = properties_query.get_mut(entity) {
                                             if is_extended {
                                                 if let Some(studs_mat_handle) = studs_mat_opt {
                                                     if let Some(mut mat) = studs_materials.get_mut(&studs_mat_handle.0) {
@@ -639,7 +642,7 @@ pub fn draw_properties(
                                     let slider_res = ui.add(egui::Slider::new(&mut transparency, 0.0..=1.0).step_by(0.01));
                                     if slider_res.changed() {
                                         for &entity in selected_entities {
-                                            if let Ok((_, _, _, _, _, _, _, _, _, mat_opt, studs_mat_opt, _)) = properties_query.get_mut(entity) {
+                                            if let Ok((_, _, _, _, _, _, _, _, _, mat_opt, studs_mat_opt, _, _)) = properties_query.get_mut(entity) {
                                                 let mut current_color = Color::srgb(0.84, 0.24, 0.16);
                                                 if let Some(studs_mat_handle) = studs_mat_opt {
                                                     if let Some(mat) = studs_materials.get(&studs_mat_handle.0) {
@@ -683,7 +686,7 @@ pub fn draw_properties(
                                     }
                                     if clicked {
                                         for &entity in selected_entities {
-                                            if let Ok((_, _, _, _, _, _, _, _, _, mat_opt, studs_mat_opt, _)) = properties_query.get_mut(entity) {
+                                            if let Ok((_, _, _, _, _, _, _, _, _, mat_opt, studs_mat_opt, _, _)) = properties_query.get_mut(entity) {
                                                 let mut current_color = Color::srgb(0.84, 0.24, 0.16);
                                                 if let Some(studs_mat_handle) = studs_mat_opt {
                                                     if let Some(mat) = studs_materials.get(&studs_mat_handle.0) {
@@ -740,7 +743,7 @@ pub fn draw_properties(
                                     });
                                 if selection_changed {
                                     for &entity in selected_entities {
-                                        if let Ok((_, _, _, _, _, _, Some(mut shape_comp), _, _, _, _, _)) = properties_query.get_mut(entity) {
+                                        if let Ok((_, _, _, _, _, _, Some(mut shape_comp), _, _, _, _, _, _)) = properties_query.get_mut(entity) {
                                             shape_comp.shape = current_shape;
                                         }
                                     }
@@ -775,7 +778,7 @@ pub fn draw_properties(
                                     });
                                     if clicked {
                                         for &entity in selected_entities {
-                                            if let Ok((_, _, _, _, _, _, _, _, _, _, _, Some(mut phys))) = properties_query.get_mut(entity) {
+                                            if let Ok((_, _, _, _, _, _, _, _, _, _, _, Some(mut phys), _)) = properties_query.get_mut(entity) {
                                                 phys.enabled = enabled;
                                             }
                                         }
@@ -785,7 +788,7 @@ pub fn draw_properties(
                                 if let Some(res) = checkbox_res {
                                     if res.changed() {
                                         for &entity in selected_entities {
-                                            if let Ok((_, _, _, _, _, _, _, _, _, _, _, Some(mut phys))) = properties_query.get_mut(entity) {
+                                            if let Ok((_, _, _, _, _, _, _, _, _, _, _, Some(mut phys), _)) = properties_query.get_mut(entity) {
                                                 phys.enabled = enabled;
                                             }
                                         }
@@ -807,7 +810,7 @@ pub fn draw_properties(
                                     });
                                     if clicked {
                                         for &entity in selected_entities {
-                                            if let Ok((_, _, _, _, _, _, _, _, _, _, _, Some(mut phys))) = properties_query.get_mut(entity) {
+                                            if let Ok((_, _, _, _, _, _, _, _, _, _, _, Some(mut phys), _)) = properties_query.get_mut(entity) {
                                                 phys.player_can_collide = player_can_collide;
                                                 let layers = if player_can_collide {
                                                     CollisionLayers::from_bits(0b0001, 0xFFFF_FFFF)
@@ -823,7 +826,7 @@ pub fn draw_properties(
                                 if let Some(res) = can_collide_checkbox_res {
                                     if res.changed() {
                                         for &entity in selected_entities {
-                                            if let Ok((_, _, _, _, _, _, _, _, _, _, _, Some(mut phys))) = properties_query.get_mut(entity) {
+                                            if let Ok((_, _, _, _, _, _, _, _, _, _, _, Some(mut phys), _)) = properties_query.get_mut(entity) {
                                                 phys.player_can_collide = player_can_collide;
                                                 let layers = if player_can_collide {
                                                     CollisionLayers::from_bits(0b0001, 0xFFFF_FFFF)
@@ -851,7 +854,7 @@ pub fn draw_properties(
                                     });
                                     if clicked {
                                         for &entity in selected_entities {
-                                            if let Ok((_, _, _, _, _, _, _, _, _, _, _, Some(mut phys))) = properties_query.get_mut(entity) {
+                                            if let Ok((_, _, _, _, _, _, _, _, _, _, _, Some(mut phys), _)) = properties_query.get_mut(entity) {
                                                 phys.locked = locked;
                                             }
                                         }
@@ -861,7 +864,7 @@ pub fn draw_properties(
                                 if let Some(res) = locked_checkbox_res {
                                     if res.changed() {
                                         for &entity in selected_entities {
-                                            if let Ok((_, _, _, _, _, _, _, _, _, _, _, Some(mut phys))) = properties_query.get_mut(entity) {
+                                            if let Ok((_, _, _, _, _, _, _, _, _, _, _, Some(mut phys), _)) = properties_query.get_mut(entity) {
                                                 phys.locked = locked;
                                             }
                                         }
@@ -877,7 +880,7 @@ pub fn draw_properties(
                                 });
                                 if let Some(new_val) = new_friction {
                                     for &entity in selected_entities {
-                                        if let Ok((_, _, _, _, _, _, _, _, _, _, _, Some(mut phys))) = properties_query.get_mut(entity) {
+                                        if let Ok((_, _, _, _, _, _, _, _, _, _, _, Some(mut phys), _)) = properties_query.get_mut(entity) {
                                             phys.friction = new_val.clamp(0.0, 1.0);
                                             commands.entity(entity).insert(Friction::new(phys.friction));
                                         }
@@ -893,7 +896,7 @@ pub fn draw_properties(
                                 });
                                 if let Some(new_val) = new_gravity_scale {
                                     for &entity in selected_entities {
-                                        if let Ok((_, _, _, _, _, _, _, _, _, _, _, Some(mut phys))) = properties_query.get_mut(entity) {
+                                        if let Ok((_, _, _, _, _, _, _, _, _, _, _, Some(mut phys), _)) = properties_query.get_mut(entity) {
                                             phys.gravity_scale = new_val;
                                             commands.entity(entity).insert(GravityScale(phys.gravity_scale));
                                         }
@@ -909,7 +912,7 @@ pub fn draw_properties(
                                 });
                                 if let Some(new_val) = new_mass {
                                     for &entity in selected_entities {
-                                        if let Ok((_, _, _, _, _, _, _, _, _, _, _, Some(mut phys))) = properties_query.get_mut(entity) {
+                                        if let Ok((_, _, _, _, _, _, _, _, _, _, _, Some(mut phys), _)) = properties_query.get_mut(entity) {
                                             phys.mass = new_val.max(0.001);
                                             commands.entity(entity).insert(Mass(phys.mass));
                                         }
@@ -926,7 +929,7 @@ pub fn draw_properties(
 
                                 if let Some(new_val) = new_bounciness {
                                     for &entity in selected_entities {
-                                        if let Ok((_, _, _, _, _, _, _, _, _, _, _, Some(mut phys))) = properties_query.get_mut(entity) {
+                                        if let Ok((_, _, _, _, _, _, _, _, _, _, _, Some(mut phys), _)) = properties_query.get_mut(entity) {
                                             phys.bounciness = new_val.clamp(0.0, 1.0);
                                             commands.entity(entity).insert(Restitution::new(phys.bounciness));
                                         }

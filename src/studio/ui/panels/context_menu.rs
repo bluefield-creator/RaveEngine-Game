@@ -32,6 +32,7 @@ pub fn draw_entity_context_menu(
                 >,
             >,
             Option<&mut crate::common::game::bricks::components::BrickPhysics>,
+            Option<&crate::common::game::bricks::components::BrickColor>,
         ),
         Without<Camera3d>,
     >,
@@ -52,6 +53,7 @@ pub fn draw_entity_context_menu(
             mat_opt,
             studs_mat_opt,
             phys_opt,
+            _,
         )) = entities_query.get(entity)
         {
             copiedbuffer.transform = Some(*transform);
@@ -119,6 +121,7 @@ pub fn draw_entity_context_menu(
                 studs_material: copiedbuffer.studs_material.clone(),
                 parent: None,
                 physics: copiedbuffer.physics.clone(),
+                color: None,
             };
 
             history.push_command(crate::studio::tools::UndoCommand::Spawn {
@@ -144,6 +147,7 @@ pub fn draw_entity_context_menu(
             mat_opt,
             studs_mat_opt,
             phys_opt,
+            _,
         )) = entities_query.get(entity)
         {
             let newtransform = *transform;
@@ -200,6 +204,7 @@ pub fn draw_entity_context_menu(
                 studs_material: studs_mat_opt.cloned(),
                 parent: parent_entity,
                 physics: phys_opt.cloned(),
+                color: None,
             };
 
             history.push_command(crate::studio::tools::UndoCommand::Spawn {

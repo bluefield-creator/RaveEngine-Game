@@ -131,6 +131,7 @@ pub struct UiQueries<'w, 's> {
                 >,
             >,
             Option<&'static mut crate::common::game::bricks::components::BrickPhysics>,
+            Option<&'static crate::common::game::bricks::components::BrickColor>,
         ),
         Without<Camera3d>,
     >,
@@ -315,7 +316,7 @@ pub fn studio_ui(
                                     }
                                 }
 
-                                for (entity, _, name, _, _, brick_opt, _, _, _, _, _, _) in
+                                for (entity, _, name, _, _, brick_opt, _, _, _, _, _, _, _) in
                                     queries.entities_query.iter()
                                 {
                                     let name_str = name.as_str();
@@ -354,6 +355,7 @@ pub fn studio_ui(
                                     child_of_opt,
                                     _,
                                     brick_opt,
+                                    _,
                                     _,
                                     _,
                                     _,
@@ -877,6 +879,7 @@ pub fn studio_ui(
                         material,
                         studs_material,
                         physics,
+                        _,
                     )) = queries.entities_query.get(entity)
                     {
                         ui_state.copiedbuffer.transform = Some(*transform);
@@ -1007,6 +1010,7 @@ pub fn studio_ui(
                         studs_material: ui_state.copiedbuffer.studs_material.clone(),
                         parent,
                         physics: ui_state.copiedbuffer.physics.clone(),
+                        color: None,
                     };
                     Some(crate::common::game::bricks::data::spawn_from_data(
                         &mut ui_res.commands,
@@ -1159,7 +1163,7 @@ pub fn studio_ui(
 
                 let mut selected_bricks = Vec::new();
                 for &entity in &ui_state.selection.entities {
-                    if let Ok((_, _, _, _, _, Some(_), _, _, _, _, _, _)) =
+                    if let Ok((_, _, _, _, _, Some(_), _, _, _, _, _, _, _)) =
                         queries.entities_query.get(entity)
                     {
                         selected_bricks.push(entity);
@@ -1393,7 +1397,7 @@ pub fn studio_ui(
 
     if let Some(dragged) = ui_state.dragged_entity.entity {
         if panel_res.response.hovered() && ctx.input(|i| i.pointer.any_released()) {
-            if let Ok((_, _, _, child_of_opt, _, _, _, child_global, _, _, _, _)) =
+            if let Ok((_, _, _, child_of_opt, _, _, _, child_global, _, _, _, _, _)) =
                 queries.entities_query.get(dragged)
             {
                 let old_parent = child_of_opt.map(|co| co.parent());
@@ -1401,7 +1405,7 @@ pub fn studio_ui(
                     .entities_query
                     .get(dragged)
                     .ok()
-                    .map(|(_, t, _, _, _, _, _, _, _, _, _, _)| *t)
+                    .map(|(_, t, _, _, _, _, _, _, _, _, _, _, _)| *t)
                     .unwrap_or(Transform::IDENTITY);
 
                 let new_transform = Transform {
