@@ -151,7 +151,10 @@ pub fn handle_file_dialog_results(
                     if let Some(mut cam_t) = camera_transform_query.iter_mut().next() {
                         *cam_t = state.camera_transform;
                     }
+                    let version = state.version;
                     let mut named_entities = std::collections::HashMap::new();
+                    let mut node_entities = std::collections::HashMap::new();
+                    let mut pending_parents = Vec::new();
                     for brick in state.bricks {
                         let layers = if brick.player_can_collide {
                             avian3d::prelude::CollisionLayers::from_bits(0b0001, 0xFFFF_FFFF)
@@ -175,7 +178,9 @@ pub fn handle_file_dialog_results(
                             Pickable::default(),
                             Name::new(brick.name.clone()),
                         )).id();
-                        named_entities.insert(brick.name, new_id);
+                        named_entities.entry(brick.name).or_insert(new_id);
+                        node_entities.insert(brick.node_id, new_id);
+                        if let Some(parent) = brick.parent_node_id { pending_parents.push((new_id, parent)); }
                     }
                     for script in state.scripts {
                         let mut cmd = commands.spawn(Name::new(script.name));
@@ -207,11 +212,19 @@ pub fn handle_file_dialog_results(
                             }
                         }
                         let new_script_entity = cmd.id();
+                        node_entities.insert(script.node_id, new_script_entity);
+                        if let Some(parent) = script.parent_node_id {
+                            pending_parents.push((new_script_entity, parent));
+                        } else if version < 6 {
                         if let Some(ref p_name) = script.parent_name {
                             if let Some(&parent_entity) = named_entities.get(p_name) {
                                 commands.entity(parent_entity).add_child(new_script_entity);
                             }
                         }
+                        }
+                    }
+                    for (child, parent_id) in pending_parents {
+                        if let Some(parent) = node_entities.get(&parent_id) { commands.entity(*parent).add_child(child); }
                     }
                 }
                 file_dialog_state.is_open.store(false, std::sync::atomic::Ordering::Relaxed);
@@ -219,9 +232,12 @@ pub fn handle_file_dialog_results(
             FileDialogResult::SaveAs(path) => {
                 let save_path_str = path.display().to_string();
                 onboarding_data.save_path = save_path_str.clone();
+                let node_ids: std::collections::HashMap<Entity, u64> = save_explorer_query.iter()
+                    .filter(|(_, _, _, _, brick, server, local, module)| brick.is_some() || server.is_some() || local.is_some() || module.is_some())
+                    .enumerate().map(|(index, (entity, _, _, _, _, _, _, _))| (entity, index as u64)).collect();
 
                 let mut bricks_data = Vec::new();
-                for (_, transform, name, _, _, brick_opt, shape_opt, _, _, mat_opt, studs_mat_opt, phys_opt) in &save_query {
+                for (entity, transform, name, child_of, _, brick_opt, shape_opt, _, _, mat_opt, studs_mat_opt, phys_opt) in &save_query {
                     if brick_opt.is_some() {
                         let shape = shape_opt.as_ref().map(|s| s.shape).unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
                         let mut current_color = Color::Srgba(Srgba::new(0.84, 0.24, 0.16, 1.0));
@@ -240,6 +256,8 @@ pub fn handle_file_dialog_results(
                             (true, 0.3, true, 0.3, 1.0, 1.0)
                         };
                         bricks_data.push(crate::common::core::vrtx::VrtxBrick {
+                            node_id: node_ids.get(&entity).copied().unwrap_or(bricks_data.len() as u64),
+                            parent_node_id: child_of.and_then(|parent| node_ids.get(&parent.parent()).copied()),
                             name: name.to_string(),
                             transform: *transform,
                             shape,
@@ -255,7 +273,7 @@ pub fn handle_file_dialog_results(
                 }
 
                 let mut scripts_data = Vec::new();
-                for (_entity, name, child_of_opt, _, _, s_opt, l_opt, m_opt) in &save_explorer_query {
+                for (entity, name, child_of_opt, _, _, s_opt, l_opt, m_opt) in &save_explorer_query {
                     let mut script_type_opt = None;
                     let mut code = String::new();
                     let mut enabled = true;
@@ -279,6 +297,8 @@ pub fn handle_file_dialog_results(
                             }
                         }
                         scripts_data.push(crate::common::core::vrtx::VrtxScript {
+                            node_id: node_ids.get(&entity).copied().unwrap_or((bricks_data.len() + scripts_data.len()) as u64),
+                            parent_node_id: child_of_opt.and_then(|parent| node_ids.get(&parent.parent()).copied()),
                             name: name.to_string(),
                             script_type,
                             code,
@@ -299,7 +319,7 @@ pub fn handle_file_dialog_results(
                     Transform::IDENTITY
                 };
                 let state = crate::common::core::vrtx::VrtxFileState {
-                    version: 5,
+                    version: crate::common::core::vrtx::CURRENT_VRTX_VERSION,
                     gravity: gravity_val,
                     settings: crate::common::core::vrtx::VrtxSettings {
                         ssao: graphics_settings.ssao,

@@ -213,6 +213,8 @@ pub fn draw_onboarding(
                             let mut bricks = Vec::new();
                             if onboarding_data.selected_template == SelectedTemplate::Baseplate {
                                 bricks.push(crate::common::core::vrtx::VrtxBrick {
+                                    node_id: bricks.len() as u64,
+                                    parent_node_id: None,
                                     name: "Baseplate".to_string(),
                                     transform: Transform::from_xyz(0.0, -0.14, 0.0).with_scale(Vec3::new(25.0, 1.0, 50.0)),
                                     shape: crate::common::game::bricks::components::BrickShape::Block,
@@ -225,6 +227,8 @@ pub fn draw_onboarding(
                                     mass: 1.0,
                                 });
                                 bricks.push(crate::common::core::vrtx::VrtxBrick {
+                                    node_id: bricks.len() as u64,
+                                    parent_node_id: None,
                                     name: "Part0".to_string(),
                                     transform: Transform::from_xyz(0.0, 0.14, 0.0),
                                     shape: crate::common::game::bricks::components::BrickShape::Block,
@@ -239,7 +243,7 @@ pub fn draw_onboarding(
                             }
 
                             let state = crate::common::core::vrtx::VrtxFileState {
-                                version: 5,
+                                version: crate::common::core::vrtx::CURRENT_VRTX_VERSION,
                                 gravity: Vec3::new(0.0, -186.9 * 0.28, 0.0),
                                 settings: crate::common::core::vrtx::VrtxSettings {
                                     ssao: false,

@@ -2,8 +2,12 @@ use std::fs::File;
 use std::io::{Read, Write, BufReader, BufWriter};
 use bevy::prelude::*;
 
+pub const CURRENT_VRTX_VERSION: u32 = 6;
+
 #[derive(Debug, Clone)]
 pub struct VrtxBrick {
+    pub node_id: u64,
+    pub parent_node_id: Option<u64>,
     pub name: String,
     pub transform: Transform,
     pub shape: crate::common::game::bricks::components::BrickShape,
@@ -18,6 +22,8 @@ pub struct VrtxBrick {
 
 #[derive(Debug, Clone)]
 pub struct VrtxScript {
+    pub node_id: u64,
+    pub parent_node_id: Option<u64>,
     pub name: String,
     pub script_type: u8,
     pub code: String,
@@ -477,6 +483,8 @@ fn collect_bricks_recursive(
 
             if is_standard_brick {
                 bricks.push(VrtxBrick {
+                    node_id: bricks.len() as u64,
+                    parent_node_id: None,
                     name,
                     transform: global_transform,
                     shape,
@@ -612,6 +620,10 @@ impl VrtxFileState {
             let name_bytes = brick.name.as_bytes();
             writer.write_all(&(name_bytes.len() as u16).to_le_bytes())?;
             writer.write_all(name_bytes)?;
+            if self.version >= 6 {
+                writer.write_all(&brick.node_id.to_le_bytes())?;
+                writer.write_all(&brick.parent_node_id.unwrap_or(u64::MAX).to_le_bytes())?;
+            }
 
             writer.write_all(&brick.transform.translation.x.to_le_bytes())?;
             writer.write_all(&brick.transform.translation.y.to_le_bytes())?;
@@ -652,6 +664,10 @@ impl VrtxFileState {
                 let name_bytes = script.name.as_bytes();
                 writer.write_all(&(name_bytes.len() as u16).to_le_bytes())?;
                 writer.write_all(name_bytes)?;
+                if self.version >= 6 {
+                    writer.write_all(&script.node_id.to_le_bytes())?;
+                    writer.write_all(&script.parent_node_id.unwrap_or(u64::MAX).to_le_bytes())?;
+                }
 
                 writer.write_all(&[script.script_type])?;
 
@@ -782,6 +798,14 @@ impl VrtxFileState {
                 reader.read_exact(&mut name_bytes)?;
                 let name = String::from_utf8(name_bytes)
                     .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+                let (node_id, parent_node_id) = if version >= 6 {
+                    let mut id = [0u8; 8]; reader.read_exact(&mut id)?;
+                    let mut parent = [0u8; 8]; reader.read_exact(&mut parent)?;
+                    let parent = u64::from_le_bytes(parent);
+                    (u64::from_le_bytes(id), (parent != u64::MAX).then_some(parent))
+                } else {
+                    (bricks.len() as u64, None)
+                };
 
                 let mut tx = [0u8; 4]; reader.read_exact(&mut tx)?;
                 let mut ty = [0u8; 4]; reader.read_exact(&mut ty)?;
@@ -876,6 +900,8 @@ impl VrtxFileState {
                 };
 
                 bricks.push(VrtxBrick {
+                    node_id,
+                    parent_node_id,
                     name,
                     transform,
                     shape,
@@ -901,6 +927,14 @@ impl VrtxFileState {
                         let mut name_bytes = vec![0u8; name_len];
                         reader.read_exact(&mut name_bytes)?;
                         let name = String::from_utf8(name_bytes).unwrap_or_default();
+                        let (node_id, parent_node_id) = if version >= 6 {
+                            let mut id = [0u8; 8]; reader.read_exact(&mut id)?;
+                            let mut parent = [0u8; 8]; reader.read_exact(&mut parent)?;
+                            let parent = u64::from_le_bytes(parent);
+                            (u64::from_le_bytes(id), (parent != u64::MAX).then_some(parent))
+                        } else {
+                            ((bricks.len() + scripts.len()) as u64, None)
+                        };
 
                         let mut type_bytes = [0u8; 1];
                         reader.read_exact(&mut type_bytes)?;
@@ -933,6 +967,8 @@ impl VrtxFileState {
                         };
 
                         scripts.push(VrtxScript {
+                            node_id,
+                            parent_node_id,
                             name,
                             script_type,
                             code,
@@ -966,5 +1002,37 @@ impl VrtxFileState {
                 "Unknown or invalid file signature",
             ))
         }
+    }
+}
+
+#[cfg(test)]
+mod hierarchy_tests {
+    use super::*;
+
+    #[test]
+    fn version_six_round_trips_node_hierarchy() {
+        let path = std::env::temp_dir().join(format!("rave-vrtx-v6-{}.vrtx", std::process::id()));
+        let state = VrtxFileState {
+            version: CURRENT_VRTX_VERSION,
+            gravity: Vec3::new(0.0, -9.8, 0.0),
+            settings: VrtxSettings { ssao: true, contact_shadows: false, bloom: true },
+            camera_transform: Transform::IDENTITY,
+            bricks: vec![VrtxBrick {
+                node_id: 10, parent_node_id: None, name: "Duplicate".into(), transform: Transform::IDENTITY,
+                shape: crate::common::game::bricks::components::BrickShape::Block, color: Color::WHITE,
+                physics_enabled: true, bounciness: 0.3, player_can_collide: true, friction: 0.3, gravity_scale: 1.0, mass: 1.0,
+            }],
+            scripts: vec![VrtxScript {
+                node_id: 11, parent_node_id: Some(10), name: "Duplicate".into(), script_type: 0,
+                code: "print('ok')".into(), parent_name: None, enabled: true,
+            }],
+        };
+        state.save_to_file(path.to_str().unwrap()).unwrap();
+        let loaded = VrtxFileState::load_from_file(path.to_str().unwrap()).unwrap();
+        std::fs::remove_file(path).unwrap();
+        assert_eq!(loaded.version, CURRENT_VRTX_VERSION);
+        assert_eq!(loaded.bricks[0].node_id, 10);
+        assert_eq!(loaded.scripts[0].parent_node_id, Some(10));
+        assert_eq!(loaded.bricks[0].name, loaded.scripts[0].name);
     }
 }

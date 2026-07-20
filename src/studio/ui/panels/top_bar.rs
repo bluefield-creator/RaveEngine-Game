@@ -103,8 +103,11 @@ pub fn draw_top_bar(
                     let file_button_res = egui::menu::menu_button(ui, egui::RichText::new("File").color(file_text_color).size(13.0), |ui| {
                         let save_enabled = !onboarding_data.save_path.is_empty();
                         if ui.add_enabled(save_enabled, egui::Button::new("Save")).clicked() {
+                            let node_ids: std::collections::HashMap<Entity, u64> = explorer_query.iter()
+                                .filter(|(_, _, _, _, brick, server, local, module)| brick.is_some() || server.is_some() || local.is_some() || module.is_some())
+                                .enumerate().map(|(index, (entity, _, _, _, _, _, _, _))| (entity, index as u64)).collect();
                             let mut bricks_data = Vec::new();
-                            for (_, transform, name, _, _, brick_opt, shape_opt, _, _, mat_opt, studs_mat_opt, phys_opt) in entities_query.iter() {
+                            for (entity, transform, name, child_of, _, brick_opt, shape_opt, _, _, mat_opt, studs_mat_opt, phys_opt) in entities_query.iter() {
                                 if brick_opt.is_some() {
                                     let shape = shape_opt.as_ref().map(|s| s.shape).unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
                                     let mut current_color = Color::Srgba(Srgba::new(0.84, 0.24, 0.16, 1.0));
@@ -123,6 +126,8 @@ pub fn draw_top_bar(
                                         (true, 0.3, true, 0.3, 1.0, 1.0)
                                     };
                                     bricks_data.push(crate::common::core::vrtx::VrtxBrick {
+                                        node_id: node_ids.get(&entity).copied().unwrap_or(bricks_data.len() as u64),
+                                        parent_node_id: child_of.and_then(|parent| node_ids.get(&parent.parent()).copied()),
                                         name: name.to_string(),
                                         transform: *transform,
                                         shape,
@@ -138,7 +143,7 @@ pub fn draw_top_bar(
                             }
 
                             let mut scripts_data = Vec::new();
-                            for (_entity, name, child_of_opt, _, _, s_opt, l_opt, m_opt) in explorer_query.iter() {
+                            for (entity, name, child_of_opt, _, _, s_opt, l_opt, m_opt) in explorer_query.iter() {
                                 let mut script_type_opt = None;
                                 let mut code = String::new();
                                 let mut enabled = true;
@@ -162,6 +167,8 @@ pub fn draw_top_bar(
                                         }
                                     }
                                     scripts_data.push(crate::common::core::vrtx::VrtxScript {
+                                        node_id: node_ids.get(&entity).copied().unwrap_or((bricks_data.len() + scripts_data.len()) as u64),
+                                        parent_node_id: child_of_opt.and_then(|parent| node_ids.get(&parent.parent()).copied()),
                                         name: name.to_string(),
                                         script_type,
                                         code,
@@ -182,7 +189,7 @@ pub fn draw_top_bar(
                                 Transform::IDENTITY
                             };
                             let state = crate::common::core::vrtx::VrtxFileState {
-                                version: 5,
+                                version: crate::common::core::vrtx::CURRENT_VRTX_VERSION,
                                 gravity: gravity_val,
                                 settings: crate::common::core::vrtx::VrtxSettings {
                                     ssao: graphics_settings.ssao,
@@ -668,6 +675,8 @@ pub fn draw_top_bar(
                                         }
                                     }
                                     backup_scripts.push(crate::common::core::vrtx::VrtxScript {
+                                        node_id: backup_scripts.len() as u64,
+                                        parent_node_id: None,
                                         name: _name.to_string(),
                                         script_type,
                                         code,
@@ -681,7 +690,7 @@ pub fn draw_top_bar(
 
                             let temp_map_path = "temp_play.vrtx".to_string();
                             let state = crate::common::core::vrtx::VrtxFileState {
-                                version: 5,
+                                version: crate::common::core::vrtx::CURRENT_VRTX_VERSION,
                                 gravity: Vec3::new(0.0, -186.9 * 0.28, 0.0),
                                 settings: crate::common::core::vrtx::VrtxSettings {
                                     ssao: graphics_settings.ssao,
@@ -706,6 +715,8 @@ pub fn draw_top_bar(
                                         (true, 0.3, true, 0.3, 1.0, 1.0)
                                     };
                                     crate::common::core::vrtx::VrtxBrick {
+                                        node_id: 0,
+                                        parent_node_id: None,
                                         name: b.name.clone(),
                                         transform: b.transform,
                                         shape: b.shape,
