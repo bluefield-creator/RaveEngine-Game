@@ -89,6 +89,7 @@ pub fn handle_file_dialog_results(
     mut commands: Commands,
     file_dialog_state: Res<FileDialogState>,
     mut onboarding_data: ResMut<crate::studio::ui::panels::onboarding::OnboardingData>,
+    mut next_onboarding_state: ResMut<NextState<crate::studio::tools::OnboardingState>>,
     mut graphics_settings: ResMut<crate::common::core::performance::GraphicsSettings>,
     mut gravity: Option<ResMut<avian3d::prelude::Gravity>>,
     mut camera_transform_query: Query<&mut Transform, With<Camera3d>>,
@@ -131,6 +132,7 @@ pub fn handle_file_dialog_results(
             FileDialogResult::OpenFile(path) => {
                 let open_path_str = path.display().to_string();
                 if let Ok(state) = crate::common::core::vrtx::VrtxFileState::load_from_file(&open_path_str) {
+                    next_onboarding_state.set(crate::studio::tools::OnboardingState::Inactive);
                     onboarding_data.save_path = open_path_str;
                     for (entity, brick_opt) in &entities_query {
                         if brick_opt.is_some() {
@@ -311,7 +313,9 @@ pub fn handle_file_dialog_results(
                     bricks: bricks_data,
                     scripts: scripts_data,
                 };
-                let _ = state.save_to_file(&save_path_str);
+                if let Err(e) = state.save_to_file(&save_path_str) {
+                    warn!("Failed to save project: {e}");
+                }
                 file_dialog_state.is_open.store(false, std::sync::atomic::Ordering::Relaxed);
             }
             FileDialogResult::Cancel => {

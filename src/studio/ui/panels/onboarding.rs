@@ -185,8 +185,28 @@ pub fn draw_onboarding(
                                         } else {
                                             let _ = tx.send(crate::studio::ui::resources::FileDialogResult::Cancel);
                                         }
-                                    });
+                    });
+                    ui.add_space(16.0);
+                    ui.separator();
+                    ui.add_space(12.0);
+                    ui.horizontal_centered(|ui| {
+                        let is_open = file_dialog_state.is_open.load(std::sync::atomic::Ordering::Relaxed);
+                        if ui.add_enabled(!is_open, egui::Button::new("Open Existing Project...").min_size(egui::vec2(200.0, 36.0))).clicked() {
+                            file_dialog_state.is_open.store(true, std::sync::atomic::Ordering::Relaxed);
+                            let tx = file_dialog_state.tx.clone();
+                            std::thread::spawn(move || {
+                                if let Some(path) = rfd::FileDialog::new()
+                                    .add_filter("Rave Project", &["vrtx"])
+                                    .set_directory(std::env::current_dir().unwrap_or_default())
+                                    .pick_file() {
+                                    let _ = tx.send(crate::studio::ui::resources::FileDialogResult::OpenFile(path));
+                                } else {
+                                    let _ = tx.send(crate::studio::ui::resources::FileDialogResult::Cancel);
                                 }
+                            });
+                        }
+                    });
+                }
                             });
                         });
                     });
