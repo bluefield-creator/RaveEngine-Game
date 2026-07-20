@@ -22,7 +22,9 @@ pub fn handle_hello_messages(
     mut receivers: Query<(Entity, &RemoteId, &mut MessageReceiver<crate::common::net::messages::HelloMessage>, Option<&ReplicationSender>)>,
     mut sender_query: Query<&mut MessageSender<crate::common::net::messages::KickMessage>>,
     mut success_sender_query: Query<&mut MessageSender<crate::common::net::messages::AuthSuccessMessage>>,
+    settings: Res<crate::server::ServerSettings>,
 ) {
+    let is_local = settings.bind_addr.ip().to_string().starts_with("127.");
     for (client_entity, remote_id, mut receiver, rep_sender) in receivers.iter_mut() {
         if rep_sender.is_some() {
             continue;
@@ -31,7 +33,7 @@ pub fn handle_hello_messages(
         for _hello in receiver.receive() {
             debug!("Received HelloMessage from client {}", client_id);
 
-            match crate::common::net::auth::validate_user_ukey(&_hello.ukey) {
+            match crate::common::net::auth::validate_user_ukey(&_hello.ukey, is_local) {
                 Ok(response) => {
                     if let Ok(mut success_sender) = success_sender_query.get_mut(client_entity) {
                         let _ = success_sender.send::<crate::common::net::messages::GameChannel>(
