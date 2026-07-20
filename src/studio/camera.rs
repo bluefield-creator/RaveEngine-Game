@@ -78,9 +78,7 @@ pub fn setup_studio(
             clear_color: ClearColorConfig::None,
             ..default()
         },
-        Hdr,
-        Msaa::Sample4,
-        bevy::core_pipeline::tonemapping::Tonemapping::TonyMcMapface,
+        Msaa::Off,
         bevy::camera::visibility::RenderLayers::layer(1),
         bevy_egui::PrimaryEguiContext,
         GizmoCamera,
