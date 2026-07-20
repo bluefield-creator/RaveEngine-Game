@@ -7,9 +7,6 @@ use bevy::pbr::{ContactShadows, ScreenSpaceAmbientOcclusion};
 use bevy::post_process::bloom::Bloom;
 use bevy::prelude::*;
 
-#[derive(Component)]
-pub struct GizmoCamera;
-
 pub fn setup_studio(
     mut commands: Commands,
     mut egui_global_settings: ResMut<bevy_egui::EguiGlobalSettings>,
@@ -41,6 +38,8 @@ pub fn setup_studio(
         NormalPrepass,
         bevy::render::occlusion_culling::OcclusionCulling,
         ShadowFilteringMethod::Gaussian,
+        bevy::camera::visibility::RenderLayers::from_layers(&[0, 1]),
+        bevy_egui::PrimaryEguiContext,
     ));
 
     camera.insert((MotionVectorPrepass, Fxaa::default()));
@@ -70,19 +69,6 @@ pub fn setup_studio(
     if let Some(bloom) = bloom_val.clone() {
         camera.insert(bloom);
     }
-
-    commands.spawn((
-        Camera3d::default(),
-        Camera {
-            order: 1,
-            clear_color: ClearColorConfig::None,
-            ..default()
-        },
-        Msaa::Off,
-        bevy::camera::visibility::RenderLayers::layer(1),
-        bevy_egui::PrimaryEguiContext,
-        GizmoCamera,
-    ));
 
     commands.spawn((Name::new("Workspace"),));
 
@@ -139,27 +125,30 @@ pub fn disable_camera_on_ui_interaction(
     }
 }
 
-pub fn sync_gizmo_camera(
-    camera_query: Query<(&Transform, &Projection, &Camera), (With<Camera3d>, Without<GizmoCamera>)>,
-    mut gizmo_camera: Query<(&mut Transform, &mut Projection), With<GizmoCamera>>,
+pub fn sync_primary_egui_camera(
+    mut commands: Commands,
+    camera_query: Query<(Entity, &Camera), With<Camera3d>>,
+    context_query: Query<Entity, With<bevy_egui::PrimaryEguiContext>>,
 ) {
-    let mut chosen = None;
-    for (trans, proj, cam) in &camera_query {
-        if cam.is_active {
-            chosen = Some((trans, proj));
-            break;
+    let target = camera_query
+        .iter()
+        .filter(|(_, camera)| camera.is_active)
+        .max_by_key(|(_, camera)| camera.order)
+        .map(|(entity, _)| entity);
+    let Some(target) = target else {
+        return;
+    };
+    for entity in &context_query {
+        if entity != target {
+            commands
+                .entity(entity)
+                .remove::<bevy_egui::PrimaryEguiContext>();
         }
     }
-    if chosen.is_none() {
-        if let Some((trans, proj, _)) = camera_query.iter().next() {
-            chosen = Some((trans, proj));
-        }
-    }
-    if let Some((main_trans, main_proj)) = chosen {
-        if let Some((mut gizmo_trans, mut gizmo_proj)) = gizmo_camera.iter_mut().next() {
-            *gizmo_trans = *main_trans;
-            *gizmo_proj = main_proj.clone();
-        }
+    if !context_query.contains(target) {
+        commands
+            .entity(target)
+            .insert(bevy_egui::PrimaryEguiContext);
     }
 }
 
