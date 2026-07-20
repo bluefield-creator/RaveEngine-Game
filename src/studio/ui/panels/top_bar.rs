@@ -6,6 +6,47 @@ use bevy::pbr::ExtendedMaterial;
 use bevy::prelude::*;
 use bevy_egui::egui;
 
+fn style_top_bar_menu(ui: &mut egui::Ui) {
+    let widgets = &mut ui.style_mut().visuals.widgets;
+    for visuals in [
+        &mut widgets.inactive,
+        &mut widgets.hovered,
+        &mut widgets.active,
+    ] {
+        visuals.weak_bg_fill = egui::Color32::TRANSPARENT;
+        visuals.bg_fill = egui::Color32::TRANSPARENT;
+        visuals.bg_stroke = egui::Stroke::NONE;
+    }
+}
+
+#[allow(deprecated)]
+fn top_bar_menu<R>(
+    ui: &mut egui::Ui,
+    id_source: &'static str,
+    label: &'static str,
+    add_contents: impl FnOnce(&mut egui::Ui) -> R,
+) {
+    let id = ui.make_persistent_id(id_source);
+    let hovered = ui.data(|data| data.get_temp::<bool>(id)).unwrap_or(false);
+    let color = if hovered {
+        egui::Color32::from_rgb(80, 160, 240)
+    } else {
+        egui::Color32::from_rgb(60, 60, 60)
+    };
+    let response = ui
+        .scope(|ui| {
+            style_top_bar_menu(ui);
+            egui::menu::menu_button(
+                ui,
+                egui::RichText::new(label).color(color).size(13.0),
+                add_contents,
+            )
+        })
+        .inner
+        .response;
+    ui.data_mut(|data| data.insert_temp(id, response.hovered()));
+}
+
 #[allow(deprecated)]
 pub fn draw_top_bar(
     ui: &mut egui::Ui,
@@ -115,17 +156,7 @@ pub fn draw_top_bar(
 
                 let mut is_hovered = false;
                 ui.scope(|ui| {
-                    ui.style_mut().visuals.widgets.inactive.weak_bg_fill = egui::Color32::TRANSPARENT;
-                    ui.style_mut().visuals.widgets.inactive.bg_fill = egui::Color32::TRANSPARENT;
-                    ui.style_mut().visuals.widgets.inactive.bg_stroke = egui::Stroke::NONE;
-
-                    ui.style_mut().visuals.widgets.hovered.weak_bg_fill = egui::Color32::TRANSPARENT;
-                    ui.style_mut().visuals.widgets.hovered.bg_fill = egui::Color32::TRANSPARENT;
-                    ui.style_mut().visuals.widgets.hovered.bg_stroke = egui::Stroke::NONE;
-
-                    ui.style_mut().visuals.widgets.active.weak_bg_fill = egui::Color32::TRANSPARENT;
-                    ui.style_mut().visuals.widgets.active.bg_fill = egui::Color32::TRANSPARENT;
-                    ui.style_mut().visuals.widgets.active.bg_stroke = egui::Stroke::NONE;
+                    style_top_bar_menu(ui);
 
                     let file_button_res = egui::menu::menu_button(ui, egui::RichText::new("File").color(file_text_color).size(13.0), |ui| {
                         if ui.button("New Project\tCtrl+N").clicked() {
@@ -269,7 +300,7 @@ pub fn draw_top_bar(
                 });
                 ui.data_mut(|d| d.insert_temp(file_id, is_hovered));
 
-                egui::menu::menu_button(ui, "Edit", |ui| {
+                top_bar_menu(ui, "edit_menu_btn", "Edit", |ui| {
                     for (label, action, enabled) in [
                         ("Undo\tCtrl+Z", crate::studio::ui::resources::EditorAction::Undo, !history.undo_stack.is_empty()),
                         ("Redo\tCtrl+Y", crate::studio::ui::resources::EditorAction::Redo, !history.redo_stack.is_empty()),
@@ -284,12 +315,12 @@ pub fn draw_top_bar(
                         if ui.add_enabled(enabled, egui::Button::new(label)).clicked() { actions.0.push(action); ui.close(); }
                     }
                 });
-                egui::menu::menu_button(ui, "Insert", |ui| {
+                top_bar_menu(ui, "insert_menu_btn", "Insert", |ui| {
                     for (label, kind) in [("Part", crate::studio::ui::resources::InsertKind::Part), ("Sphere", crate::studio::ui::resources::InsertKind::Sphere), ("Script", crate::studio::ui::resources::InsertKind::ServerScript), ("LocalScript", crate::studio::ui::resources::InsertKind::LocalScript), ("ModuleScript", crate::studio::ui::resources::InsertKind::ModuleScript)] {
                         if ui.button(label).clicked() { actions.0.push(crate::studio::ui::resources::EditorAction::Insert(kind, selection.entity)); ui.close(); }
                     }
                 });
-                egui::menu::menu_button(ui, "View", |ui| {
+                top_bar_menu(ui, "view_menu_btn", "View", |ui| {
                     if ui.selectable_label(layout.explorer_visible, "Explorer").clicked() { actions.0.push(crate::studio::ui::resources::EditorAction::ToggleExplorer); }
                     if ui.selectable_label(layout.properties_visible, "Properties").clicked() { actions.0.push(crate::studio::ui::resources::EditorAction::ToggleProperties); }
                     if ui.selectable_label(layout.script_editor_visible, "Script Editor").clicked() { actions.0.push(crate::studio::ui::resources::EditorAction::ToggleScriptEditor); }
@@ -298,7 +329,7 @@ pub fn draw_top_bar(
                     if ui.button("Reset Camera").clicked() { actions.0.push(crate::studio::ui::resources::EditorAction::ResetCamera); ui.close(); }
                     if ui.button("Reset Layout").clicked() { actions.0.push(crate::studio::ui::resources::EditorAction::ResetLayout); ui.close(); }
                 });
-                egui::menu::menu_button(ui, "Test", |ui| {
+                top_bar_menu(ui, "test_menu_btn", "Test", |ui| {
                     let simulation = if physics_state == crate::common::game::physics::PhysicsSimulationState::Running { "Stop Simulation\tF6" } else { "Play Simulation\tF6" };
                     if ui.button(simulation).clicked() { ui.data_mut(|data| data.insert_temp(egui::Id::new("trigger_simulation"), true)); ui.close(); }
                     let playtest = if playtest_state.active { "Stop Playtest\tShift+F5" } else { "Play in Studio\tF5" };
