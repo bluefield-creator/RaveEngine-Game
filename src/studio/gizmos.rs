@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy::picking::mesh_picking::ray_cast::SimplifiedMesh;
-use crate::common::game::bricks::components::Brick;
+use crate::common::game::bricks::components::{Brick, BrickShape};
 use crate::studio::tools::{Selection, ToolState, HoverState, DragState};
 
 #[derive(Component)]
@@ -310,5 +310,64 @@ pub fn draw_selection_outline(
     }
     for &selected_entity in &selection.entities {
         draw_outline_recursive(selected_entity, &bricks, &mut gizmos);
+    }
+}
+
+fn draw_hover_outline_recursive(
+    entity: Entity,
+    bricks: &Query<(&GlobalTransform, Option<&BrickShapeComponent>, Option<&Children>), With<Brick>>,
+    gizmos: &mut Gizmos,
+) {
+    if let Ok((global_transform, shape_opt, children_opt)) = bricks.get(entity) {
+        let (scale, rotation, translation) = global_transform.to_scale_rotation_translation();
+        let shape = shape_opt.map(|s| s.shape).unwrap_or(BrickShape::Block);
+
+        match shape {
+            BrickShape::Block => {
+                let outline_scale = scale * Vec3::new(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28);
+                let outline_transform = Transform {
+                    translation,
+                    rotation,
+                    scale: outline_scale,
+                };
+                gizmos.cube(outline_transform, Color::srgba(0.6, 0.8, 1.0, 0.35));
+            }
+            BrickShape::Sphere => {
+                let base_radius = 1.0 * 0.28;
+                let half_size_xy = Vec2::new(scale.x * base_radius, scale.y * base_radius);
+                let isometry_xy = Isometry3d::new(translation, rotation);
+                gizmos.ellipse(isometry_xy, half_size_xy, Color::srgba(0.6, 0.8, 1.0, 0.35));
+                let half_size_yz = Vec2::new(scale.z * base_radius, scale.y * base_radius);
+                let isometry_yz = Isometry3d::new(translation, rotation * Quat::from_rotation_y(std::f32::consts::FRAC_PI_2));
+                gizmos.ellipse(isometry_yz, half_size_yz, Color::srgba(0.6, 0.8, 1.0, 0.35));
+                let half_size_xz = Vec2::new(scale.x * base_radius, scale.z * base_radius);
+                let isometry_xz = Isometry3d::new(translation, rotation * Quat::from_rotation_x(std::f32::consts::FRAC_PI_2));
+                gizmos.ellipse(isometry_xz, half_size_xz, Color::srgba(0.6, 0.8, 1.0, 0.35));
+            }
+        }
+
+        if let Some(children) = children_opt {
+            for child in children.iter() {
+                draw_hover_outline_recursive(child, bricks, gizmos);
+            }
+        }
+    }
+}
+
+pub fn draw_hover_outline(
+    hover_state: Res<crate::studio::tools::HoverState>,
+    physics_state: Res<crate::common::game::physics::PhysicsSimulationState>,
+    playtest: Option<Res<crate::client::PlaytestState>>,
+    bricks: Query<(&GlobalTransform, Option<&BrickShapeComponent>, Option<&Children>), With<Brick>>,
+    mut gizmos: Gizmos,
+) {
+    if *physics_state == crate::common::game::physics::PhysicsSimulationState::Running {
+        return;
+    }
+    if playtest.map_or(false, |p| p.active) {
+        return;
+    }
+    if let Some(hovered) = hover_state.hovered_brick {
+        draw_hover_outline_recursive(hovered, &bricks, &mut gizmos);
     }
 }

@@ -53,6 +53,7 @@ pub struct PartDragState {
 #[derive(Resource, Default)]
 pub struct HoverState {
     pub hovered_gizmo: Option<Entity>,
+    pub hovered_brick: Option<Entity>,
     pub is_hovering_ui: bool,
 }
 
@@ -837,18 +838,24 @@ pub fn handle_hover(
     mut overs: MessageReader<Pointer<Over>>,
     mut outs: MessageReader<Pointer<Out>>,
     gizmos: Query<&ToolGizmo>,
+    bricks: Query<Entity, With<Brick>>,
     mut hover_state: ResMut<HoverState>,
 ) {
     for over in overs.read() {
         let target = over.event_target();
         if gizmos.get(target).is_ok() {
             hover_state.hovered_gizmo = Some(target);
+        } else if bricks.get(target).is_ok() {
+            hover_state.hovered_brick = Some(target);
         }
     }
     for out in outs.read() {
         let target = out.event_target();
         if Some(target) == hover_state.hovered_gizmo {
             hover_state.hovered_gizmo = None;
+        }
+        if Some(target) == hover_state.hovered_brick {
+            hover_state.hovered_brick = None;
         }
     }
 }
@@ -863,7 +870,7 @@ pub fn update_cursor(
     let Ok(window_entity) = windows.single() else { return };
     if drag_state.active || part_drag_state.active {
         commands.entity(window_entity).insert(CursorIcon::from(SystemCursorIcon::Grabbing));
-    } else if hover_state.hovered_gizmo.is_some() {
+    } else if hover_state.hovered_gizmo.is_some() || hover_state.hovered_brick.is_some() {
         commands.entity(window_entity).insert(CursorIcon::from(SystemCursorIcon::Grab));
     } else {
         commands.entity(window_entity).remove::<CursorIcon>();
