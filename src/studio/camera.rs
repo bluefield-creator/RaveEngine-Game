@@ -39,6 +39,7 @@ pub fn setup_studio(
         bevy::render::occlusion_culling::OcclusionCulling,
         ShadowFilteringMethod::Gaussian,
         bevy::camera::visibility::RenderLayers::from_layers(&[0, 1]),
+        bevy_egui::PrimaryEguiContext,
     ));
 
     camera.insert((MotionVectorPrepass, Fxaa::default()));
@@ -68,19 +69,6 @@ pub fn setup_studio(
     if let Some(bloom) = bloom_val.clone() {
         camera.insert(bloom);
     }
-
-    commands.spawn((
-        Camera2d,
-        Camera {
-            order: 100,
-            clear_color: ClearColorConfig::None,
-            ..default()
-        },
-        Msaa::Off,
-        bevy::camera::visibility::RenderLayers::layer(31),
-        bevy::ui::prelude::IsDefaultUiCamera,
-        bevy_egui::PrimaryEguiContext,
-    ));
 
     commands.spawn((Name::new("Workspace"),));
 
@@ -137,19 +125,41 @@ pub fn disable_camera_on_ui_interaction(
     }
 }
 
-pub fn toggle_editor_camera_active(
+pub fn sync_playtest_camera(
     playtest: Option<Res<crate::client::PlaytestState>>,
-    mut camera_query: Query<
-        &mut Camera,
+    mut editor_query: Query<
+        (&mut Transform, &mut Projection),
         (
             With<bevy::camera_controller::free_camera::FreeCamera>,
             Without<crate::client::player::PlayerCamera>,
         ),
     >,
+    player_query: Query<
+        (&Transform, &Projection),
+        (
+            With<crate::client::player::PlayerCamera>,
+            Without<bevy::camera_controller::free_camera::FreeCamera>,
+        ),
+    >,
+    mut saved_editor_view: Local<Option<(Transform, Projection)>>,
 ) {
     let playtesting_active = playtest.map_or(false, |p| p.active);
-    for mut camera in &mut camera_query {
-        camera.is_active = !playtesting_active;
+    let Ok((mut editor_transform, mut editor_projection)) = editor_query.single_mut() else {
+        return;
+    };
+
+    if playtesting_active {
+        let Some((player_transform, player_projection)) = player_query.iter().next() else {
+            return;
+        };
+        if saved_editor_view.is_none() {
+            *saved_editor_view = Some((*editor_transform, editor_projection.clone()));
+        }
+        *editor_transform = *player_transform;
+        *editor_projection = player_projection.clone();
+    } else if let Some((transform, projection)) = saved_editor_view.take() {
+        *editor_transform = transform;
+        *editor_projection = projection;
     }
 }
 
@@ -179,5 +189,64 @@ pub fn disable_cameras_on_minimization(
             }
         }
         previous_active_states.clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn follows_playtest_camera_and_restores_editor_view() {
+        let mut app = App::new();
+        app.insert_resource(crate::client::PlaytestState { active: true })
+            .add_systems(Update, sync_playtest_camera);
+
+        let editor_transform = Transform::from_xyz(-10.0, 10.0, -10.0);
+        let player_transform = Transform::from_xyz(2.0, 3.0, 4.0);
+        let editor = app
+            .world_mut()
+            .spawn((
+                FreeCamera::default(),
+                editor_transform,
+                Projection::Perspective(PerspectiveProjection {
+                    fov: 80.0f32.to_radians(),
+                    ..default()
+                }),
+            ))
+            .id();
+        app.world_mut().spawn((
+            crate::client::player::PlayerCamera,
+            player_transform,
+            Projection::Perspective(PerspectiveProjection {
+                fov: 70.0f32.to_radians(),
+                ..default()
+            }),
+        ));
+
+        app.update();
+
+        let followed_transform = app.world().get::<Transform>(editor).unwrap();
+        assert_eq!(*followed_transform, player_transform);
+        let Projection::Perspective(followed_projection) =
+            app.world().get::<Projection>(editor).unwrap()
+        else {
+            panic!("expected perspective projection");
+        };
+        assert_eq!(followed_projection.fov, 70.0f32.to_radians());
+
+        app.world_mut()
+            .resource_mut::<crate::client::PlaytestState>()
+            .active = false;
+        app.update();
+
+        let restored_transform = app.world().get::<Transform>(editor).unwrap();
+        assert_eq!(*restored_transform, editor_transform);
+        let Projection::Perspective(restored_projection) =
+            app.world().get::<Projection>(editor).unwrap()
+        else {
+            panic!("expected perspective projection");
+        };
+        assert_eq!(restored_projection.fov, 80.0f32.to_radians());
     }
 }

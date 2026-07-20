@@ -378,13 +378,6 @@ fn sync_local_player(
             }
 
             let mut cam_cmd = commands.spawn((
-                Camera3d::default(),
-                Camera::default(),
-                Projection::Perspective(PerspectiveProjection {
-                    far: 3000.0,
-                    fov: 70.0f32.to_radians(),
-                    ..default()
-                }),
                 player::PlayerCamera,
                 player::CameraSettings {
                     yaw: 0.0,
@@ -394,14 +387,24 @@ fn sync_local_player(
                     target_offset: Vec3::new(0.0, 0.55, 0.0),
                 },
                 Transform::from_xyz(0.0, 5.0, 10.0).looking_at(Vec3::ZERO, Vec3::Y),
-                Msaa::Sample4,
-                Hdr,
-                bevy::core_pipeline::tonemapping::Tonemapping::TonyMcMapface,
-                ShadowFilteringMethod::Gaussian,
+                GlobalTransform::default(),
+                Projection::Perspective(PerspectiveProjection {
+                    far: 3000.0,
+                    fov: 70.0f32.to_radians(),
+                    ..default()
+                }),
             ));
 
             if std::env::var("VERTIGO_APP").unwrap_or_default() == "client" {
-                cam_cmd.insert(bevy_egui::PrimaryEguiContext);
+                cam_cmd.insert((
+                    Camera3d::default(),
+                    Camera::default(),
+                    Msaa::Sample4,
+                    Hdr,
+                    bevy::core_pipeline::tonemapping::Tonemapping::TonyMcMapface,
+                    ShadowFilteringMethod::Gaussian,
+                    bevy_egui::PrimaryEguiContext,
+                ));
             }
         }
     }

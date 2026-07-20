@@ -97,7 +97,6 @@ impl Plugin for StudioPlugin {
             .add_systems(
                 Update,
                 (
-                    crate::studio::camera::toggle_editor_camera_active,
                     crate::studio::camera::disable_cameras_on_minimization,
                     ui::resources::handle_file_dialog_results,
                     ui::resources::update_studio_window_title,
@@ -109,6 +108,12 @@ impl Plugin for StudioPlugin {
                     .after(ui::resources::handle_file_dialog_results),
             )
             .add_systems(Update, ui::resources::cleanup_play_processes_on_exit)
+            .add_systems(
+                PostUpdate,
+                crate::studio::camera::sync_playtest_camera
+                    .after(crate::client::player::play_camera::update_camera)
+                    .before(bevy::transform::TransformSystems::Propagate),
+            )
             .add_systems(
                 PostUpdate,
                 tools::correct_child_transforms.after(bevy::transform::TransformSystems::Propagate),
