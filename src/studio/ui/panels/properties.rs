@@ -1,8 +1,8 @@
-use bevy::prelude::*;
-use bevy_egui::egui;
-use bevy::pbr::ExtendedMaterial;
 use crate::common::game::bricks::components::Brick;
 use avian3d::prelude::{CollisionLayers, Friction, GravityScale, Mass, Restitution};
+use bevy::pbr::ExtendedMaterial;
+use bevy::prelude::*;
+use bevy_egui::egui;
 
 fn draw_coord_edit(
     ui: &mut egui::Ui,
@@ -15,10 +15,16 @@ fn draw_coord_edit(
         ui.label(label);
     }
     let id = ui.make_persistent_id(unique_key);
-    let mut text = ui.data_mut(|d| d.get_temp::<String>(id).unwrap_or_else(|| {
-        if all_same { format!("{:.2}", val) } else { "—".to_string() }
-    }));
-    
+    let mut text = ui.data_mut(|d| {
+        d.get_temp::<String>(id).unwrap_or_else(|| {
+            if all_same {
+                format!("{:.2}", val)
+            } else {
+                "—".to_string()
+            }
+        })
+    });
+
     let res = ui.add(egui::TextEdit::singleline(&mut text).desired_width(45.0));
     if res.changed() {
         ui.data_mut(|d| d.insert_temp(id, text.clone()));
@@ -26,7 +32,11 @@ fn draw_coord_edit(
             return Some(parsed);
         }
     } else if !res.has_focus() {
-        let expected = if all_same { format!("{:.2}", val) } else { "—".to_string() };
+        let expected = if all_same {
+            format!("{:.2}", val)
+        } else {
+            "—".to_string()
+        };
         if text != expected {
             ui.data_mut(|d| d.insert_temp(id, expected));
         }
@@ -38,33 +48,48 @@ pub fn draw_properties(
     ui: &mut egui::Ui,
     selected_entities: &[Entity],
     commands: &mut Commands,
-    properties_query: &mut Query<(
-        Entity,
-        &mut Transform,
-        &Name,
-        Option<&ChildOf>,
-        Option<&Children>,
-        Option<&Brick>,
-        Option<&mut crate::common::game::bricks::components::BrickShapeComponent>,
-        &GlobalTransform,
-        Option<&Mesh3d>,
-        Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
-        Option<&mut crate::common::game::bricks::components::BrickPhysics>,
-    ), Without<Camera3d>>,
+    properties_query: &mut Query<
+        (
+            Entity,
+            &mut Transform,
+            &Name,
+            Option<&ChildOf>,
+            Option<&Children>,
+            Option<&Brick>,
+            Option<&mut crate::common::game::bricks::components::BrickShapeComponent>,
+            &GlobalTransform,
+            Option<&Mesh3d>,
+            Option<&MeshMaterial3d<StandardMaterial>>,
+            Option<
+                &MeshMaterial3d<
+                    ExtendedMaterial<
+                        StandardMaterial,
+                        crate::common::game::bricks::studs::StudsExtension,
+                    >,
+                >,
+            >,
+            Option<&mut crate::common::game::bricks::components::BrickPhysics>,
+        ),
+        Without<Camera3d>,
+    >,
     brick_colors: &mut Query<&mut crate::common::game::bricks::components::BrickColor>,
     materials: &mut Assets<StandardMaterial>,
-    studs_materials: &mut Assets<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>,
-    explorer_query: &Query<(
-        Entity,
-        &Name,
-        Option<&ChildOf>,
-        Option<&Children>,
-        Option<&Brick>,
-        Option<&crate::scripting::ecs::ServerScript>,
-        Option<&crate::scripting::ecs::LocalScript>,
-        Option<&crate::scripting::ecs::ModuleScript>,
-    ), Without<Camera3d>>,
+    studs_materials: &mut Assets<
+        ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>,
+    >,
+    explorer_query: &Query<
+        (
+            Entity,
+            &Name,
+            Option<&ChildOf>,
+            Option<&Children>,
+            Option<&Brick>,
+            Option<&crate::scripting::ecs::ServerScript>,
+            Option<&crate::scripting::ecs::LocalScript>,
+            Option<&crate::scripting::ecs::ModuleScript>,
+        ),
+        Without<Camera3d>,
+    >,
     active_editor: &mut ResMut<crate::studio::ui::resources::ActiveScriptEditor>,
 ) {
     if selected_entities.is_empty() {
@@ -80,103 +105,173 @@ pub fn draw_properties(
     }
 
     if let Some(entity) = script_entity {
-        let name_str = explorer_query.get(entity).map(|(_, n, _, _, _, _, _, _)| n.as_str().to_string()).unwrap_or_else(|_| "Script".to_string());
-        let (code, script_type, mut enabled) = if let Ok((_, _, _, _, _, s, l, m)) = explorer_query.get(entity) {
-            if let Some(ref script) = s {
-                (script.code.clone(), "Script", script.enabled)
-            } else if let Some(ref script) = l {
-                (script.code.clone(), "LocalScript", script.enabled)
-            } else if let Some(ref script) = m {
-                (script.code.clone(), "ModuleScript", true)
+        let name_str = explorer_query
+            .get(entity)
+            .map(|(_, n, _, _, _, _, _, _)| n.as_str().to_string())
+            .unwrap_or_else(|_| "Script".to_string());
+        let (code, script_type, mut enabled) =
+            if let Ok((_, _, _, _, _, s, l, m)) = explorer_query.get(entity) {
+                if let Some(ref script) = s {
+                    (script.code.clone(), "Script", script.enabled)
+                } else if let Some(ref script) = l {
+                    (script.code.clone(), "LocalScript", script.enabled)
+                } else if let Some(ref script) = m {
+                    (script.code.clone(), "ModuleScript", true)
+                } else {
+                    ("".to_string(), "Script", true)
+                }
             } else {
                 ("".to_string(), "Script", true)
-            }
-        } else {
-            ("".to_string(), "Script", true)
-        };
+            };
 
-        let parent_name_str = if let Ok((_, _, Some(child_of), _, _, _, _, _)) = explorer_query.get(entity) {
-            explorer_query.get(child_of.parent()).map(|(_, name, _, _, _, _, _, _)| name.as_str().to_string()).unwrap_or_else(|_| "None".to_string())
-        } else {
-            "Workspace".to_string()
-        };
+        let parent_name_str =
+            if let Ok((_, _, Some(child_of), _, _, _, _, _)) = explorer_query.get(entity) {
+                explorer_query
+                    .get(child_of.parent())
+                    .map(|(_, name, _, _, _, _, _, _)| name.as_str().to_string())
+                    .unwrap_or_else(|_| "None".to_string())
+            } else {
+                "Workspace".to_string()
+            };
 
         ui.vertical(|ui| {
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Properties").color(egui::Color32::from_rgb(0, 0, 0)).strong().size(16.0));
+                ui.label(
+                    egui::RichText::new("Properties")
+                        .color(egui::Color32::from_rgb(0, 0, 0))
+                        .strong()
+                        .size(16.0),
+                );
             });
 
             ui.add_space(8.0);
-            let (sep_rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
-            ui.painter().rect_filled(sep_rect, 0.0, egui::Color32::from_rgb(212, 212, 212));
+            let (sep_rect, _) =
+                ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
+            ui.painter()
+                .rect_filled(sep_rect, 0.0, egui::Color32::from_rgb(212, 212, 212));
             ui.add_space(8.0);
 
-            egui::CollapsingHeader::new(egui::RichText::new("Information").color(egui::Color32::from_rgb(0, 0, 0)).strong().size(14.0))
-                .default_open(true)
-                .show(ui, |ui| {
-                    egui::Grid::new("properties_script_info_grid")
-                        .num_columns(2)
-                        .spacing([12.0, 8.0])
-                        .show(ui, |ui| {
-                            ui.label(egui::RichText::new("Name").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
-                            let name_id = ui.make_persistent_id("properties_script_name_input");
-                            let mut name_edit = ui.data_mut(|d| d.get_temp::<String>(name_id).unwrap_or_else(|| name_str.clone()));
-                            let res = ui.add(egui::TextEdit::singleline(&mut name_edit));
-                            if res.changed() {
+            egui::CollapsingHeader::new(
+                egui::RichText::new("Information")
+                    .color(egui::Color32::from_rgb(0, 0, 0))
+                    .strong()
+                    .size(14.0),
+            )
+            .default_open(true)
+            .show(ui, |ui| {
+                egui::Grid::new("properties_script_info_grid")
+                    .num_columns(2)
+                    .spacing([12.0, 8.0])
+                    .show(ui, |ui| {
+                        ui.label(
+                            egui::RichText::new("Name")
+                                .color(egui::Color32::from_rgb(60, 60, 60))
+                                .size(13.0),
+                        );
+                        let name_id = ui.make_persistent_id("properties_script_name_input");
+                        let mut name_edit = ui.data_mut(|d| {
+                            d.get_temp::<String>(name_id)
+                                .unwrap_or_else(|| name_str.clone())
+                        });
+                        let res = ui.add(egui::TextEdit::singleline(&mut name_edit));
+                        if res.changed() {
+                            ui.data_mut(|d| d.insert_temp(name_id, name_edit.clone()));
+                            commands.entity(entity).insert(Name::new(name_edit.clone()));
+                        } else if !res.has_focus() {
+                            if name_edit != name_str {
+                                name_edit = name_str.clone();
                                 ui.data_mut(|d| d.insert_temp(name_id, name_edit.clone()));
-                                commands.entity(entity).insert(Name::new(name_edit.clone()));
-                            } else if !res.has_focus() {
-                                if name_edit != name_str {
-                                    name_edit = name_str.clone();
-                                    ui.data_mut(|d| d.insert_temp(name_id, name_edit.clone()));
-                                }
                             }
-                            ui.end_row();
+                        }
+                        ui.end_row();
 
-                            ui.label(egui::RichText::new("Class Name").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
-                            ui.label(egui::RichText::new(script_type).color(egui::Color32::BLACK).size(13.0));
-                            ui.end_row();
+                        ui.label(
+                            egui::RichText::new("Class Name")
+                                .color(egui::Color32::from_rgb(60, 60, 60))
+                                .size(13.0),
+                        );
+                        ui.label(
+                            egui::RichText::new(script_type)
+                                .color(egui::Color32::BLACK)
+                                .size(13.0),
+                        );
+                        ui.end_row();
 
-                            if script_type != "ModuleScript" {
-                                ui.label(egui::RichText::new("Enabled").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
-                                if ui.checkbox(&mut enabled, "").changed() {
-                                    if let Ok((_, _, _, _, _, s, l, _)) = explorer_query.get(entity) {
-                                        if s.is_some() {
-                                            commands.entity(entity).insert(crate::scripting::ecs::ServerScript {
+                        if script_type != "ModuleScript" {
+                            ui.label(
+                                egui::RichText::new("Enabled")
+                                    .color(egui::Color32::from_rgb(60, 60, 60))
+                                    .size(13.0),
+                            );
+                            if ui.checkbox(&mut enabled, "").changed() {
+                                if let Ok((_, _, _, _, _, s, l, _)) = explorer_query.get(entity) {
+                                    if s.is_some() {
+                                        commands.entity(entity).insert(
+                                            crate::scripting::ecs::ServerScript {
                                                 code: code.clone(),
                                                 enabled,
                                                 started: false,
-                                            });
-                                        } else if l.is_some() {
-                                            commands.entity(entity).insert(crate::scripting::ecs::LocalScript {
+                                            },
+                                        );
+                                    } else if l.is_some() {
+                                        commands.entity(entity).insert(
+                                            crate::scripting::ecs::LocalScript {
                                                 code: code.clone(),
                                                 enabled,
                                                 started: false,
-                                            });
-                                        }
+                                            },
+                                        );
                                     }
                                 }
-                                ui.end_row();
                             }
-
-                            ui.label(egui::RichText::new("Parent").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
-                            ui.label(egui::RichText::new(&parent_name_str).color(egui::Color32::BLACK).size(13.0));
                             ui.end_row();
+                        }
 
-                            ui.label(egui::RichText::new("Lines").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
-                            ui.label(egui::RichText::new(format!("{}", code.lines().count())).color(egui::Color32::BLACK).size(13.0));
-                            ui.end_row();
+                        ui.label(
+                            egui::RichText::new("Parent")
+                                .color(egui::Color32::from_rgb(60, 60, 60))
+                                .size(13.0),
+                        );
+                        ui.label(
+                            egui::RichText::new(&parent_name_str)
+                                .color(egui::Color32::BLACK)
+                                .size(13.0),
+                        );
+                        ui.end_row();
 
-                            ui.label(egui::RichText::new("Characters").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
-                            ui.label(egui::RichText::new(format!("{}", code.len())).color(egui::Color32::BLACK).size(13.0));
-                            ui.end_row();
-                        });
-                });
+                        ui.label(
+                            egui::RichText::new("Lines")
+                                .color(egui::Color32::from_rgb(60, 60, 60))
+                                .size(13.0),
+                        );
+                        ui.label(
+                            egui::RichText::new(format!("{}", code.lines().count()))
+                                .color(egui::Color32::BLACK)
+                                .size(13.0),
+                        );
+                        ui.end_row();
+
+                        ui.label(
+                            egui::RichText::new("Characters")
+                                .color(egui::Color32::from_rgb(60, 60, 60))
+                                .size(13.0),
+                        );
+                        ui.label(
+                            egui::RichText::new(format!("{}", code.len()))
+                                .color(egui::Color32::BLACK)
+                                .size(13.0),
+                        );
+                        ui.end_row();
+                    });
+            });
 
             ui.add_space(12.0);
 
             ui.vertical_centered_justified(|ui| {
-                if ui.button(egui::RichText::new("Open in Editor").strong()).clicked() {
+                if ui
+                    .button(egui::RichText::new("Open in Editor").strong())
+                    .clicked()
+                {
                     if !active_editor.open_entities.contains(&entity) {
                         active_editor.open_entities.push(entity);
                     }
@@ -205,7 +300,21 @@ pub fn draw_properties(
         first_mass,
         has_phys_opt,
     ) = {
-        let Ok((_, first_transform, first_name, _, _, _, first_shape_opt, _, _, first_mat_opt, first_studs_mat_opt, first_phys_opt)) = properties_query.get(first_entity) else {
+        let Ok((
+            _,
+            first_transform,
+            first_name,
+            _,
+            _,
+            _,
+            first_shape_opt,
+            _,
+            _,
+            first_mat_opt,
+            first_studs_mat_opt,
+            first_phys_opt,
+        )) = properties_query.get(first_entity)
+        else {
             return;
         };
 
@@ -251,7 +360,8 @@ pub fn draw_properties(
     let first_pos = first_transform_val.translation / 0.28;
     let first_scale = first_transform_val.scale;
     let first_rot = first_transform_val.rotation;
-    let first_shape = first_shape_opt_val.unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
+    let first_shape =
+        first_shape_opt_val.unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
     let first_alpha = first_color.to_srgba().alpha;
 
     let mut all_names_same = true;
@@ -274,24 +384,58 @@ pub fn draw_properties(
     let mut all_mass_same = true;
 
     for &entity in &selected_entities[1..] {
-        if let Ok((_, transform, name, _, _, _, shape_opt, _, _, mat_opt, studs_mat_opt, phys_opt)) = properties_query.get(entity) {
-            if name.to_string() != first_name_str { all_names_same = false; }
+        if let Ok((
+            _,
+            transform,
+            name,
+            _,
+            _,
+            _,
+            shape_opt,
+            _,
+            _,
+            mat_opt,
+            studs_mat_opt,
+            phys_opt,
+        )) = properties_query.get(entity)
+        {
+            if name.to_string() != first_name_str {
+                all_names_same = false;
+            }
             let pos = transform.translation / 0.28;
-            if (pos.x - first_pos.x).abs() > 0.001 { all_pos_x_same = false; }
-            if (pos.y - first_pos.y).abs() > 0.001 { all_pos_y_same = false; }
-            if (pos.z - first_pos.z).abs() > 0.001 { all_pos_z_same = false; }
-            
+            if (pos.x - first_pos.x).abs() > 0.001 {
+                all_pos_x_same = false;
+            }
+            if (pos.y - first_pos.y).abs() > 0.001 {
+                all_pos_y_same = false;
+            }
+            if (pos.z - first_pos.z).abs() > 0.001 {
+                all_pos_z_same = false;
+            }
+
             let scale = transform.scale;
-            if (scale.x - first_scale.x).abs() > 0.001 { all_scale_x_same = false; }
-            if (scale.y - first_scale.y).abs() > 0.001 { all_scale_y_same = false; }
-            if (scale.z - first_scale.z).abs() > 0.001 { all_scale_z_same = false; }
-            
+            if (scale.x - first_scale.x).abs() > 0.001 {
+                all_scale_x_same = false;
+            }
+            if (scale.y - first_scale.y).abs() > 0.001 {
+                all_scale_y_same = false;
+            }
+            if (scale.z - first_scale.z).abs() > 0.001 {
+                all_scale_z_same = false;
+            }
+
             let rot = transform.rotation;
-            if rot.dot(first_rot).abs() < 0.999 { all_rot_same = false; }
-            
-            let shape = shape_opt.map(|s| s.shape).unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
-            if shape != first_shape { all_shape_same = false; }
-            
+            if rot.dot(first_rot).abs() < 0.999 {
+                all_rot_same = false;
+            }
+
+            let shape = shape_opt
+                .map(|s| s.shape)
+                .unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
+            if shape != first_shape {
+                all_shape_same = false;
+            }
+
             let mut color = Color::srgb(0.84, 0.24, 0.16);
             if let Some(studs_mat_handle) = studs_mat_opt {
                 if let Some(mat) = studs_materials.get(&studs_mat_handle.0) {
@@ -617,7 +761,7 @@ pub fn draw_properties(
                         .show(ui, |ui| {
                             if has_phys_opt {
                                 ui.label(egui::RichText::new("Physics Enabled").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
-                                
+
                                 let mut enabled = first_phys_enabled;
                                 let checkbox_res = if all_phys_enabled_same {
                                     Some(ui.checkbox(&mut enabled, ""))
@@ -779,7 +923,7 @@ pub fn draw_properties(
                                 ui.horizontal(|ui| {
                                     new_bounciness = draw_coord_edit(ui, "", &mut bounciness_val, all_bounciness_same, "bounciness");
                                 });
-                                
+
                                 if let Some(new_val) = new_bounciness {
                                     for &entity in selected_entities {
                                         if let Ok((_, _, _, _, _, _, _, _, _, _, _, Some(mut phys))) = properties_query.get_mut(entity) {
@@ -801,33 +945,61 @@ pub fn draw_workspace_properties(
     gravity: &mut Option<ResMut<'_, avian3d::prelude::Gravity>>,
 ) {
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("Properties").color(egui::Color32::from_rgb(0, 0, 0)).strong().size(16.0));
+        ui.label(
+            egui::RichText::new("Properties")
+                .color(egui::Color32::from_rgb(0, 0, 0))
+                .strong()
+                .size(16.0),
+        );
     });
 
     ui.add_space(8.0);
-    let (sep_rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
-    ui.painter().rect_filled(sep_rect, 0.0, egui::Color32::from_rgb(212, 212, 212));
+    let (sep_rect, _) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
+    ui.painter()
+        .rect_filled(sep_rect, 0.0, egui::Color32::from_rgb(212, 212, 212));
     ui.add_space(8.0);
 
-    egui::CollapsingHeader::new(egui::RichText::new("Physics").color(egui::Color32::from_rgb(0, 0, 0)).strong().size(14.0))
-        .default_open(true)
-        .show(ui, |ui| {
-            egui::Grid::new("properties_workspace_physics_grid")
-                .num_columns(2)
-                .spacing([12.0, 8.0])
-                .show(ui, |ui| {
-                    ui.label(egui::RichText::new("World Gravity").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
-                    if let Some(g) = gravity {
-                        let mut gravity_studs = -g.0.y / 0.28;
-                        if ui.add(egui::DragValue::new(&mut gravity_studs).speed(1.0).range(0.0..=10000.0).suffix(" studs/s²")).changed() {
-                            g.0 = Vec3::new(0.0, -gravity_studs * 0.28, 0.0);
-                        }
-                    } else {
-                        ui.label(egui::RichText::new("Gravity resource not found").color(egui::Color32::from_rgb(180, 60, 60)).size(13.0));
+    egui::CollapsingHeader::new(
+        egui::RichText::new("Physics")
+            .color(egui::Color32::from_rgb(0, 0, 0))
+            .strong()
+            .size(14.0),
+    )
+    .default_open(true)
+    .show(ui, |ui| {
+        egui::Grid::new("properties_workspace_physics_grid")
+            .num_columns(2)
+            .spacing([12.0, 8.0])
+            .show(ui, |ui| {
+                ui.label(
+                    egui::RichText::new("World Gravity")
+                        .color(egui::Color32::from_rgb(60, 60, 60))
+                        .size(13.0),
+                );
+                if let Some(g) = gravity {
+                    let mut gravity_studs = -g.0.y / 0.28;
+                    if ui
+                        .add(
+                            egui::DragValue::new(&mut gravity_studs)
+                                .speed(1.0)
+                                .range(0.0..=10000.0)
+                                .suffix(" studs/s²"),
+                        )
+                        .changed()
+                    {
+                        g.0 = Vec3::new(0.0, -gravity_studs * 0.28, 0.0);
                     }
-                    ui.end_row();
-                });
-        });
+                } else {
+                    ui.label(
+                        egui::RichText::new("Gravity resource not found")
+                            .color(egui::Color32::from_rgb(180, 60, 60))
+                            .size(13.0),
+                    );
+                }
+                ui.end_row();
+            });
+    });
 }
 
 pub fn draw_players_properties(
@@ -835,103 +1007,210 @@ pub fn draw_players_properties(
     players_service: &mut Option<ResMut<'_, crate::studio::tools::PlayersService>>,
 ) {
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("Properties").color(egui::Color32::from_rgb(0, 0, 0)).strong().size(16.0));
+        ui.label(
+            egui::RichText::new("Properties")
+                .color(egui::Color32::from_rgb(0, 0, 0))
+                .strong()
+                .size(16.0),
+        );
     });
 
     ui.add_space(8.0);
-    let (sep_rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
-    ui.painter().rect_filled(sep_rect, 0.0, egui::Color32::from_rgb(212, 212, 212));
+    let (sep_rect, _) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
+    ui.painter()
+        .rect_filled(sep_rect, 0.0, egui::Color32::from_rgb(212, 212, 212));
     ui.add_space(8.0);
 
-    egui::CollapsingHeader::new(egui::RichText::new("Basic").color(egui::Color32::from_rgb(0, 0, 0)).strong().size(14.0))
-        .default_open(true)
-        .show(ui, |ui| {
-            egui::Grid::new("properties_players_basic_grid")
-                .num_columns(2)
-                .spacing([12.0, 8.0])
-                .show(ui, |ui| {
-                    ui.label(egui::RichText::new("Player Speed").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
-                    if let Some(service) = players_service {
-                        let mut speed_studs = service.speed / 0.28;
-                        if ui.add(egui::DragValue::new(&mut speed_studs).speed(0.5).range(0.0..=1000.0).suffix(" studs/s")).changed() {
-                            service.speed = speed_studs * 0.28;
-                            if let Ok(mut shared) = crate::studio::tools::SHARED_PLAYERS_SERVICE.write() {
-                                shared.speed = service.speed;
-                            }
+    egui::CollapsingHeader::new(
+        egui::RichText::new("Basic")
+            .color(egui::Color32::from_rgb(0, 0, 0))
+            .strong()
+            .size(14.0),
+    )
+    .default_open(true)
+    .show(ui, |ui| {
+        egui::Grid::new("properties_players_basic_grid")
+            .num_columns(2)
+            .spacing([12.0, 8.0])
+            .show(ui, |ui| {
+                ui.label(
+                    egui::RichText::new("Player Speed")
+                        .color(egui::Color32::from_rgb(60, 60, 60))
+                        .size(13.0),
+                );
+                if let Some(service) = players_service {
+                    let mut speed_studs = service.speed / 0.28;
+                    if ui
+                        .add(
+                            egui::DragValue::new(&mut speed_studs)
+                                .speed(0.5)
+                                .range(0.0..=1000.0)
+                                .suffix(" studs/s"),
+                        )
+                        .changed()
+                    {
+                        service.speed = speed_studs * 0.28;
+                        if let Ok(mut shared) = crate::studio::tools::SHARED_PLAYERS_SERVICE.write()
+                        {
+                            shared.speed = service.speed;
                         }
-                    } else {
-                        ui.label(egui::RichText::new("Players resource not found").color(egui::Color32::from_rgb(180, 60, 60)).size(13.0));
                     }
-                    ui.end_row();
+                } else {
+                    ui.label(
+                        egui::RichText::new("Players resource not found")
+                            .color(egui::Color32::from_rgb(180, 60, 60))
+                            .size(13.0),
+                    );
+                }
+                ui.end_row();
 
-                    ui.label(egui::RichText::new("Player Jump Power").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
-                    if let Some(service) = players_service {
-                        let mut jump_power_studs = service.jump_power / 0.28;
-                        if ui.add(egui::DragValue::new(&mut jump_power_studs).speed(1.0).range(0.0..=1000.0).suffix(" studs/s")).changed() {
-                            service.jump_power = jump_power_studs * 0.28;
-                            if let Ok(mut shared) = crate::studio::tools::SHARED_PLAYERS_SERVICE.write() {
-                                shared.jump_power = service.jump_power;
-                            }
+                ui.label(
+                    egui::RichText::new("Player Jump Power")
+                        .color(egui::Color32::from_rgb(60, 60, 60))
+                        .size(13.0),
+                );
+                if let Some(service) = players_service {
+                    let mut jump_power_studs = service.jump_power / 0.28;
+                    if ui
+                        .add(
+                            egui::DragValue::new(&mut jump_power_studs)
+                                .speed(1.0)
+                                .range(0.0..=1000.0)
+                                .suffix(" studs/s"),
+                        )
+                        .changed()
+                    {
+                        service.jump_power = jump_power_studs * 0.28;
+                        if let Ok(mut shared) = crate::studio::tools::SHARED_PLAYERS_SERVICE.write()
+                        {
+                            shared.jump_power = service.jump_power;
                         }
-                    } else {
-                        ui.label(egui::RichText::new("Players resource not found").color(egui::Color32::from_rgb(180, 60, 60)).size(13.0));
                     }
-                    ui.end_row();
+                } else {
+                    ui.label(
+                        egui::RichText::new("Players resource not found")
+                            .color(egui::Color32::from_rgb(180, 60, 60))
+                            .size(13.0),
+                    );
+                }
+                ui.end_row();
 
-                    ui.label(egui::RichText::new("Player Gravity Scale").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
-                    if let Some(service) = players_service {
-                        if ui.add(egui::DragValue::new(&mut service.gravity_scale).speed(0.1).range(0.0..=10.0)).changed() {
-                            if let Ok(mut shared) = crate::studio::tools::SHARED_PLAYERS_SERVICE.write() {
-                                shared.gravity_scale = service.gravity_scale;
-                            }
+                ui.label(
+                    egui::RichText::new("Player Gravity Scale")
+                        .color(egui::Color32::from_rgb(60, 60, 60))
+                        .size(13.0),
+                );
+                if let Some(service) = players_service {
+                    if ui
+                        .add(
+                            egui::DragValue::new(&mut service.gravity_scale)
+                                .speed(0.1)
+                                .range(0.0..=10.0),
+                        )
+                        .changed()
+                    {
+                        if let Ok(mut shared) = crate::studio::tools::SHARED_PLAYERS_SERVICE.write()
+                        {
+                            shared.gravity_scale = service.gravity_scale;
                         }
-                    } else {
-                        ui.label(egui::RichText::new("Players resource not found").color(egui::Color32::from_rgb(180, 60, 60)).size(13.0));
                     }
-                    ui.end_row();
+                } else {
+                    ui.label(
+                        egui::RichText::new("Players resource not found")
+                            .color(egui::Color32::from_rgb(180, 60, 60))
+                            .size(13.0),
+                    );
+                }
+                ui.end_row();
 
-                    ui.label(egui::RichText::new("Player Friction").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
-                    if let Some(service) = players_service {
-                        if ui.add(egui::DragValue::new(&mut service.friction).speed(0.05).range(0.0..=1.0)).changed() {
-                            if let Ok(mut shared) = crate::studio::tools::SHARED_PLAYERS_SERVICE.write() {
-                                shared.friction = service.friction;
-                            }
+                ui.label(
+                    egui::RichText::new("Player Friction")
+                        .color(egui::Color32::from_rgb(60, 60, 60))
+                        .size(13.0),
+                );
+                if let Some(service) = players_service {
+                    if ui
+                        .add(
+                            egui::DragValue::new(&mut service.friction)
+                                .speed(0.05)
+                                .range(0.0..=1.0),
+                        )
+                        .changed()
+                    {
+                        if let Ok(mut shared) = crate::studio::tools::SHARED_PLAYERS_SERVICE.write()
+                        {
+                            shared.friction = service.friction;
                         }
-                    } else {
-                        ui.label(egui::RichText::new("Players resource not found").color(egui::Color32::from_rgb(180, 60, 60)).size(13.0));
                     }
-                    ui.end_row();
+                } else {
+                    ui.label(
+                        egui::RichText::new("Players resource not found")
+                            .color(egui::Color32::from_rgb(180, 60, 60))
+                            .size(13.0),
+                    );
+                }
+                ui.end_row();
 
-                    ui.label(egui::RichText::new("Player Bounciness").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
-                    if let Some(service) = players_service {
-                        if ui.add(egui::DragValue::new(&mut service.bounciness).speed(0.05).range(0.0..=1.0)).changed() {
-                            if let Ok(mut shared) = crate::studio::tools::SHARED_PLAYERS_SERVICE.write() {
-                                shared.bounciness = service.bounciness;
-                            }
+                ui.label(
+                    egui::RichText::new("Player Bounciness")
+                        .color(egui::Color32::from_rgb(60, 60, 60))
+                        .size(13.0),
+                );
+                if let Some(service) = players_service {
+                    if ui
+                        .add(
+                            egui::DragValue::new(&mut service.bounciness)
+                                .speed(0.05)
+                                .range(0.0..=1.0),
+                        )
+                        .changed()
+                    {
+                        if let Ok(mut shared) = crate::studio::tools::SHARED_PLAYERS_SERVICE.write()
+                        {
+                            shared.bounciness = service.bounciness;
                         }
-                    } else {
-                        ui.label(egui::RichText::new("Players resource not found").color(egui::Color32::from_rgb(180, 60, 60)).size(13.0));
                     }
-                    ui.end_row();
-                });
-        });
+                } else {
+                    ui.label(
+                        egui::RichText::new("Players resource not found")
+                            .color(egui::Color32::from_rgb(180, 60, 60))
+                            .size(13.0),
+                    );
+                }
+                ui.end_row();
+            });
+    });
 }
 
 pub fn draw_lighting_properties(
     ui: &mut egui::Ui,
-    lighting_service: &mut Option<ResMut<'_, crate::common::game::environment::lighting::LightingService>>,
+    lighting_service: &mut Option<
+        ResMut<'_, crate::common::game::environment::lighting::LightingService>,
+    >,
 ) {
     ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("Properties").color(egui::Color32::from_rgb(0, 0, 0)).strong().size(16.0));
+        ui.label(
+            egui::RichText::new("Properties")
+                .color(egui::Color32::from_rgb(0, 0, 0))
+                .strong()
+                .size(16.0),
+        );
     });
 
     ui.add_space(8.0);
-    let (sep_rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
-    ui.painter().rect_filled(sep_rect, 0.0, egui::Color32::from_rgb(212, 212, 212));
+    let (sep_rect, _) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
+    ui.painter()
+        .rect_filled(sep_rect, 0.0, egui::Color32::from_rgb(212, 212, 212));
     ui.add_space(8.0);
 
     let Some(service) = lighting_service else {
-        ui.label(egui::RichText::new("Lighting service not available").color(egui::Color32::from_rgb(180, 60, 60)).size(13.0));
+        ui.label(
+            egui::RichText::new("Lighting service not available")
+                .color(egui::Color32::from_rgb(180, 60, 60))
+                .size(13.0),
+        );
         return;
     };
 
@@ -941,13 +1220,136 @@ pub fn draw_lighting_properties(
             .num_columns(2)
             .spacing([12.0, 8.0])
             .show(ui, |ui| {
-                ui.label(egui::RichText::new("Time of Day").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
+                ui.label(
+                    egui::RichText::new("Time of Day")
+                        .color(egui::Color32::from_rgb(60, 60, 60))
+                        .size(13.0),
+                );
                 let mut tod = service.time_of_day;
-                if ui.add(egui::Slider::new(&mut tod, 0.0..=24.0).suffix("h")).changed() {
+                if ui
+                    .add(egui::Slider::new(&mut tod, 0.0..=24.0).suffix("h"))
+                    .changed()
+                {
                     service.time_of_day = tod;
                     if let Ok(mut shared) = crate::studio::tools::SHARED_LIGHTING_SERVICE.write() {
                         *shared = tod;
                     }
+                }
+                ui.end_row();
+
+                ui.label(
+                    egui::RichText::new("Sun Intensity")
+                        .color(egui::Color32::from_rgb(60, 60, 60))
+                        .size(13.0),
+                );
+                let mut sun_intensity = service.sun_intensity;
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut sun_intensity)
+                            .speed(0.05)
+                            .range(0.0..=4.0)
+                            .suffix("×"),
+                    )
+                    .changed()
+                {
+                    service.sun_intensity = sun_intensity;
+                }
+                ui.end_row();
+
+                ui.label(
+                    egui::RichText::new("Ambient Intensity")
+                        .color(egui::Color32::from_rgb(60, 60, 60))
+                        .size(13.0),
+                );
+                let mut ambient_intensity = service.ambient_intensity;
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut ambient_intensity)
+                            .speed(0.05)
+                            .range(0.0..=4.0)
+                            .suffix("×"),
+                    )
+                    .changed()
+                {
+                    service.ambient_intensity = ambient_intensity;
+                }
+                ui.end_row();
+
+                ui.label(
+                    egui::RichText::new("Sun Tint")
+                        .color(egui::Color32::from_rgb(60, 60, 60))
+                        .size(13.0),
+                );
+                let sun = service.sun_tint.to_srgba();
+                let mut sun_color = [sun.red, sun.green, sun.blue, sun.alpha];
+                if ui
+                    .color_edit_button_rgba_unmultiplied(&mut sun_color)
+                    .changed()
+                {
+                    service.sun_tint =
+                        Color::srgba(sun_color[0], sun_color[1], sun_color[2], sun_color[3]);
+                }
+                ui.end_row();
+
+                ui.label(
+                    egui::RichText::new("Ambient Tint")
+                        .color(egui::Color32::from_rgb(60, 60, 60))
+                        .size(13.0),
+                );
+                let ambient = service.ambient_tint.to_srgba();
+                let mut ambient_color = [ambient.red, ambient.green, ambient.blue, ambient.alpha];
+                if ui
+                    .color_edit_button_rgba_unmultiplied(&mut ambient_color)
+                    .changed()
+                {
+                    service.ambient_tint = Color::srgba(
+                        ambient_color[0],
+                        ambient_color[1],
+                        ambient_color[2],
+                        ambient_color[3],
+                    );
+                }
+                ui.end_row();
+
+                ui.label(
+                    egui::RichText::new("Cast Shadows")
+                        .color(egui::Color32::from_rgb(60, 60, 60))
+                        .size(13.0),
+                );
+                let mut shadows_enabled = service.shadows_enabled;
+                if ui.checkbox(&mut shadows_enabled, "").changed() {
+                    service.shadows_enabled = shadows_enabled;
+                }
+                ui.end_row();
+
+                ui.label(
+                    egui::RichText::new("Atmospheric Fog")
+                        .color(egui::Color32::from_rgb(60, 60, 60))
+                        .size(13.0),
+                );
+                let mut fog_enabled = service.fog_enabled;
+                if ui.checkbox(&mut fog_enabled, "").changed() {
+                    service.fog_enabled = fog_enabled;
+                }
+                ui.end_row();
+
+                ui.label(
+                    egui::RichText::new("Fog Density")
+                        .color(egui::Color32::from_rgb(60, 60, 60))
+                        .size(13.0),
+                );
+                let mut fog_density = service.fog_density;
+                if ui
+                    .add_enabled(
+                        service.fog_enabled,
+                        egui::DragValue::new(&mut fog_density)
+                            .speed(0.05)
+                            .range(0.0..=4.0)
+                            .suffix("×"),
+                    )
+                    .changed()
+                {
+                    service.fog_density = fog_density;
                 }
                 ui.end_row();
             });

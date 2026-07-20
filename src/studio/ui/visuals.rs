@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_egui::{egui, EguiContexts};
+use bevy_egui::{EguiContexts, egui};
 
 pub fn configure_visuals(mut contexts: EguiContexts) {
     if let Ok(ctx) = contexts.ctx_mut() {

@@ -1,8 +1,8 @@
-use bevy::prelude::*;
-use bevy_egui::egui;
-use bevy::pbr::ExtendedMaterial;
 use crate::common::game::bricks::data::spawn_brick;
 use avian3d::prelude::CollisionLayers;
+use bevy::pbr::ExtendedMaterial;
+use bevy::prelude::*;
+use bevy_egui::egui;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SelectedTemplate {
@@ -40,7 +40,9 @@ pub fn draw_onboarding(
     onboarding_data: &mut OnboardingData,
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
-    studs_materials: &mut Assets<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>,
+    studs_materials: &mut Assets<
+        ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>,
+    >,
     studs_assets: &crate::common::game::bricks::studs::StudsAssets,
     count: &mut crate::common::game::bricks::data::BrickSpawnerCount,
     thumb_empty_tex: egui::TextureId,
@@ -229,10 +231,12 @@ pub fn draw_onboarding(
 
                         if create_btn.clicked() {
                             next_onboarding_state.set(crate::studio::tools::OnboardingState::Login);
-                            
+
                             let mut bricks = Vec::new();
                             if onboarding_data.selected_template == SelectedTemplate::Baseplate {
                                 bricks.push(crate::common::core::vrtx::VrtxBrick {
+                                    node_id: bricks.len() as u64,
+                                    parent_node_id: None,
                                     name: "Baseplate".to_string(),
                                     transform: Transform::from_xyz(0.0, -0.14, 0.0).with_scale(Vec3::new(25.0, 1.0, 50.0)),
                                     shape: crate::common::game::bricks::components::BrickShape::Block,
@@ -245,6 +249,8 @@ pub fn draw_onboarding(
                                     mass: 1.0,
                                 });
                                 bricks.push(crate::common::core::vrtx::VrtxBrick {
+                                    node_id: bricks.len() as u64,
+                                    parent_node_id: None,
                                     name: "Part0".to_string(),
                                     transform: Transform::from_xyz(0.0, 0.14, 0.0),
                                     shape: crate::common::game::bricks::components::BrickShape::Block,
@@ -259,13 +265,15 @@ pub fn draw_onboarding(
                             }
 
                             let state = crate::common::core::vrtx::VrtxFileState {
-                                version: 5,
+                                version: crate::common::core::vrtx::CURRENT_VRTX_VERSION,
                                 gravity: Vec3::new(0.0, -186.9 * 0.28, 0.0),
                                 settings: crate::common::core::vrtx::VrtxSettings {
-                                    ssao: false,
-                                    contact_shadows: false,
+                                    ssao: true,
+                                    contact_shadows: true,
                                     bloom: true,
+                                    ..default()
                                 },
+                                lighting: default(),
                                 camera_transform: Transform::from_xyz(-10.0, 10.0, -10.0).looking_at(Vec3::ZERO, Vec3::Y),
                                 bricks,
                                 scripts: Vec::new(),

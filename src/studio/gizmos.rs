@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy::picking::mesh_picking::ray_cast::SimplifiedMesh;
-use crate::common::game::bricks::components::{Brick, BrickShape};
+use crate::common::game::bricks::components::{Brick, BrickShape, BrickShapeComponent};
 use crate::studio::tools::{Selection, ToolState, HoverState, DragState};
 
 #[derive(Component)]
@@ -44,14 +44,35 @@ fn ensure_gizmo_assets<'a>(
 ) -> &'a GizmoAssets {
     cache.get_or_insert_with(|| GizmoAssets {
         materials: [
-            materials.add(StandardMaterial { base_color: Color::srgb(1.0, 0.0, 0.0), unlit: true, ..default() }),
-            materials.add(StandardMaterial { base_color: Color::srgb(0.0, 1.0, 0.0), unlit: true, ..default() }),
-            materials.add(StandardMaterial { base_color: Color::srgb(0.0, 0.0, 1.0), unlit: true, ..default() }),
+            materials.add(StandardMaterial {
+                base_color: Color::srgb(1.0, 0.0, 0.0),
+                unlit: true,
+                ..default()
+            }),
+            materials.add(StandardMaterial {
+                base_color: Color::srgb(0.0, 1.0, 0.0),
+                unlit: true,
+                ..default()
+            }),
+            materials.add(StandardMaterial {
+                base_color: Color::srgb(0.0, 0.0, 1.0),
+                unlit: true,
+                ..default()
+            }),
         ],
-        move_mesh: meshes.add(Cone { radius: 0.4, height: 1.0 }),
+        move_mesh: meshes.add(Cone {
+            radius: 0.4,
+            height: 1.0,
+        }),
         size_mesh: meshes.add(Sphere::new(0.4)),
-        rotate_mesh: meshes.add(Torus { minor_radius: 0.1, major_radius: 3.5 }),
-        rotate_pick_mesh: meshes.add(Torus { minor_radius: 0.4, major_radius: 3.5 }),
+        rotate_mesh: meshes.add(Torus {
+            minor_radius: 0.1,
+            major_radius: 3.5,
+        }),
+        rotate_pick_mesh: meshes.add(Torus {
+            minor_radius: 0.4,
+            major_radius: 3.5,
+        }),
     })
 }
 
@@ -100,15 +121,20 @@ pub(crate) fn update_gizmos(
     }
     let tool = *tool_state.get();
 
-    if tool == ToolState::None { return; }
+    if tool == ToolState::None {
+        return;
+    }
 
     let assets = ensure_gizmo_assets(&mut gizmo_assets, &mut meshes, &mut materials);
     let [mat_x, mat_y, mat_z] = &assets.materials;
 
     let axes = [
-        (Vec3::X, mat_x.clone()), (-Vec3::X, mat_x.clone()),
-        (Vec3::Y, mat_y.clone()), (-Vec3::Y, mat_y.clone()),
-        (Vec3::Z, mat_z.clone()), (-Vec3::Z, mat_z.clone()),
+        (Vec3::X, mat_x.clone()),
+        (-Vec3::X, mat_x.clone()),
+        (Vec3::Y, mat_y.clone()),
+        (-Vec3::Y, mat_y.clone()),
+        (Vec3::Z, mat_z.clone()),
+        (-Vec3::Z, mat_z.clone()),
     ];
 
     match tool {
@@ -118,7 +144,11 @@ pub(crate) fn update_gizmos(
                     Mesh3d(assets.move_mesh.clone()),
                     MeshMaterial3d(mat),
                     Transform::default(),
-                    ToolGizmo { axis, tool, target: selected_entity },
+                    ToolGizmo {
+                        axis,
+                        tool,
+                        target: selected_entity,
+                    },
                     Pickable::default(),
                     bevy::camera::visibility::RenderLayers::layer(1),
                 ));
@@ -130,21 +160,33 @@ pub(crate) fn update_gizmos(
                     Mesh3d(assets.size_mesh.clone()),
                     MeshMaterial3d(mat),
                     Transform::default(),
-                    ToolGizmo { axis, tool, target: selected_entity },
+                    ToolGizmo {
+                        axis,
+                        tool,
+                        target: selected_entity,
+                    },
                     Pickable::default(),
                     bevy::camera::visibility::RenderLayers::layer(1),
                 ));
             }
         }
         ToolState::Rotate => {
-            let rot_axes = [(Vec3::X, mat_x.clone()), (Vec3::Y, mat_y.clone()), (Vec3::Z, mat_z.clone())];
+            let rot_axes = [
+                (Vec3::X, mat_x.clone()),
+                (Vec3::Y, mat_y.clone()),
+                (Vec3::Z, mat_z.clone()),
+            ];
             for (axis, mat) in rot_axes {
                 commands.spawn((
                     Mesh3d(assets.rotate_mesh.clone()),
                     SimplifiedMesh(assets.rotate_pick_mesh.clone()),
                     MeshMaterial3d(mat),
                     Transform::default(),
-                    ToolGizmo { axis, tool, target: selected_entity },
+                    ToolGizmo {
+                        axis,
+                        tool,
+                        target: selected_entity,
+                    },
                     Pickable::default(),
                     bevy::camera::visibility::RenderLayers::layer(1),
                 ));
@@ -156,19 +198,35 @@ pub(crate) fn update_gizmos(
 
 pub fn sync_gizmos(
     mut gizmos: Query<(Entity, &mut Transform, &ToolGizmo)>,
-    bricks: Query<(&GlobalTransform, Option<&crate::common::game::bricks::components::BrickShapeComponent>), (With<Brick>, Without<ToolGizmo>)>,
+    bricks: Query<
+        (
+            &GlobalTransform,
+            Option<&crate::common::game::bricks::components::BrickShapeComponent>,
+        ),
+        (With<Brick>, Without<ToolGizmo>),
+    >,
     camera_query: Query<&GlobalTransform, (With<Camera3d>, Without<ToolGizmo>, Without<Brick>)>,
     hover_state: Res<HoverState>,
     drag_state: Res<DragState>,
 ) {
-    let camera_pos = camera_query.iter().next().map(|t| t.translation()).unwrap_or(Vec3::ZERO);
+    let camera_pos = camera_query
+        .iter()
+        .next()
+        .map(|t| t.translation())
+        .unwrap_or(Vec3::ZERO);
 
     for (entity, mut transform, gizmo) in &mut gizmos {
         if let Ok((brick_global, shape_opt)) = bricks.get(gizmo.target) {
-            let shape = shape_opt.map(|s| s.shape).unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
+            let shape = shape_opt
+                .map(|s| s.shape)
+                .unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
             let base_extents = match shape {
-                crate::common::game::bricks::components::BrickShape::Block => Vec3::new(2.0 * 0.28, 0.5 * 0.28, 1.0 * 0.28),
-                crate::common::game::bricks::components::BrickShape::Sphere => Vec3::splat(1.0 * 0.28),
+                crate::common::game::bricks::components::BrickShape::Block => {
+                    Vec3::new(2.0 * 0.28, 0.5 * 0.28, 1.0 * 0.28)
+                }
+                crate::common::game::bricks::components::BrickShape::Sphere => {
+                    Vec3::splat(1.0 * 0.28)
+                }
             };
             let global_scale = brick_global.scale();
             let scaled_extents = base_extents * global_scale;
@@ -185,7 +243,8 @@ pub fn sync_gizmos(
                 transform.translation = global_translation;
             } else {
                 let offset = face_offset + 0.6 * distance_scale;
-                transform.translation = global_translation + global_rotation.mul_vec3(gizmo.axis * offset);
+                transform.translation =
+                    global_translation + global_rotation.mul_vec3(gizmo.axis * offset);
             }
 
             transform.rotation = global_rotation * Quat::from_rotation_arc(Vec3::Y, gizmo.axis);
@@ -252,12 +311,21 @@ mod tests {
 
 fn draw_outline_recursive(
     entity: Entity,
-    bricks: &Query<(&GlobalTransform, Option<&crate::common::game::bricks::components::BrickShapeComponent>, Option<&Children>), With<Brick>>,
+    bricks: &Query<
+        (
+            &GlobalTransform,
+            Option<&crate::common::game::bricks::components::BrickShapeComponent>,
+            Option<&Children>,
+        ),
+        With<Brick>,
+    >,
     gizmos: &mut Gizmos,
 ) {
     if let Ok((global_transform, shape_opt, children_opt)) = bricks.get(entity) {
         let (scale, rotation, translation) = global_transform.to_scale_rotation_translation();
-        let shape = shape_opt.map(|s| s.shape).unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
+        let shape = shape_opt
+            .map(|s| s.shape)
+            .unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
 
         match shape {
             crate::common::game::bricks::components::BrickShape::Block => {
@@ -271,17 +339,23 @@ fn draw_outline_recursive(
             }
             crate::common::game::bricks::components::BrickShape::Sphere => {
                 let base_radius = 1.0 * 0.28;
-                
+
                 let half_size_xy = Vec2::new(scale.x * base_radius, scale.y * base_radius);
                 let isometry_xy = Isometry3d::new(translation, rotation);
                 gizmos.ellipse(isometry_xy, half_size_xy, Color::srgb(1.0, 1.0, 1.0));
 
                 let half_size_yz = Vec2::new(scale.z * base_radius, scale.y * base_radius);
-                let isometry_yz = Isometry3d::new(translation, rotation * Quat::from_rotation_y(std::f32::consts::FRAC_PI_2));
+                let isometry_yz = Isometry3d::new(
+                    translation,
+                    rotation * Quat::from_rotation_y(std::f32::consts::FRAC_PI_2),
+                );
                 gizmos.ellipse(isometry_yz, half_size_yz, Color::srgb(1.0, 1.0, 1.0));
 
                 let half_size_xz = Vec2::new(scale.x * base_radius, scale.z * base_radius);
-                let isometry_xz = Isometry3d::new(translation, rotation * Quat::from_rotation_x(std::f32::consts::FRAC_PI_2));
+                let isometry_xz = Isometry3d::new(
+                    translation,
+                    rotation * Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+                );
                 gizmos.ellipse(isometry_xz, half_size_xz, Color::srgb(1.0, 1.0, 1.0));
             }
         }
@@ -298,7 +372,14 @@ pub fn draw_selection_outline(
     selection: Res<Selection>,
     physics_state: Res<crate::common::game::physics::PhysicsSimulationState>,
     playtest: Option<Res<crate::client::PlaytestState>>,
-    bricks: Query<(&GlobalTransform, Option<&crate::common::game::bricks::components::BrickShapeComponent>, Option<&Children>), With<Brick>>,
+    bricks: Query<
+        (
+            &GlobalTransform,
+            Option<&crate::common::game::bricks::components::BrickShapeComponent>,
+            Option<&Children>,
+        ),
+        With<Brick>,
+    >,
     mut gizmos: Gizmos,
 ) {
     if *physics_state == crate::common::game::physics::PhysicsSimulationState::Running {

@@ -1,10 +1,51 @@
-use bevy::prelude::*;
-use bevy_egui::egui;
-use crate::studio::tools::{ToolState, SnapConfig, Selection};
+use crate::common::game::bricks::data::BrickSpawnerCount;
 use crate::common::game::bricks::data::spawn_brick;
 use crate::common::game::bricks::studs::StudsAssets;
-use crate::common::game::bricks::data::BrickSpawnerCount;
+use crate::studio::tools::{Selection, SnapConfig, ToolState};
 use bevy::pbr::ExtendedMaterial;
+use bevy::prelude::*;
+use bevy_egui::egui;
+
+fn style_top_bar_menu(ui: &mut egui::Ui) {
+    let widgets = &mut ui.style_mut().visuals.widgets;
+    for visuals in [
+        &mut widgets.inactive,
+        &mut widgets.hovered,
+        &mut widgets.active,
+    ] {
+        visuals.weak_bg_fill = egui::Color32::TRANSPARENT;
+        visuals.bg_fill = egui::Color32::TRANSPARENT;
+        visuals.bg_stroke = egui::Stroke::NONE;
+    }
+}
+
+#[allow(deprecated)]
+fn top_bar_menu<R>(
+    ui: &mut egui::Ui,
+    id_source: &'static str,
+    label: &'static str,
+    add_contents: impl FnOnce(&mut egui::Ui) -> R,
+) {
+    let id = ui.make_persistent_id(id_source);
+    let hovered = ui.data(|data| data.get_temp::<bool>(id)).unwrap_or(false);
+    let color = if hovered {
+        egui::Color32::from_rgb(80, 160, 240)
+    } else {
+        egui::Color32::from_rgb(60, 60, 60)
+    };
+    let response = ui
+        .scope(|ui| {
+            style_top_bar_menu(ui);
+            egui::menu::menu_button(
+                ui,
+                egui::RichText::new(label).color(color).size(13.0),
+                add_contents,
+            )
+        })
+        .inner
+        .response;
+    ui.data_mut(|data| data.insert_temp(id, response.hovered()));
+}
 
 #[allow(deprecated)]
 pub fn draw_top_bar(
@@ -14,7 +55,11 @@ pub fn draw_top_bar(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
-    studs_materials: &mut ResMut<Assets<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
+    studs_materials: &mut ResMut<
+        Assets<
+            ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>,
+        >,
+    >,
     studs_assets: &StudsAssets,
     count: &mut ResMut<BrickSpawnerCount>,
     snap_config: &mut ResMut<SnapConfig>,
@@ -30,45 +75,68 @@ pub fn draw_top_bar(
     _action_writer: &mut MessageWriter<crate::studio::tools::UndoRedoAction>,
     history: &mut ResMut<crate::studio::tools::UndoRedoHistory>,
     physics_state: crate::common::game::physics::PhysicsSimulationState,
-    physics_action_writer: &mut MessageWriter<crate::common::game::physics::PhysicsSimulationAction>,
+    physics_action_writer: &mut MessageWriter<
+        crate::common::game::physics::PhysicsSimulationAction,
+    >,
     settings_window: &mut ResMut<crate::studio::ui::SettingsWindow>,
     graphics_settings: &mut crate::studio::ui::GraphicsSettings,
     gravity: &mut Option<ResMut<avian3d::prelude::Gravity>>,
     camera_transform_query: &mut Query<&mut Transform, With<Camera3d>>,
-    entities_query: &mut Query<(
-        Entity,
-        &mut Transform,
-        &Name,
-        Option<&ChildOf>,
-        Option<&Children>,
-        Option<&crate::common::game::bricks::components::Brick>,
-        Option<&mut crate::common::game::bricks::components::BrickShapeComponent>,
-        &GlobalTransform,
-        Option<&Mesh3d>,
-        Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
-        Option<&mut crate::common::game::bricks::components::BrickPhysics>,
-    ), Without<Camera3d>>,
+    entities_query: &mut Query<
+        (
+            Entity,
+            &mut Transform,
+            &Name,
+            Option<&ChildOf>,
+            Option<&Children>,
+            Option<&crate::common::game::bricks::components::Brick>,
+            Option<&mut crate::common::game::bricks::components::BrickShapeComponent>,
+            &GlobalTransform,
+            Option<&Mesh3d>,
+            Option<&MeshMaterial3d<StandardMaterial>>,
+            Option<
+                &MeshMaterial3d<
+                    ExtendedMaterial<
+                        StandardMaterial,
+                        crate::common::game::bricks::studs::StudsExtension,
+                    >,
+                >,
+            >,
+            Option<&mut crate::common::game::bricks::components::BrickPhysics>,
+        ),
+        Without<Camera3d>,
+    >,
     onboarding_data: &mut crate::studio::ui::panels::onboarding::OnboardingData,
     _play_processes: &mut ResMut<crate::studio::ui::resources::PlayInClientProcesses>,
     playtest_state: &mut ResMut<crate::client::PlaytestState>,
     playtest_backup: &mut ResMut<crate::studio::ui::resources::PlaytestBackup>,
-    playtest_client_query: &Query<Entity, With<crate::studio::ui::resources::InEditorPlaytestClient>>,
-    selection: &Selection,
-    explorer_query: &Query<(
+    playtest_client_query: &Query<
         Entity,
-        &Name,
-        Option<&ChildOf>,
-        Option<&Children>,
-        Option<&crate::common::game::bricks::components::Brick>,
-        Option<&crate::scripting::ecs::ServerScript>,
-        Option<&crate::scripting::ecs::LocalScript>,
-        Option<&crate::scripting::ecs::ModuleScript>,
-    ), Without<Camera3d>>,
+        With<crate::studio::ui::resources::InEditorPlaytestClient>,
+    >,
+    selection: &Selection,
+    explorer_query: &Query<
+        (
+            Entity,
+            &Name,
+            Option<&ChildOf>,
+            Option<&Children>,
+            Option<&crate::common::game::bricks::components::Brick>,
+            Option<&crate::scripting::ecs::ServerScript>,
+            Option<&crate::scripting::ecs::LocalScript>,
+            Option<&crate::scripting::ecs::ModuleScript>,
+        ),
+        Without<Camera3d>,
+    >,
     onboarding_active: bool,
     players_service: &mut Option<ResMut<crate::studio::tools::PlayersService>>,
-    lighting_service: &mut Option<ResMut<crate::common::game::environment::lighting::LightingService>>,
+    lighting_service: &mut Option<
+        ResMut<crate::common::game::environment::lighting::LightingService>,
+    >,
     file_dialog_state: &crate::studio::ui::resources::FileDialogState,
+    actions: &mut crate::studio::ui::resources::EditorActionQueue,
+    layout: &crate::studio::ui::resources::EditorLayoutState,
+    document: &mut crate::studio::ui::resources::DocumentState,
 ) {
     ui.style_mut().interaction.selectable_labels = false;
 
@@ -88,23 +156,25 @@ pub fn draw_top_bar(
 
                 let mut is_hovered = false;
                 ui.scope(|ui| {
-                    ui.style_mut().visuals.widgets.inactive.weak_bg_fill = egui::Color32::TRANSPARENT;
-                    ui.style_mut().visuals.widgets.inactive.bg_fill = egui::Color32::TRANSPARENT;
-                    ui.style_mut().visuals.widgets.inactive.bg_stroke = egui::Stroke::NONE;
-
-                    ui.style_mut().visuals.widgets.hovered.weak_bg_fill = egui::Color32::TRANSPARENT;
-                    ui.style_mut().visuals.widgets.hovered.bg_fill = egui::Color32::TRANSPARENT;
-                    ui.style_mut().visuals.widgets.hovered.bg_stroke = egui::Stroke::NONE;
-
-                    ui.style_mut().visuals.widgets.active.weak_bg_fill = egui::Color32::TRANSPARENT;
-                    ui.style_mut().visuals.widgets.active.bg_fill = egui::Color32::TRANSPARENT;
-                    ui.style_mut().visuals.widgets.active.bg_stroke = egui::Stroke::NONE;
+                    style_top_bar_menu(ui);
 
                     let file_button_res = egui::menu::menu_button(ui, egui::RichText::new("File").color(file_text_color).size(13.0), |ui| {
+                        if ui.button("New Project\tCtrl+N").clicked() {
+                            actions.0.push(crate::studio::ui::resources::EditorAction::NewProject);
+                            ui.close();
+                        }
+                        if ui.button("Open…\tCtrl+O").clicked() {
+                            actions.0.push(crate::studio::ui::resources::EditorAction::Open);
+                            ui.close();
+                        }
+                        ui.separator();
                         let save_enabled = !onboarding_data.save_path.is_empty();
-                        if ui.add_enabled(save_enabled, egui::Button::new("Save")).clicked() {
+                        if ui.add_enabled(save_enabled, egui::Button::new("Save\tCtrl+S")).clicked() {
+                            let node_ids: std::collections::HashMap<Entity, u64> = explorer_query.iter()
+                                .filter(|(_, _, _, _, brick, server, local, module)| brick.is_some() || server.is_some() || local.is_some() || module.is_some())
+                                .enumerate().map(|(index, (entity, _, _, _, _, _, _, _))| (entity, index as u64)).collect();
                             let mut bricks_data = Vec::new();
-                            for (_, transform, name, _, _, brick_opt, shape_opt, _, _, mat_opt, studs_mat_opt, phys_opt) in entities_query.iter() {
+                            for (entity, transform, name, child_of, _, brick_opt, shape_opt, _, _, mat_opt, studs_mat_opt, phys_opt) in entities_query.iter() {
                                 if brick_opt.is_some() {
                                     let shape = shape_opt.as_ref().map(|s| s.shape).unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
                                     let mut current_color = Color::Srgba(Srgba::new(0.84, 0.24, 0.16, 1.0));
@@ -123,6 +193,8 @@ pub fn draw_top_bar(
                                         (true, 0.3, true, 0.3, 1.0, 1.0)
                                     };
                                     bricks_data.push(crate::common::core::vrtx::VrtxBrick {
+                                        node_id: node_ids.get(&entity).copied().unwrap_or(bricks_data.len() as u64),
+                                        parent_node_id: child_of.and_then(|parent| node_ids.get(&parent.parent()).copied()),
                                         name: name.to_string(),
                                         transform: *transform,
                                         shape,
@@ -138,7 +210,7 @@ pub fn draw_top_bar(
                             }
 
                             let mut scripts_data = Vec::new();
-                            for (_entity, name, child_of_opt, _, _, s_opt, l_opt, m_opt) in explorer_query.iter() {
+                            for (entity, name, child_of_opt, _, _, s_opt, l_opt, m_opt) in explorer_query.iter() {
                                 let mut script_type_opt = None;
                                 let mut code = String::new();
                                 let mut enabled = true;
@@ -162,6 +234,8 @@ pub fn draw_top_bar(
                                         }
                                     }
                                     scripts_data.push(crate::common::core::vrtx::VrtxScript {
+                                        node_id: node_ids.get(&entity).copied().unwrap_or((bricks_data.len() + scripts_data.len()) as u64),
+                                        parent_node_id: child_of_opt.and_then(|parent| node_ids.get(&parent.parent()).copied()),
                                         name: name.to_string(),
                                         script_type,
                                         code,
@@ -182,23 +256,28 @@ pub fn draw_top_bar(
                                 Transform::IDENTITY
                             };
                             let state = crate::common::core::vrtx::VrtxFileState {
-                                version: 5,
+                                version: crate::common::core::vrtx::CURRENT_VRTX_VERSION,
                                 gravity: gravity_val,
-                                settings: crate::common::core::vrtx::VrtxSettings {
-                                    ssao: graphics_settings.ssao,
-                                    contact_shadows: graphics_settings.contact_shadows,
-                                    bloom: graphics_settings.bloom,
-                                },
+                                settings: crate::common::core::vrtx::VrtxSettings::from_graphics(
+                                    graphics_settings,
+                                ),
+                                lighting: lighting_service
+                                    .as_ref()
+                                    .map(|service| (**service).clone())
+                                    .unwrap_or_default(),
                                 camera_transform: cam_transform,
                                 bricks: bricks_data,
                                 scripts: scripts_data,
                             };
-                            let _ = state.save_to_file(&onboarding_data.save_path);
+                            match state.save_to_file(&onboarding_data.save_path) {
+                                Ok(()) => document.dirty = false,
+                                Err(error) => document.error = Some(format!("Could not save project: {error}")),
+                            }
                             ui.close_menu();
                         }
-                        
+
                         let is_open = file_dialog_state.is_open.load(std::sync::atomic::Ordering::Relaxed);
-                        if ui.add_enabled(!is_open, egui::Button::new("Save As...")).clicked() {
+                        if ui.add_enabled(!is_open, egui::Button::new("Save As…\tCtrl+Shift+S")).clicked() {
                             file_dialog_state.is_open.store(true, std::sync::atomic::Ordering::Relaxed);
                             let tx = file_dialog_state.tx.clone();
                             std::thread::spawn(move || {
@@ -213,30 +292,51 @@ pub fn draw_top_bar(
                             });
                             ui.close_menu();
                         }
-                        if ui.add_enabled(!is_open, egui::Button::new("Open...")).clicked() {
-                            file_dialog_state.is_open.store(true, std::sync::atomic::Ordering::Relaxed);
-                            let tx = file_dialog_state.tx.clone();
-                            std::thread::spawn(move || {
-                                if let Some(path) = rfd::FileDialog::new()
-                                    .add_filter("Rave Project", &["vrtx"])
-                                    .set_directory(std::env::current_dir().unwrap_or_default())
-                                    .pick_file() {
-                                    let _ = tx.send(crate::studio::ui::resources::FileDialogResult::OpenFile(path));
-                                } else {
-                                    let _ = tx.send(crate::studio::ui::resources::FileDialogResult::Cancel);
-                                }
-                            });
-                            ui.close_menu();
+                        ui.separator();
+                        if ui.button("Exit").clicked() {
+                            actions.0.push(crate::studio::ui::resources::EditorAction::Exit);
+                            ui.close();
                         }
                     });
                     is_hovered = file_button_res.response.hovered();
                 });
                 ui.data_mut(|d| d.insert_temp(file_id, is_hovered));
 
-                ui.label(egui::RichText::new("Edit").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
-                ui.label(egui::RichText::new("Insert").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
-                ui.label(egui::RichText::new("View").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
-                ui.label(egui::RichText::new("Test").color(egui::Color32::from_rgb(60, 60, 60)).size(13.0));
+                top_bar_menu(ui, "edit_menu_btn", "Edit", |ui| {
+                    for (label, action, enabled) in [
+                        ("Undo\tCtrl+Z", crate::studio::ui::resources::EditorAction::Undo, !history.undo_stack.is_empty()),
+                        ("Redo\tCtrl+Y", crate::studio::ui::resources::EditorAction::Redo, !history.redo_stack.is_empty()),
+                        ("Cut\tCtrl+X", crate::studio::ui::resources::EditorAction::Cut, !selection.entities.is_empty()),
+                        ("Copy\tCtrl+C", crate::studio::ui::resources::EditorAction::Copy, !selection.entities.is_empty()),
+                        ("Paste\tCtrl+V", crate::studio::ui::resources::EditorAction::Paste, true),
+                        ("Duplicate\tCtrl+D", crate::studio::ui::resources::EditorAction::Duplicate, !selection.entities.is_empty()),
+                        ("Rename\tF2", crate::studio::ui::resources::EditorAction::Rename, selection.entities.len() == 1),
+                        ("Delete\tDelete", crate::studio::ui::resources::EditorAction::Delete, !selection.entities.is_empty()),
+                        ("Select All\tCtrl+A", crate::studio::ui::resources::EditorAction::SelectAll, true),
+                    ] {
+                        if ui.add_enabled(enabled, egui::Button::new(label)).clicked() { actions.0.push(action); ui.close(); }
+                    }
+                });
+                top_bar_menu(ui, "insert_menu_btn", "Insert", |ui| {
+                    for (label, kind) in [("Part", crate::studio::ui::resources::InsertKind::Part), ("Sphere", crate::studio::ui::resources::InsertKind::Sphere), ("Script", crate::studio::ui::resources::InsertKind::ServerScript), ("LocalScript", crate::studio::ui::resources::InsertKind::LocalScript), ("ModuleScript", crate::studio::ui::resources::InsertKind::ModuleScript)] {
+                        if ui.button(label).clicked() { actions.0.push(crate::studio::ui::resources::EditorAction::Insert(kind, selection.entity)); ui.close(); }
+                    }
+                });
+                top_bar_menu(ui, "view_menu_btn", "View", |ui| {
+                    if ui.selectable_label(layout.explorer_visible, "Explorer").clicked() { actions.0.push(crate::studio::ui::resources::EditorAction::ToggleExplorer); }
+                    if ui.selectable_label(layout.properties_visible, "Properties").clicked() { actions.0.push(crate::studio::ui::resources::EditorAction::ToggleProperties); }
+                    if ui.selectable_label(layout.script_editor_visible, "Script Editor").clicked() { actions.0.push(crate::studio::ui::resources::EditorAction::ToggleScriptEditor); }
+                    ui.separator();
+                    if ui.add_enabled(!selection.entities.is_empty(), egui::Button::new("Frame Selected\tF")).clicked() { actions.0.push(crate::studio::ui::resources::EditorAction::FrameSelected); ui.close(); }
+                    if ui.button("Reset Camera").clicked() { actions.0.push(crate::studio::ui::resources::EditorAction::ResetCamera); ui.close(); }
+                    if ui.button("Reset Layout").clicked() { actions.0.push(crate::studio::ui::resources::EditorAction::ResetLayout); ui.close(); }
+                });
+                top_bar_menu(ui, "test_menu_btn", "Test", |ui| {
+                    let simulation = if physics_state == crate::common::game::physics::PhysicsSimulationState::Running { "Stop Simulation\tF6" } else { "Play Simulation\tF6" };
+                    if ui.button(simulation).clicked() { ui.data_mut(|data| data.insert_temp(egui::Id::new("trigger_simulation"), true)); ui.close(); }
+                    let playtest = if playtest_state.active { "Stop Playtest\tShift+F5" } else { "Play in Studio\tF5" };
+                    if ui.button(playtest).clicked() { ui.data_mut(|data| data.insert_temp(egui::Id::new("trigger_playtest"), true)); ui.close(); }
+                });
 
                 let settings_id = ui.make_persistent_id("settings_menu_btn");
                 let is_hovered_settings = ui.data(|d| d.get_temp::<bool>(settings_id)).unwrap_or(false);
@@ -268,8 +368,10 @@ pub fn draw_top_bar(
             });
         });
 
-    let (bottom_sep, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
-    ui.painter().rect_filled(bottom_sep, 0.0, egui::Color32::from_rgb(212, 212, 212));
+    let (bottom_sep, _) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
+    ui.painter()
+        .rect_filled(bottom_sep, 0.0, egui::Color32::from_rgb(212, 212, 212));
 
     egui::Frame::NONE
         .inner_margin(egui::Margin::symmetric(12, 8))
@@ -518,7 +620,8 @@ pub fn draw_top_bar(
                     let play_btn_tex = if is_playing { stopp_tex } else { play_tex };
                     let play_btn_label = if is_playing { "Stop" } else { "Play" };
 
-                    if ribbonbutton(ui, Some(play_btn_tex), play_btn_label, is_playing).clicked() {
+                    let trigger_simulation = ui.data_mut(|data| data.remove_temp::<bool>(egui::Id::new("trigger_simulation"))).unwrap_or(false);
+                    if ribbonbutton(ui, Some(play_btn_tex), play_btn_label, is_playing).clicked() || trigger_simulation {
                         if is_playing {
                             physics_action_writer.write(crate::common::game::physics::PhysicsSimulationAction::Stop);
                         } else {
@@ -530,7 +633,8 @@ pub fn draw_top_bar(
                     let playc_btn_label = if playtesting_active { "Stop Playtest" } else { "Play in Studio" };
                     let playc_btn_tex = if playtesting_active { stopp_tex } else { playc_tex };
 
-                    if ribbonbutton(ui, Some(playc_btn_tex), playc_btn_label, playtesting_active).clicked() {
+                    let trigger_playtest = ui.data_mut(|data| data.remove_temp::<bool>(egui::Id::new("trigger_playtest"))).unwrap_or(false);
+                    if ribbonbutton(ui, Some(playc_btn_tex), playc_btn_label, playtesting_active).clicked() || trigger_playtest {
                         if playtesting_active {
                             playtest_state.active = false;
 
@@ -668,6 +772,8 @@ pub fn draw_top_bar(
                                         }
                                     }
                                     backup_scripts.push(crate::common::core::vrtx::VrtxScript {
+                                        node_id: backup_scripts.len() as u64,
+                                        parent_node_id: None,
                                         name: _name.to_string(),
                                         script_type,
                                         code,
@@ -681,13 +787,15 @@ pub fn draw_top_bar(
 
                             let temp_map_path = "temp_play.vrtx".to_string();
                             let state = crate::common::core::vrtx::VrtxFileState {
-                                version: 5,
+                                version: crate::common::core::vrtx::CURRENT_VRTX_VERSION,
                                 gravity: Vec3::new(0.0, -186.9 * 0.28, 0.0),
-                                settings: crate::common::core::vrtx::VrtxSettings {
-                                    ssao: graphics_settings.ssao,
-                                    contact_shadows: graphics_settings.contact_shadows,
-                                    bloom: graphics_settings.bloom,
-                                },
+                                settings: crate::common::core::vrtx::VrtxSettings::from_graphics(
+                                    graphics_settings,
+                                ),
+                                lighting: lighting_service
+                                    .as_ref()
+                                    .map(|service| (**service).clone())
+                                    .unwrap_or_default(),
                                 camera_transform: Transform::IDENTITY,
                                 bricks: playtest_backup.bricks.iter().map(|b| {
                                     let mut current_color = Color::Srgba(Srgba::new(0.84, 0.24, 0.16, 1.0));
@@ -706,6 +814,8 @@ pub fn draw_top_bar(
                                         (true, 0.3, true, 0.3, 1.0, 1.0)
                                     };
                                     crate::common::core::vrtx::VrtxBrick {
+                                        node_id: 0,
+                                        parent_node_id: None,
                                         name: b.name.clone(),
                                         transform: b.transform,
                                         shape: b.shape,
@@ -785,8 +895,10 @@ pub fn draw_top_bar(
             });
         });
 
-    let (bottom_sep, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
-    ui.painter().rect_filled(bottom_sep, 0.0, egui::Color32::from_rgb(180, 180, 180));
+    let (bottom_sep, _) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 1.0), egui::Sense::hover());
+    ui.painter()
+        .rect_filled(bottom_sep, 0.0, egui::Color32::from_rgb(180, 180, 180));
 }
 
 #[allow(deprecated)]
@@ -801,11 +913,8 @@ fn ribbonbutton(
     let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
 
     if selected {
-        ui.painter().rect_filled(
-            rect,
-            4.0,
-            egui::Color32::from_rgb(204, 232, 255),
-        );
+        ui.painter()
+            .rect_filled(rect, 4.0, egui::Color32::from_rgb(204, 232, 255));
         ui.painter().rect_stroke(
             rect,
             4.0,
@@ -813,11 +922,8 @@ fn ribbonbutton(
             egui::StrokeKind::Inside,
         );
     } else if response.hovered() {
-        ui.painter().rect_filled(
-            rect,
-            4.0,
-            egui::Color32::from_rgb(224, 238, 249),
-        );
+        ui.painter()
+            .rect_filled(rect, 4.0, egui::Color32::from_rgb(224, 238, 249));
         ui.painter().rect_stroke(
             rect,
             4.0,

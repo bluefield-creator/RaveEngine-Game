@@ -4,12 +4,26 @@ use bevy::prelude::*;
 #[reflect(Resource)]
 pub struct LightingService {
     pub time_of_day: f32,
+    pub sun_intensity: f32,
+    pub ambient_intensity: f32,
+    pub sun_tint: Color,
+    pub ambient_tint: Color,
+    pub shadows_enabled: bool,
+    pub fog_enabled: bool,
+    pub fog_density: f32,
 }
 
 impl Default for LightingService {
     fn default() -> Self {
         Self {
             time_of_day: 12.0,
+            sun_intensity: 1.0,
+            ambient_intensity: 1.0,
+            sun_tint: Color::WHITE,
+            ambient_tint: Color::WHITE,
+            shadows_enabled: true,
+            fog_enabled: true,
+            fog_density: 1.0,
         }
     }
 }
@@ -31,64 +45,93 @@ pub fn sync_lighting_service(
 pub fn update_lighting_system(
     mut commands: Commands,
     lighting_service: Res<LightingService>,
-    mut last_tod: Local<f32>,
     mut ambient: ResMut<GlobalAmbientLight>,
-    sky_dome_query: Query<&MeshMaterial3d<StandardMaterial>, With<crate::common::game::environment::sky::SkyDome>>,
+    sky_dome_query: Query<
+        &MeshMaterial3d<StandardMaterial>,
+        With<crate::common::game::environment::sky::SkyDome>,
+    >,
     mut celestial_query: Query<
-        (&mut Transform, Option<&crate::common::game::environment::sky::SunDisk>, Option<&crate::common::game::environment::sky::MoonDisk>),
-        Or<(With<crate::common::game::environment::sky::SunDisk>, With<crate::common::game::environment::sky::MoonDisk>)>,
+        (
+            &mut Transform,
+            Option<&crate::common::game::environment::sky::SunDisk>,
+            Option<&crate::common::game::environment::sky::MoonDisk>,
+        ),
+        Or<(
+            With<crate::common::game::environment::sky::SunDisk>,
+            With<crate::common::game::environment::sky::MoonDisk>,
+        )>,
     >,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
-    mut sun_light_query: Query<(&mut DirectionalLight, &mut Transform), (Without<crate::common::game::environment::sky::SunDisk>, Without<crate::common::game::environment::sky::MoonDisk>)>,
+    mut sun_light_query: Query<
+        (&mut DirectionalLight, &mut Transform),
+        (
+            Without<crate::common::game::environment::sky::SunDisk>,
+            Without<crate::common::game::environment::sky::MoonDisk>,
+        ),
+    >,
     mut camera_query: Query<(Entity, Option<&mut DistanceFog>), With<Camera3d>>,
 ) {
-    let time_of_day = lighting_service.time_of_day;
-    if (*last_tod - time_of_day).abs() < 0.001 {
+    if !lighting_service.is_changed() {
         return;
     }
-    *last_tod = time_of_day;
+    let time_of_day = lighting_service.time_of_day.rem_euclid(24.0);
 
     let altitude = (time_of_day - 6.0) / 24.0 * 2.0 * std::f32::consts::PI;
     let azimuth = 0.95;
     let tilt = 30.0f32.to_radians();
-    let sun_rotation = Quat::from_rotation_y(azimuth) * Quat::from_rotation_z(tilt) * Quat::from_rotation_x(-altitude);
+    let sun_rotation = Quat::from_rotation_y(azimuth)
+        * Quat::from_rotation_z(tilt)
+        * Quat::from_rotation_x(-altitude);
     let sun_dir = sun_rotation.mul_vec3(Vec3::Z);
     let sun_y = sun_dir.y;
 
     let (ambient_color, ambient_brightness) = if time_of_day >= 6.0 && time_of_day < 12.0 {
         let t = (time_of_day - 6.0) / 6.0;
         (
-            interpolate_color(Color::srgb(0.40, 0.35, 0.45), Color::srgb(0.55, 0.75, 0.95), t),
-            500.0 + t * 500.0,
+            interpolate_color(
+                Color::srgb(0.40, 0.35, 0.45),
+                Color::srgb(0.55, 0.75, 0.95),
+                t,
+            ),
+            180.0 + t * 140.0,
         )
     } else if time_of_day >= 12.0 && time_of_day < 19.0 {
         let t = (time_of_day - 12.0) / 7.0;
         (
-            interpolate_color(Color::srgb(0.55, 0.75, 0.95), Color::srgb(0.45, 0.25, 0.35), t),
-            1000.0 - t * 500.0,
+            interpolate_color(
+                Color::srgb(0.55, 0.75, 0.95),
+                Color::srgb(0.45, 0.25, 0.35),
+                t,
+            ),
+            320.0 - t * 140.0,
         )
     } else if time_of_day >= 19.0 && time_of_day < 21.5 {
         let t = (time_of_day - 19.0) / 2.5;
         (
-            interpolate_color(Color::srgb(0.45, 0.25, 0.35), Color::srgb(0.06, 0.09, 0.22), t),
-            500.0 + t * 500.0,
+            interpolate_color(
+                Color::srgb(0.45, 0.25, 0.35),
+                Color::srgb(0.06, 0.09, 0.22),
+                t,
+            ),
+            180.0 - t * 130.0,
         )
     } else if time_of_day >= 4.5 && time_of_day < 6.0 {
         let t = (time_of_day - 4.5) / 1.5;
         (
-            interpolate_color(Color::srgb(0.06, 0.09, 0.22), Color::srgb(0.40, 0.35, 0.45), t),
-            1000.0 - t * 500.0,
+            interpolate_color(
+                Color::srgb(0.06, 0.09, 0.22),
+                Color::srgb(0.40, 0.35, 0.45),
+                t,
+            ),
+            50.0 + t * 130.0,
         )
     } else {
-        (Color::srgb(0.06, 0.09, 0.22), 1000.0)
+        (Color::srgb(0.06, 0.09, 0.22), 50.0)
     };
 
-    let daytime_factor = sun_y.max(0.0);
-    let ambient_mult = 0.85 + daytime_factor * (0.60 - 0.85);
-
-    ambient.color = ambient_color;
-    ambient.brightness = ambient_brightness * ambient_mult;
+    ambient.color = multiply_color(ambient_color, lighting_service.ambient_tint);
+    ambient.brightness = ambient_brightness * lighting_service.ambient_intensity.max(0.0);
 
     let sun_color = if time_of_day >= 6.0 && time_of_day < 12.0 {
         let t = (time_of_day - 6.0) / 6.0;
@@ -124,23 +167,25 @@ pub fn update_lighting_system(
 
     let sun_illuminance = if time_of_day >= 6.0 && time_of_day < 12.0 {
         let t = (time_of_day - 6.0) / 6.0;
-        3000.0 + t * 9000.0
+        12_000.0 + t * 73_000.0
     } else if time_of_day >= 12.0 && time_of_day < 19.0 {
         let t = (time_of_day - 12.0) / 7.0;
-        12000.0 - t * 9000.0
+        85_000.0 - t * 73_000.0
     } else if time_of_day >= 19.0 && time_of_day < 21.5 {
         let t = (time_of_day - 19.0) / 2.5;
-        3000.0 - t * 500.0
+        12_000.0 - t * 11_700.0
     } else if time_of_day >= 4.5 && time_of_day < 6.0 {
         let t = (time_of_day - 4.5) / 1.5;
-        2500.0 + t * 500.0
+        300.0 + t * 11_700.0
     } else {
-        2500.0
+        300.0
     };
 
     for (mut light, mut transform) in &mut sun_light_query {
-        light.color = sun_color;
-        light.illuminance = sun_illuminance;
+        light.color = multiply_color(sun_color, lighting_service.sun_tint);
+        light.illuminance = sun_illuminance * lighting_service.sun_intensity.max(0.0);
+        light.shadow_maps_enabled = lighting_service.shadows_enabled;
+        light.contact_shadows_enabled = lighting_service.shadows_enabled;
         transform.rotation = sun_rotation;
     }
 
@@ -168,34 +213,55 @@ pub fn update_lighting_system(
     }
 
     for (camera_entity, mut fog_opt) in &mut camera_query {
+        if !lighting_service.fog_enabled {
+            commands.entity(camera_entity).remove::<DistanceFog>();
+            continue;
+        }
         let (fog_color, density) = if time_of_day >= 6.0 && time_of_day < 12.0 {
             let t = (time_of_day - 6.0) / 6.0;
             (
-                interpolate_color(Color::srgb(0.70, 0.45, 0.35), Color::srgb(0.55, 0.65, 0.75), t),
+                interpolate_color(
+                    Color::srgb(0.70, 0.45, 0.35),
+                    Color::srgb(0.55, 0.65, 0.75),
+                    t,
+                ),
                 0.0003 - t * 0.0001,
             )
         } else if time_of_day >= 12.0 && time_of_day < 19.0 {
             let t = (time_of_day - 12.0) / 7.0;
             (
-                interpolate_color(Color::srgb(0.55, 0.65, 0.75), Color::srgb(0.75, 0.35, 0.20), t),
+                interpolate_color(
+                    Color::srgb(0.55, 0.65, 0.75),
+                    Color::srgb(0.75, 0.35, 0.20),
+                    t,
+                ),
                 0.0002 + t * 0.00015,
             )
         } else if time_of_day >= 19.0 && time_of_day < 21.5 {
             let t = (time_of_day - 19.0) / 2.5;
             (
-                interpolate_color(Color::srgb(0.75, 0.35, 0.20), Color::srgb(0.04, 0.05, 0.10), t),
+                interpolate_color(
+                    Color::srgb(0.75, 0.35, 0.20),
+                    Color::srgb(0.04, 0.05, 0.10),
+                    t,
+                ),
                 0.00035 + t * 0.00025,
             )
         } else if time_of_day >= 4.5 && time_of_day < 6.0 {
             let t = (time_of_day - 4.5) / 1.5;
             (
-                interpolate_color(Color::srgb(0.04, 0.05, 0.10), Color::srgb(0.70, 0.45, 0.35), t),
+                interpolate_color(
+                    Color::srgb(0.04, 0.05, 0.10),
+                    Color::srgb(0.70, 0.45, 0.35),
+                    t,
+                ),
                 0.0006 - t * 0.0003,
             )
         } else {
             (Color::srgb(0.04, 0.05, 0.10), 0.0006)
         };
 
+        let density = density * lighting_service.fog_density.max(0.0);
         if let Some(ref mut fog) = fog_opt {
             fog.color = fog_color;
             fog.falloff = FogFalloff::Exponential { density };
@@ -209,10 +275,7 @@ pub fn update_lighting_system(
     }
 }
 
-pub fn update_sky_gradient(
-    time_of_day: f32,
-    image: &mut Image,
-) {
+pub fn update_sky_gradient(time_of_day: f32, image: &mut Image) {
     let height = 256;
     if image.data.is_none() {
         return;
@@ -332,4 +395,15 @@ fn interpolate_color(c1: Color, c2: Color, t: f32) -> Color {
         s1.blue + t * (s2.blue - s1.blue),
         s1.alpha + t * (s2.alpha - s1.alpha),
     ))
+}
+
+fn multiply_color(color: Color, tint: Color) -> Color {
+    let color = color.to_srgba();
+    let tint = tint.to_srgba();
+    Color::srgba(
+        color.red * tint.red,
+        color.green * tint.green,
+        color.blue * tint.blue,
+        color.alpha,
+    )
 }

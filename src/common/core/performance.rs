@@ -1,28 +1,160 @@
-use bevy::prelude::*;
-use bevy::winit::{WinitSettings, UpdateMode};
-use bevy::window::{PrimaryWindow, WindowMode};
+use bevy::anti_alias::fxaa::Fxaa;
+use bevy::camera::Exposure;
 use bevy::camera_controller::free_camera::FreeCamera;
+use bevy::light::{DirectionalLightShadowMap, ShadowFilteringMethod};
+use bevy::pbr::{
+    ContactShadows, ScreenSpaceAmbientOcclusion, ScreenSpaceAmbientOcclusionQualityLevel,
+};
 use bevy::post_process::bloom::Bloom;
-use bevy::pbr::{ScreenSpaceAmbientOcclusion, ContactShadows};
+use bevy::prelude::*;
+use bevy::window::{PrimaryWindow, WindowMode};
+use bevy::winit::{UpdateMode, WinitSettings};
 use std::time::Duration;
 
 #[derive(Component)]
 pub struct PreviousTransform(pub Transform);
 
-#[derive(Resource)]
+#[derive(Resource, Clone, PartialEq)]
 pub struct GraphicsSettings {
     pub ssao: bool,
+    pub ssao_quality: AmbientOcclusionQuality,
     pub contact_shadows: bool,
+    pub contact_shadow_length: f32,
     pub bloom: bool,
+    pub bloom_intensity: f32,
+    pub shadow_quality: ShadowQuality,
+    pub soft_shadows: bool,
+    pub anti_aliasing: AntiAliasing,
+    pub exposure_ev100: f32,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AmbientOcclusionQuality {
+    Low,
+    Medium,
+    High,
+    Ultra,
+}
+
+impl AmbientOcclusionQuality {
+    pub fn from_u8(value: u8) -> Self {
+        match value {
+            0 => Self::Low,
+            1 => Self::Medium,
+            3 => Self::Ultra,
+            _ => Self::High,
+        }
+    }
+
+    pub fn as_u8(self) -> u8 {
+        match self {
+            Self::Low => 0,
+            Self::Medium => 1,
+            Self::High => 2,
+            Self::Ultra => 3,
+        }
+    }
+
+    fn bevy(self) -> ScreenSpaceAmbientOcclusionQualityLevel {
+        match self {
+            Self::Low => ScreenSpaceAmbientOcclusionQualityLevel::Low,
+            Self::Medium => ScreenSpaceAmbientOcclusionQualityLevel::Medium,
+            Self::High => ScreenSpaceAmbientOcclusionQualityLevel::High,
+            Self::Ultra => ScreenSpaceAmbientOcclusionQualityLevel::Ultra,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ShadowQuality {
+    Low,
+    Medium,
+    High,
+    Ultra,
+}
+
+impl ShadowQuality {
+    pub fn from_u8(value: u8) -> Self {
+        match value {
+            0 => Self::Low,
+            1 => Self::Medium,
+            3 => Self::Ultra,
+            _ => Self::High,
+        }
+    }
+
+    pub fn as_u8(self) -> u8 {
+        match self {
+            Self::Low => 0,
+            Self::Medium => 1,
+            Self::High => 2,
+            Self::Ultra => 3,
+        }
+    }
+
+    fn map_size(self) -> usize {
+        match self {
+            Self::Low => 512,
+            Self::Medium => 1024,
+            Self::High => 2048,
+            Self::Ultra => 4096,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AntiAliasing {
+    Off,
+    Fxaa,
+    Msaa2,
+    Msaa4,
+    Msaa8,
+}
+
+impl AntiAliasing {
+    pub fn from_u8(value: u8) -> Self {
+        match value {
+            0 => Self::Off,
+            1 => Self::Fxaa,
+            2 => Self::Msaa2,
+            4 => Self::Msaa8,
+            _ => Self::Msaa4,
+        }
+    }
+
+    pub fn as_u8(self) -> u8 {
+        match self {
+            Self::Off => 0,
+            Self::Fxaa => 1,
+            Self::Msaa2 => 2,
+            Self::Msaa4 => 3,
+            Self::Msaa8 => 4,
+        }
+    }
 }
 
 impl Default for GraphicsSettings {
     fn default() -> Self {
         Self {
-            ssao: false,
-            contact_shadows: false,
+            ssao: true,
+            ssao_quality: AmbientOcclusionQuality::High,
+            contact_shadows: true,
+            contact_shadow_length: 0.45,
             bloom: true,
+            bloom_intensity: 0.05,
+            shadow_quality: ShadowQuality::High,
+            soft_shadows: true,
+            anti_aliasing: AntiAliasing::Fxaa,
+            exposure_ev100: 9.7,
         }
+    }
+}
+
+pub(crate) fn contact_shadow_settings(settings: &GraphicsSettings) -> ContactShadows {
+    ContactShadows {
+        linear_steps: if settings.contact_shadows { 24 } else { 0 },
+        thickness: 0.1,
+        length: settings.contact_shadow_length,
     }
 }
 
@@ -33,10 +165,7 @@ impl Plugin for PerformancePlugin {
         if app.is_plugin_added::<bevy::render::RenderPlugin>() {
             app.insert_resource(WinitSettings::desktop_app())
                 .init_resource::<GraphicsSettings>()
-                .add_systems(Update, (
-                    apply_graphics_settings,
-                    manage_winit_performance,
-                ));
+                .add_systems(Update, (apply_graphics_settings, manage_winit_performance));
         }
     }
 }
@@ -44,29 +173,90 @@ impl Plugin for PerformancePlugin {
 pub fn apply_graphics_settings(
     settings: Res<GraphicsSettings>,
     mut commands: Commands,
-    camera_query: Query<Entity, With<Camera3d>>,
+    camera_query: Query<(Entity, &Camera), With<Camera3d>>,
+    mut shadow_map: Option<ResMut<DirectionalLightShadowMap>>,
 ) {
     if !settings.is_changed() {
         return;
     }
-    for entity in &camera_query {
+    for (entity, camera) in &camera_query {
+        if camera.order != 0 {
+            continue;
+        }
         if settings.ssao {
-            commands.entity(entity).insert(ScreenSpaceAmbientOcclusion::default());
+            commands.entity(entity).insert(ScreenSpaceAmbientOcclusion {
+                quality_level: settings.ssao_quality.bevy(),
+                ..default()
+            });
         } else {
-            commands.entity(entity).remove::<ScreenSpaceAmbientOcclusion>();
+            commands
+                .entity(entity)
+                .remove::<ScreenSpaceAmbientOcclusion>();
         }
 
-        if settings.contact_shadows {
-            commands.entity(entity).insert(ContactShadows::default());
-        } else {
-            commands.entity(entity).remove::<ContactShadows>();
-        }
+        commands
+            .entity(entity)
+            .insert(contact_shadow_settings(&settings));
 
         if settings.bloom {
-            commands.entity(entity).insert(Bloom { intensity: 0.05, ..default() });
+            commands.entity(entity).insert(Bloom {
+                intensity: settings.bloom_intensity,
+                ..default()
+            });
         } else {
             commands.entity(entity).remove::<Bloom>();
         }
+
+        commands.entity(entity).insert((
+            Exposure {
+                ev100: settings.exposure_ev100,
+            },
+            if settings.soft_shadows {
+                ShadowFilteringMethod::Gaussian
+            } else {
+                ShadowFilteringMethod::Hardware2x2
+            },
+        ));
+
+        let anti_aliasing = if settings.ssao
+            && matches!(
+                settings.anti_aliasing,
+                AntiAliasing::Msaa2 | AntiAliasing::Msaa4 | AntiAliasing::Msaa8
+            ) {
+            AntiAliasing::Fxaa
+        } else {
+            settings.anti_aliasing
+        };
+        match anti_aliasing {
+            AntiAliasing::Off => {
+                commands.entity(entity).insert(Msaa::Off).remove::<Fxaa>();
+            }
+            AntiAliasing::Fxaa => {
+                commands.entity(entity).insert((Msaa::Off, Fxaa::default()));
+            }
+            AntiAliasing::Msaa2 => {
+                commands
+                    .entity(entity)
+                    .insert(Msaa::Sample2)
+                    .remove::<Fxaa>();
+            }
+            AntiAliasing::Msaa4 => {
+                commands
+                    .entity(entity)
+                    .insert(Msaa::Sample4)
+                    .remove::<Fxaa>();
+            }
+            AntiAliasing::Msaa8 => {
+                commands
+                    .entity(entity)
+                    .insert(Msaa::Sample8)
+                    .remove::<Fxaa>();
+            }
+        }
+    }
+
+    if let Some(ref mut shadow_map) = shadow_map {
+        shadow_map.size = settings.shadow_quality.map_size();
     }
 }
 
@@ -91,10 +281,10 @@ pub fn manage_winit_performance(
     }
 
     let current_time = time.elapsed_secs();
-    
+
     let mut is_hovered = false;
     let mut is_fullscreen = false;
-    
+
     if let Ok(window) = windows.single() {
         if !matches!(window.mode, WindowMode::Windowed) {
             is_fullscreen = true;
@@ -145,7 +335,9 @@ pub fn manage_winit_performance(
             }
             prev.0 = *transform;
         } else {
-            commands.entity(entity).insert(PreviousTransform(*transform));
+            commands
+                .entity(entity)
+                .insert(PreviousTransform(*transform));
             is_active = true;
         }
     }
@@ -154,5 +346,32 @@ pub fn manage_winit_performance(
         winit_settings.focused_mode = UpdateMode::Continuous;
     } else {
         winit_settings.focused_mode = UpdateMode::reactive(Duration::from_millis(16));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn disables_contact_shadows_without_changing_the_render_layout() {
+        let mut settings = GraphicsSettings::default();
+        settings.contact_shadows = false;
+        settings.contact_shadow_length = 1.25;
+
+        let contact_shadows = contact_shadow_settings(&settings);
+
+        assert_eq!(contact_shadows.linear_steps, 0);
+        assert_eq!(contact_shadows.length, 1.25);
+    }
+
+    #[test]
+    fn enables_contact_shadows_through_the_uniform() {
+        let settings = GraphicsSettings::default();
+
+        let contact_shadows = contact_shadow_settings(&settings);
+
+        assert_eq!(contact_shadows.linear_steps, 24);
+        assert_eq!(contact_shadows.length, settings.contact_shadow_length);
     }
 }
