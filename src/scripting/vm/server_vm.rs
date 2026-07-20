@@ -58,8 +58,14 @@ impl ServerScriptVM {
         game_table.set("Players", crate::scripting::services::players::PlayersService).unwrap();
         game_table.set("Lighting", crate::scripting::services::lighting::LightingService).unwrap();
         game_table.set("RunService", crate::scripting::services::run_service::RunService).unwrap();
-        game_table.set("GetService", lua.create_function(|_, service_name: String| {
-            Ok(service_name)
+        game_table.set("GetService", lua.create_function(|lua, service_name: String| {
+            match service_name.as_str() {
+                "Workspace" | "workspace" => Ok(LuaValue::UserData(lua.create_userdata(crate::scripting::services::workspace::WorkspaceService)?)),
+                "Players" => Ok(LuaValue::UserData(lua.create_userdata(crate::scripting::services::players::PlayersService)?)),
+                "Lighting" => Ok(LuaValue::UserData(lua.create_userdata(crate::scripting::services::lighting::LightingService)?)),
+                "RunService" => Ok(LuaValue::UserData(lua.create_userdata(crate::scripting::services::run_service::RunService)?)),
+                _ => Err(mlua::Error::RuntimeError(format!("Service not found: {}", service_name))),
+            }
         }).unwrap()).unwrap();
         lua.globals().set("game", game_table).unwrap();
 

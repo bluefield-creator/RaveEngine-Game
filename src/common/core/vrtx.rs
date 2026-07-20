@@ -816,8 +816,16 @@ fn parse_godot_vrtx(decompressed: &[u8]) -> std::io::Result<VrtxFileState> {
 }
 
 impl VrtxFileState {
+    const MAX_FILE_SIZE: u64 = 256 * 1024 * 1024;
+    const MAX_BRICK_COUNT: u32 = 100_000;
+    const MAX_SCRIPT_COUNT: u32 = 100_000;
+    const MAX_NAME_LENGTH: usize = 256;
+    const MAX_CODE_LENGTH: usize = 1_048_576;
+    const MAX_VRTX_VERSION: u32 = 7;
+
     pub fn save_to_file(&self, path: &str) -> std::io::Result<()> {
-        let file = File::create(path)?;
+        let temp_path = format!("{}.tmp", path);
+        let file = File::create(&temp_path)?;
         let mut writer = BufWriter::new(file);
 
         writer.write_all(b"VRTX")?;
@@ -945,6 +953,10 @@ impl VrtxFileState {
         }
 
         writer.flush()?;
+        if let Err(e) = std::fs::rename(&temp_path, path) {
+            let _ = std::fs::remove_file(&temp_path);
+            return Err(e);
+        }
         Ok(())
     }
 
@@ -953,6 +965,12 @@ impl VrtxFileState {
         let mut file = File::open(path)?;
         let mut data = Vec::new();
         file.read_to_end(&mut data)?;
+        if data.len() as u64 > Self::MAX_FILE_SIZE {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "File exceeds maximum allowed size of 256 MB",
+            ));
+        }
         debug!("load_from_file: Read {} bytes from {}", data.len(), path);
 
         if data.len() >= 4 && &data[0..4] == b"VRTX" {
@@ -960,6 +978,12 @@ impl VrtxFileState {
             let mut version_bytes = [0u8; 4];
             reader.read_exact(&mut version_bytes)?;
             let version = u32::from_le_bytes(version_bytes);
+            if version > Self::MAX_VRTX_VERSION {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Unsupported .VRTX file version",
+                ));
+            }
             debug!("load_from_file: VRTX format version is {}", version);
 
             let (gravity, settings, lighting, camera_transform, count) = if version >= 1 {
@@ -1099,12 +1123,25 @@ impl VrtxFileState {
                 ));
             };
 
+            if count > Self::MAX_BRICK_COUNT {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "Brick count exceeds maximum allowed",
+                ));
+            }
+
             debug!("load_from_file: Expecting {} bricks", count);
             let mut bricks = Vec::with_capacity(count as usize);
             for _ in 0..count {
                 let mut name_len_bytes = [0u8; 2];
                 reader.read_exact(&mut name_len_bytes)?;
                 let name_len = u16::from_le_bytes(name_len_bytes) as usize;
+                if name_len > Self::MAX_NAME_LENGTH {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Brick name exceeds maximum allowed length",
+                    ));
+                }
                 let mut name_bytes = vec![0u8; name_len];
                 reader.read_exact(&mut name_bytes)?;
                 let name = String::from_utf8(name_bytes)
@@ -1250,10 +1287,22 @@ impl VrtxFileState {
                 let mut script_count_bytes = [0u8; 4];
                 if reader.read_exact(&mut script_count_bytes).is_ok() {
                     let script_count = u32::from_le_bytes(script_count_bytes);
+                    if script_count > Self::MAX_SCRIPT_COUNT {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "Script count exceeds maximum allowed",
+                        ));
+                    }
                     for _ in 0..script_count {
                         let mut name_len_bytes = [0u8; 2];
                         reader.read_exact(&mut name_len_bytes)?;
                         let name_len = u16::from_le_bytes(name_len_bytes) as usize;
+                        if name_len > Self::MAX_NAME_LENGTH {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                "Script name exceeds maximum allowed length",
+                            ));
+                        }
                         let mut name_bytes = vec![0u8; name_len];
                         reader.read_exact(&mut name_bytes)?;
                         let name = String::from_utf8(name_bytes).unwrap_or_default();
@@ -1278,6 +1327,12 @@ impl VrtxFileState {
                         let mut code_len_bytes = [0u8; 4];
                         reader.read_exact(&mut code_len_bytes)?;
                         let code_len = u32::from_le_bytes(code_len_bytes) as usize;
+                        if code_len > Self::MAX_CODE_LENGTH {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                "Script code exceeds maximum allowed length",
+                            ));
+                        }
                         let mut code_bytes = vec![0u8; code_len];
                         reader.read_exact(&mut code_bytes)?;
                         let code = String::from_utf8(code_bytes).unwrap_or_default();

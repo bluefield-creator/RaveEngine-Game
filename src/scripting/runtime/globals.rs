@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use mlua::prelude::*;
+use mlua::LuaThreadStatus;
 
 pub fn setup_globals(lua: &Lua) -> Result<(), mlua::Error> {
     let task_table = lua.create_table()?;
@@ -11,10 +12,28 @@ pub fn setup_globals(lua: &Lua) -> Result<(), mlua::Error> {
         match val {
             LuaValue::Function(f) => {
                 let thread = lua.create_thread(f)?;
-                thread.resume::<()>(())?;
+                thread.resume::<Option<f32>>(())?;
+                if thread.status() == LuaThreadStatus::Resumable {
+                    let scheduler_ref = lua.app_data_ref::<crate::scripting::vm::scheduler::SchedulerRef>().unwrap();
+                    let mut scheduler = scheduler_ref.0.lock().expect("Lua scheduler lock poisoned");
+                    let key = lua.create_registry_value(thread)?;
+                    scheduler.tasks.push(crate::scripting::vm::scheduler::LuaTask {
+                        thread_key: key,
+                        wake_time: None,
+                    });
+                }
             }
             LuaValue::Thread(t) => {
-                t.resume::<()>(())?;
+                t.resume::<Option<f32>>(())?;
+                if t.status() == LuaThreadStatus::Resumable {
+                    let scheduler_ref = lua.app_data_ref::<crate::scripting::vm::scheduler::SchedulerRef>().unwrap();
+                    let mut scheduler = scheduler_ref.0.lock().expect("Lua scheduler lock poisoned");
+                    let key = lua.create_registry_value(t)?;
+                    scheduler.tasks.push(crate::scripting::vm::scheduler::LuaTask {
+                        thread_key: key,
+                        wake_time: None,
+                    });
+                }
             }
             _ => return Err(mlua::Error::RuntimeError("task.spawn expects function or thread".to_string())),
         }

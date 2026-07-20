@@ -72,11 +72,24 @@ pub fn load_map(
     let loaded_state = VrtxFileState::load_from_file(&settings.map_path).ok();
 
     if let Some(state) = loaded_state {
-        let mut named_entities = std::collections::HashMap::new();
+        let mut node_id_to_entity = std::collections::HashMap::new();
+        let mut pending_parents: Vec<(Entity, u64)> = Vec::new();
+        let mut name_to_entity = std::collections::HashMap::new();
         for brick in state.bricks {
+            let node_id = brick.node_id;
+            let parent_node_id = brick.parent_node_id;
             let name = brick.name.clone();
             let entity = spawn_brick_entity(&mut commands, brick);
-            named_entities.insert(name, entity);
+            node_id_to_entity.insert(node_id, entity);
+            name_to_entity.insert(name, entity);
+            if let Some(parent_id) = parent_node_id {
+                pending_parents.push((entity, parent_id));
+            }
+        }
+        for (child, parent_id) in pending_parents {
+            if let Some(&parent) = node_id_to_entity.get(&parent_id) {
+                commands.entity(parent).add_child(child);
+            }
         }
         for script in state.scripts {
             let mut cmd = commands.spawn(Name::new(script.name));
@@ -108,9 +121,18 @@ pub fn load_map(
                 }
             }
             let new_script_entity = cmd.id();
-            if let Some(ref p_name) = script.parent_name {
-                if let Some(&parent_entity) = named_entities.get(p_name) {
+            let mut parented = false;
+            if let Some(parent_id) = script.parent_node_id {
+                if let Some(&parent_entity) = node_id_to_entity.get(&parent_id) {
                     commands.entity(parent_entity).add_child(new_script_entity);
+                    parented = true;
+                }
+            }
+            if !parented {
+                if let Some(ref p_name) = script.parent_name {
+                    if let Some(&parent_entity) = name_to_entity.get(p_name) {
+                        commands.entity(parent_entity).add_child(new_script_entity);
+                    }
                 }
             }
         }

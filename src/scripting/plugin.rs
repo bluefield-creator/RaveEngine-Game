@@ -324,7 +324,7 @@ pub fn detect_player_added_events(
 
         {
             let registry = server_vm.registry.lock().expect("ScriptRegistry lock poisoned");
-            let players_entity = crate::scripting::userdata::instance::find_service_entity(world, "Workspace").unwrap_or(Entity::PLACEHOLDER);
+            let players_entity = crate::scripting::userdata::instance::find_service_entity(world, "Players").unwrap_or(Entity::PLACEHOLDER);
             if let Some(keys) = registry.connections.get(&(players_entity, "PlayerAdded")) {
                 for key in keys {
                     if let Ok(func) = server_vm.lua.registry_value::<LuaFunction>(&**key) {
@@ -346,7 +346,7 @@ pub fn detect_player_added_events(
 
         {
             let registry = client_vm.registry.lock().expect("ScriptRegistry lock poisoned");
-            let players_entity = crate::scripting::userdata::instance::find_service_entity(world, "Workspace").unwrap_or(Entity::PLACEHOLDER);
+            let players_entity = crate::scripting::userdata::instance::find_service_entity(world, "Players").unwrap_or(Entity::PLACEHOLDER);
             if let Some(keys) = registry.connections.get(&(players_entity, "PlayerAdded")) {
                 for key in keys {
                     if let Ok(func) = client_vm.lua.registry_value::<LuaFunction>(&**key) {
