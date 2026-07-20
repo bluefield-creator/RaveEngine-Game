@@ -486,8 +486,7 @@ pub fn select_brick(
         let target = click.event_target();
         if click.button == PointerButton::Primary {
             if bricks.get(target).is_ok() {
-                let locked = brick_physics.get(target).map_or(false, |p| p.locked);
-                if locked && !shift && !ctrl {
+                if brick_physics.get(target).map_or(false, |p| p.locked) {
                     continue;
                 }
                 if shift {
@@ -982,7 +981,7 @@ pub fn handle_marquee_selection(
                     if let Ok(screen_pos) = camera.world_to_viewport(camera_transform, world_pos) {
                         if screen_pos.x >= min_x && screen_pos.x <= max_x && screen_pos.y >= min_y && screen_pos.y <= max_y {
                             selected_entities.push(entity);
-                            add_children_recursive(entity, &bricks_query, &mut selected_entities);
+                            add_children_recursive(entity, &bricks_query, &children_query, &mut selected_entities);
                         }
                     }
                 }
@@ -1012,10 +1011,10 @@ fn add_children_recursive(
     selected: &mut Vec<Entity>,
 ) {
     if let Ok(children) = children_query.get(entity) {
-        for &child in children.iter() {
-            if bricks_query.get(child).is_ok() && !selected.contains(&child) {
-                selected.push(child);
-                add_children_recursive(child, bricks_query, children_query, selected);
+        for child_entity in children.iter() {
+            if bricks_query.get(child_entity).is_ok() && !selected.contains(&child_entity) {
+                selected.push(child_entity);
+                add_children_recursive(child_entity, bricks_query, children_query, selected);
             }
         }
     }
