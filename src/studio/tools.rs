@@ -1,9 +1,9 @@
-use bevy::prelude::*;
-use bevy::window::{CursorIcon, SystemCursorIcon};
-use bevy::picking::mesh_picking::ray_cast::{MeshRayCast, MeshRayCastSettings};
 use crate::common::game::bricks::components::Brick;
 use crate::common::game::bricks::data::{BrickData, spawn_from_data};
 use crate::studio::gizmos::ToolGizmo;
+use bevy::picking::mesh_picking::ray_cast::{MeshRayCast, MeshRayCastSettings};
+use bevy::prelude::*;
+use bevy::window::{CursorIcon, SystemCursorIcon};
 use std::sync::RwLock;
 
 #[derive(Default, States, Debug, Clone, Copy, Eq, PartialEq, Hash)]
@@ -107,6 +107,14 @@ pub enum UndoCommand {
         old_transform: Transform,
         new_transform: Transform,
     },
+    SpawnTrees {
+        roots: Vec<Entity>,
+        snapshots: Vec<crate::studio::ui::resources::EditorNodeSnapshot>,
+    },
+    DeleteTrees {
+        roots: Vec<Entity>,
+        snapshots: Vec<crate::studio::ui::resources::EditorNodeSnapshot>,
+    },
 }
 
 impl UndoCommand {
@@ -129,7 +137,12 @@ impl UndoCommand {
                 }
                 data.remap(old, new);
             }
-            UndoCommand::ParentChange { entity, old_parent, new_parent, .. } => {
+            UndoCommand::ParentChange {
+                entity,
+                old_parent,
+                new_parent,
+                ..
+            } => {
                 if *entity == old {
                     *entity = new;
                 }
@@ -142,6 +155,34 @@ impl UndoCommand {
                     if *p == old {
                         *p = new;
                     }
+                }
+            }
+            UndoCommand::SpawnTrees { roots, snapshots }
+            | UndoCommand::DeleteTrees { roots, snapshots } => {
+                for root in roots {
+                    if *root == old {
+                        *root = new;
+                    }
+                }
+                fn remap(
+                    snapshot: &mut crate::studio::ui::resources::EditorNodeSnapshot,
+                    old: Entity,
+                    new: Entity,
+                ) {
+                    if snapshot.parent == Some(old) {
+                        snapshot.parent = Some(new);
+                    }
+                    if let crate::studio::ui::resources::EditorItemSnapshot::Part(data) =
+                        &mut snapshot.item
+                    {
+                        data.remap(old, new);
+                    }
+                    for child in &mut snapshot.children {
+                        remap(child, old, new);
+                    }
+                }
+                for snapshot in snapshots {
+                    remap(snapshot, old, new);
                 }
             }
         }
@@ -242,7 +283,14 @@ pub fn handle_undo_redo_action(
         Option<&Brick>,
         Option<&Mesh3d>,
         Option<&MeshMaterial3d<StandardMaterial>>,
-        Option<&MeshMaterial3d<bevy::pbr::ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>>>,
+        Option<
+            &MeshMaterial3d<
+                bevy::pbr::ExtendedMaterial<
+                    StandardMaterial,
+                    crate::common::game::bricks::studs::StudsExtension,
+                >,
+            >,
+        >,
     )>,
 ) {
     for action in actions.read() {
@@ -250,8 +298,14 @@ pub fn handle_undo_redo_action(
             UndoRedoAction::Undo => {
                 if let Some(command) = history.undo_stack.pop() {
                     match command.clone() {
-                        UndoCommand::TransformChange { entity, old_transform, new_transform: _ } => {
-                            if let Ok((_, mut transform, _, _, _, _, _, _, _)) = query.get_mut(entity) {
+                        UndoCommand::TransformChange {
+                            entity,
+                            old_transform,
+                            new_transform: _,
+                        } => {
+                            if let Ok((_, mut transform, _, _, _, _, _, _, _)) =
+                                query.get_mut(entity)
+                            {
                                 *transform = old_transform;
                             }
                             history.redo_stack.push(command);
@@ -271,11 +325,22 @@ pub fn handle_undo_redo_action(
                                 selection.entity = Some(new_entity);
                                 selection.entities = vec![new_entity];
                             }
-                            let updated_command = UndoCommand::Delete { entity: new_entity, data };
+                            let updated_command = UndoCommand::Delete {
+                                entity: new_entity,
+                                data,
+                            };
                             history.redo_stack.push(updated_command);
                         }
-                        UndoCommand::ParentChange { entity, old_parent, new_parent: _, old_transform, new_transform: _ } => {
-                            if let Ok((_, mut transform, _, _, _, _, _, _, _)) = query.get_mut(entity) {
+                        UndoCommand::ParentChange {
+                            entity,
+                            old_parent,
+                            new_parent: _,
+                            old_transform,
+                            new_transform: _,
+                        } => {
+                            if let Ok((_, mut transform, _, _, _, _, _, _, _)) =
+                                query.get_mut(entity)
+                            {
                                 *transform = old_transform;
                             }
                             if let Some(parent) = old_parent {
@@ -291,14 +356,45 @@ pub fn handle_undo_redo_action(
                             }
                             history.redo_stack.push(command);
                         }
+                        UndoCommand::SpawnTrees { roots, .. } => {
+                            for entity in roots {
+                                commands.entity(entity).try_despawn();
+                            }
+                            selection.entity = None;
+                            selection.entities.clear();
+                            history.redo_stack.push(command);
+                        }
+                        UndoCommand::DeleteTrees { roots, snapshots } => {
+                            let mut restored = Vec::new();
+                            let mut updated = command;
+                            for (old, snapshot) in roots.iter().zip(&snapshots) {
+                                let new = crate::studio::ui::resources::spawn_editor_snapshot(
+                                    &mut commands,
+                                    snapshot,
+                                    snapshot.parent,
+                                );
+                                history.remap_entity(*old, new);
+                                updated.remap(*old, new);
+                                restored.push(new);
+                            }
+                            selection.entity = restored.first().copied();
+                            selection.entities = restored;
+                            history.redo_stack.push(updated);
+                        }
                     }
                 }
             }
             UndoRedoAction::Redo => {
                 if let Some(command) = history.redo_stack.pop() {
                     match command.clone() {
-                        UndoCommand::TransformChange { entity, old_transform: _, new_transform } => {
-                            if let Ok((_, mut transform, _, _, _, _, _, _, _)) = query.get_mut(entity) {
+                        UndoCommand::TransformChange {
+                            entity,
+                            old_transform: _,
+                            new_transform,
+                        } => {
+                            if let Ok((_, mut transform, _, _, _, _, _, _, _)) =
+                                query.get_mut(entity)
+                            {
                                 *transform = new_transform;
                             }
                             history.undo_stack.push(command);
@@ -310,7 +406,10 @@ pub fn handle_undo_redo_action(
                                 selection.entity = Some(new_entity);
                                 selection.entities = vec![new_entity];
                             }
-                            let _updated_command = UndoCommand::Spawn { entity: new_entity, data };
+                            let _updated_command = UndoCommand::Spawn {
+                                entity: new_entity,
+                                data,
+                            };
                             history.undo_stack.push(_updated_command);
                         }
                         UndoCommand::Delete { entity, data: _ } => {
@@ -321,8 +420,16 @@ pub fn handle_undo_redo_action(
                             }
                             history.undo_stack.push(command);
                         }
-                        UndoCommand::ParentChange { entity, old_parent: _, new_parent, old_transform: _, new_transform } => {
-                            if let Ok((_, mut transform, _, _, _, _, _, _, _)) = query.get_mut(entity) {
+                        UndoCommand::ParentChange {
+                            entity,
+                            old_parent: _,
+                            new_parent,
+                            old_transform: _,
+                            new_transform,
+                        } => {
+                            if let Ok((_, mut transform, _, _, _, _, _, _, _)) =
+                                query.get_mut(entity)
+                            {
                                 *transform = new_transform;
                             }
                             if let Some(parent) = new_parent {
@@ -336,6 +443,31 @@ pub fn handle_undo_redo_action(
                                     e_cmd.remove::<ChildOf>();
                                 }
                             }
+                            history.undo_stack.push(command);
+                        }
+                        UndoCommand::SpawnTrees { roots, snapshots } => {
+                            let mut spawned = Vec::new();
+                            let mut updated = command;
+                            for (old, snapshot) in roots.iter().zip(&snapshots) {
+                                let new = crate::studio::ui::resources::spawn_editor_snapshot(
+                                    &mut commands,
+                                    snapshot,
+                                    snapshot.parent,
+                                );
+                                history.remap_entity(*old, new);
+                                updated.remap(*old, new);
+                                spawned.push(new);
+                            }
+                            selection.entity = spawned.first().copied();
+                            selection.entities = spawned;
+                            history.undo_stack.push(updated);
+                        }
+                        UndoCommand::DeleteTrees { roots, .. } => {
+                            for entity in roots {
+                                commands.entity(entity).try_despawn();
+                            }
+                            selection.entity = None;
+                            selection.entities.clear();
                             history.undo_stack.push(command);
                         }
                     }
@@ -357,7 +489,9 @@ fn world_to_local(
 
         let local_scale = world_scale;
         let local_rotation = parent_rotation.inverse() * world_rotation;
-        let local_translation = parent_rotation.inverse().mul_vec3(world_translation - parent_translation);
+        let local_translation = parent_rotation
+            .inverse()
+            .mul_vec3(world_translation - parent_translation);
         (local_translation, local_rotation, local_scale)
     } else {
         (world_translation, world_rotation, world_scale)
@@ -373,8 +507,12 @@ fn compute_rotation_drag(
     camera_transform: &GlobalTransform,
     window: &Window,
 ) -> Option<Quat> {
-    let center_screen = camera.world_to_viewport(camera_transform, center_world).ok()?;
-    let cursor_pos = window.cursor_position().unwrap_or(center_screen + Vec2::new(100.0, 0.0));
+    let center_screen = camera
+        .world_to_viewport(camera_transform, center_world)
+        .ok()?;
+    let cursor_pos = window
+        .cursor_position()
+        .unwrap_or(center_screen + Vec2::new(100.0, 0.0));
     let to_cursor = cursor_pos - center_screen;
     let tangent = if to_cursor.length_squared() > 1.0 {
         Vec2::new(-to_cursor.y, to_cursor.x).normalize()
@@ -402,7 +540,9 @@ fn compute_move_delta(
     camera_transform: &GlobalTransform,
 ) -> Option<f32> {
     let tip_world = center_world + axis_world;
-    let c = camera.world_to_viewport(camera_transform, center_world).ok()?;
+    let c = camera
+        .world_to_viewport(camera_transform, center_world)
+        .ok()?;
     let t = camera.world_to_viewport(camera_transform, tip_world).ok()?;
     let screen_vec = t - c;
     let pixel_len = screen_vec.length();
@@ -415,10 +555,7 @@ fn compute_move_delta(
     }
 }
 
-fn apply_snap(
-    value: f32,
-    snap_config: &SnapConfig,
-) -> f32 {
+fn apply_snap(value: f32, snap_config: &SnapConfig) -> f32 {
     if snap_config.enabled && snap_config.distance > 0.0 {
         let snap_interval = snap_config.distance * 0.28;
         (value / snap_interval).round() * snap_interval
@@ -530,18 +667,32 @@ pub fn handle_drag(
     snap_config: Res<SnapConfig>,
     physics_state: Res<crate::common::game::physics::PhysicsSimulationState>,
 ) {
-    if *physics_state == crate::common::game::physics::PhysicsSimulationState::Running { return; }
-    if !drag_state.active { return; }
+    if *physics_state == crate::common::game::physics::PhysicsSimulationState::Running {
+        return;
+    }
+    if !drag_state.active {
+        return;
+    }
 
-    let Some(gizmo_entity) = drag_state.gizmo_entity else { return };
-    let Ok(gizmo) = gizmos.get(gizmo_entity) else { return };
-    let Ok((mut brick_transform, brick_global, child_of_opt)) = bricks.get_mut(gizmo.target) else { return };
-    let Some((camera, camera_transform)) = camera_query.iter().next() else { return };
+    let Some(gizmo_entity) = drag_state.gizmo_entity else {
+        return;
+    };
+    let Ok(gizmo) = gizmos.get(gizmo_entity) else {
+        return;
+    };
+    let Ok((mut brick_transform, brick_global, child_of_opt)) = bricks.get_mut(gizmo.target) else {
+        return;
+    };
+    let Some((camera, camera_transform)) = camera_query.iter().next() else {
+        return;
+    };
     let Ok(window) = windows.single() else { return };
 
     let parent_global = child_of_opt.and_then(|co| parent_global_query.get(co.parent()).ok());
 
-    let start_translation = *drag_state.start_translation.get_or_insert(brick_global.translation());
+    let start_translation = *drag_state
+        .start_translation
+        .get_or_insert(brick_global.translation());
     let start_scale = *drag_state.start_scale.get_or_insert(brick_global.scale());
 
     for drag in drags.read() {
@@ -565,20 +716,18 @@ pub fn handle_drag(
                 brick_transform.rotate_local(rot);
             }
         } else {
-            if let Some(amount_world) = compute_move_delta(
-                delta,
-                center_world,
-                axis_world,
-                camera,
-                camera_transform,
-            ) {
+            if let Some(amount_world) =
+                compute_move_delta(delta, center_world, axis_world, camera, camera_transform)
+            {
                 drag_state.accumulated_displacement += amount_world;
 
-                let snapped_displacement = apply_snap(drag_state.accumulated_displacement, &snap_config);
+                let snapped_displacement =
+                    apply_snap(drag_state.accumulated_displacement, &snap_config);
 
                 match gizmo.tool {
                     ToolState::Move => {
-                        let new_global_translation = start_translation + axis_world * snapped_displacement;
+                        let new_global_translation =
+                            start_translation + axis_world * snapped_displacement;
                         let (local_translation, _local_rotation, _local_scale) = world_to_local(
                             new_global_translation,
                             brick_global.rotation(),
@@ -617,7 +766,9 @@ pub fn handle_drag_end(
         if drag.button != PointerButton::Primary {
             continue;
         }
-        if let (Some(gizmo_entity), Some(start_transform)) = (drag_state.gizmo_entity, drag_state.start_transform) {
+        if let (Some(gizmo_entity), Some(start_transform)) =
+            (drag_state.gizmo_entity, drag_state.start_transform)
+        {
             if let Ok(gizmo) = gizmos.get(gizmo_entity) {
                 if let Ok(final_transform) = bricks.get(gizmo.target) {
                     if start_transform != *final_transform {
@@ -661,11 +812,7 @@ pub fn handle_part_drag_start(
     }
 }
 
-fn is_descendant_of(
-    entity: Entity,
-    ancestor: Entity,
-    parent_query: &Query<&ChildOf>,
-) -> bool {
+fn is_descendant_of(entity: Entity, ancestor: Entity, parent_query: &Query<&ChildOf>) -> bool {
     let mut current = entity;
     while let Ok(child_of) = parent_query.get(current) {
         let parent_entity = child_of.parent();
@@ -690,23 +837,42 @@ pub fn handle_part_drag(
     snap_config: Res<SnapConfig>,
     physics_state: Res<crate::common::game::physics::PhysicsSimulationState>,
 ) {
-    if *physics_state == crate::common::game::physics::PhysicsSimulationState::Running { return; }
-    if !part_drag_state.active { return; }
-    let Some(dragged_entity) = part_drag_state.dragged_entity else { return };
+    if *physics_state == crate::common::game::physics::PhysicsSimulationState::Running {
+        return;
+    }
+    if !part_drag_state.active {
+        return;
+    }
+    let Some(dragged_entity) = part_drag_state.dragged_entity else {
+        return;
+    };
 
-    let Some((camera, camera_transform)) = camera_query.iter().next() else { return };
+    let Some((camera, camera_transform)) = camera_query.iter().next() else {
+        return;
+    };
     let Ok(window) = windows.single() else { return };
-    let Some(cursor_pos) = window.cursor_position() else { return };
-    let Ok(ray) = camera.viewport_to_world(camera_transform, cursor_pos) else { return };
+    let Some(cursor_pos) = window.cursor_position() else {
+        return;
+    };
+    let Ok(ray) = camera.viewport_to_world(camera_transform, cursor_pos) else {
+        return;
+    };
 
     for _ in drags.read() {}
 
     let (brick_rotation, brick_scale, child_of_parent) = {
-        let Ok((_, brick_global, child_of_opt)) = bricks.get(dragged_entity) else { return };
-        (brick_global.rotation(), brick_global.scale(), child_of_opt.map(|co| co.parent()))
+        let Ok((_, brick_global, child_of_opt)) = bricks.get(dragged_entity) else {
+            return;
+        };
+        (
+            brick_global.rotation(),
+            brick_global.scale(),
+            child_of_opt.map(|co| co.parent()),
+        )
     };
 
-    let parent_global = child_of_parent.and_then(|parent_entity| parent_global_query.get(parent_entity).ok());
+    let parent_global =
+        child_of_parent.and_then(|parent_entity| parent_global_query.get(parent_entity).ok());
 
     let base_extents = Vec3::new(2.0 * 0.28, 0.5 * 0.28, 1.0 * 0.28);
     let scaled_half_extents = base_extents * brick_scale;
@@ -716,15 +882,24 @@ pub fn handle_part_drag(
     let local_z = brick_rotation.mul_vec3(Vec3::Z);
 
     let world_half_extents = Vec3::new(
-        local_x.x.abs() * scaled_half_extents.x + local_y.x.abs() * scaled_half_extents.y + local_z.x.abs() * scaled_half_extents.z,
-        local_x.y.abs() * scaled_half_extents.x + local_y.y.abs() * scaled_half_extents.y + local_z.y.abs() * scaled_half_extents.z,
-        local_x.z.abs() * scaled_half_extents.x + local_y.z.abs() * scaled_half_extents.y + local_z.z.abs() * scaled_half_extents.z,
+        local_x.x.abs() * scaled_half_extents.x
+            + local_y.x.abs() * scaled_half_extents.y
+            + local_z.x.abs() * scaled_half_extents.z,
+        local_x.y.abs() * scaled_half_extents.x
+            + local_y.y.abs() * scaled_half_extents.y
+            + local_z.y.abs() * scaled_half_extents.z,
+        local_x.z.abs() * scaled_half_extents.x
+            + local_y.z.abs() * scaled_half_extents.y
+            + local_z.z.abs() * scaled_half_extents.z,
     );
 
     let filter_func = |entity: Entity| {
-        entity != dragged_entity 
+        entity != dragged_entity
             && !is_descendant_of(entity, dragged_entity, &parent_query)
-            && (bricks.contains(entity) || name_query.get(entity).map_or(false, |n| n.as_str() == "Baseplate"))
+            && (bricks.contains(entity)
+                || name_query
+                    .get(entity)
+                    .map_or(false, |n| n.as_str() == "Baseplate"))
     };
 
     let raycast_settings = MeshRayCastSettings {
@@ -761,9 +936,18 @@ pub fn handle_part_drag(
 
     if snap_config.enabled && snap_config.distance > 0.0 {
         let snap_interval = snap_config.distance * 0.28;
-        target_world_translation.x = ((target_world_translation.x - world_half_extents.x) / snap_interval).round() * snap_interval + world_half_extents.x;
-        target_world_translation.z = ((target_world_translation.z - world_half_extents.z) / snap_interval).round() * snap_interval + world_half_extents.x;
-        target_world_translation.y = ((target_world_translation.y - world_half_extents.y) / snap_interval).round() * snap_interval + world_half_extents.y;
+        target_world_translation.x =
+            ((target_world_translation.x - world_half_extents.x) / snap_interval).round()
+                * snap_interval
+                + world_half_extents.x;
+        target_world_translation.z =
+            ((target_world_translation.z - world_half_extents.z) / snap_interval).round()
+                * snap_interval
+                + world_half_extents.x;
+        target_world_translation.y =
+            ((target_world_translation.y - world_half_extents.y) / snap_interval).round()
+                * snap_interval
+                + world_half_extents.y;
         if target_world_translation.y < world_half_extents.y {
             target_world_translation.y = world_half_extents.y;
         }
@@ -790,7 +974,10 @@ pub fn handle_part_drag_end(
         if drag.button != PointerButton::Primary {
             continue;
         }
-        if let (Some(dragged_entity), Some(part_drag_state_start_transform)) = (part_drag_state.dragged_entity, part_drag_state.start_transform) {
+        if let (Some(dragged_entity), Some(part_drag_state_start_transform)) = (
+            part_drag_state.dragged_entity,
+            part_drag_state.start_transform,
+        ) {
             if let Ok(final_transform) = bricks.get(dragged_entity) {
                 if part_drag_state_start_transform != *final_transform {
                     history.push_command(UndoCommand::TransformChange {
@@ -834,18 +1021,30 @@ pub fn update_cursor(
     hover_state: Res<HoverState>,
     windows: Query<Entity, With<Window>>,
 ) {
-    let Ok(window_entity) = windows.single() else { return };
+    let Ok(window_entity) = windows.single() else {
+        return;
+    };
     if drag_state.active || part_drag_state.active {
-        commands.entity(window_entity).insert(CursorIcon::from(SystemCursorIcon::Grabbing));
+        commands
+            .entity(window_entity)
+            .insert(CursorIcon::from(SystemCursorIcon::Grabbing));
     } else if hover_state.hovered_gizmo.is_some() {
-        commands.entity(window_entity).insert(CursorIcon::from(SystemCursorIcon::Grab));
+        commands
+            .entity(window_entity)
+            .insert(CursorIcon::from(SystemCursorIcon::Grab));
     } else {
         commands.entity(window_entity).remove::<CursorIcon>();
     }
 }
 
 pub fn correct_child_transforms(
-    root_query: Query<(Entity, &GlobalTransform), (Without<ChildOf>, With<crate::common::game::bricks::components::Brick>)>,
+    root_query: Query<
+        (Entity, &GlobalTransform),
+        (
+            Without<ChildOf>,
+            With<crate::common::game::bricks::components::Brick>,
+        ),
+    >,
     child_query: Query<(&Transform, Option<&Children>)>,
     mut global_transform_query: Query<&mut GlobalTransform, With<ChildOf>>,
 ) {
@@ -855,7 +1054,12 @@ pub fn correct_child_transforms(
             rotation: root_global.rotation(),
             scale: Vec3::ONE,
         };
-        propagate_unscaled(root_entity, root_unscaled, &child_query, &mut global_transform_query);
+        propagate_unscaled(
+            root_entity,
+            root_unscaled,
+            &child_query,
+            &mut global_transform_query,
+        );
     }
 }
 
@@ -868,7 +1072,10 @@ fn propagate_unscaled(
     if let Ok((_, Some(children))) = child_query.get(parent_entity) {
         for child in children.iter() {
             if let Ok((local_transform, _)) = child_query.get(child) {
-                let child_global_translation = parent_unscaled.translation + parent_unscaled.rotation.mul_vec3(local_transform.translation);
+                let child_global_translation = parent_unscaled.translation
+                    + parent_unscaled
+                        .rotation
+                        .mul_vec3(local_transform.translation);
                 let child_global_rotation = parent_unscaled.rotation * local_transform.rotation;
                 let child_global_scale = local_transform.scale;
 
@@ -907,7 +1114,11 @@ pub fn handle_marquee_selection(
 ) {
     let Ok(window) = windows.single() else { return };
 
-    if mouse_buttons.just_pressed(MouseButton::Left) && !hover_state.is_hovering_ui && !drag_state.active && !part_drag_state.active {
+    if mouse_buttons.just_pressed(MouseButton::Left)
+        && !hover_state.is_hovering_ui
+        && !drag_state.active
+        && !part_drag_state.active
+    {
         if let Some(cursor_pos) = window.cursor_position() {
             marquee_state.start_pos = Some(cursor_pos);
             marquee_state.current_pos = Some(cursor_pos);
@@ -936,13 +1147,19 @@ pub fn handle_marquee_selection(
                 let min_y = start.y.min(end.y);
                 let max_y = start.y.max(end.y);
 
-                let Some((camera, camera_transform)) = camera_query.iter().next() else { return };
+                let Some((camera, camera_transform)) = camera_query.iter().next() else {
+                    return;
+                };
 
                 let mut selected_entities = Vec::new();
                 for (entity, global_transform) in &bricks_query {
                     let world_pos = global_transform.translation();
                     if let Ok(screen_pos) = camera.world_to_viewport(camera_transform, world_pos) {
-                        if screen_pos.x >= min_x && screen_pos.x <= max_x && screen_pos.y >= min_y && screen_pos.y <= max_y {
+                        if screen_pos.x >= min_x
+                            && screen_pos.x <= max_x
+                            && screen_pos.y >= min_y
+                            && screen_pos.y <= max_y
+                        {
                             selected_entities.push(entity);
                         }
                     }

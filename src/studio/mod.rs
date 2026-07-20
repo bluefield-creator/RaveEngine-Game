@@ -3,9 +3,9 @@ pub mod gizmos;
 pub mod tools;
 pub mod ui;
 
+use bevy::camera_controller::free_camera::FreeCameraPlugin;
 use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
-use bevy::camera_controller::free_camera::FreeCameraPlugin;
 
 pub struct StudioPlugin;
 
@@ -54,11 +54,15 @@ impl Plugin for StudioPlugin {
             })
             .add_plugins(MeshPickingPlugin)
             .add_plugins(FreeCameraPlugin)
-            .add_systems(Startup, (
-                crate::studio::camera::setup_studio.after(crate::common::game::bricks::studs::setup_studs),
-                ui::setup_ui_assets,
-                ui::configure_visuals,
-            ))
+            .add_systems(
+                Startup,
+                (
+                    crate::studio::camera::setup_studio
+                        .after(crate::common::game::bricks::studs::setup_studs),
+                    ui::setup_ui_assets,
+                    ui::configure_visuals,
+                ),
+            )
             .add_systems(
                 Update,
                 (
@@ -77,7 +81,8 @@ impl Plugin for StudioPlugin {
                     tools::handle_keyboard_shortcuts,
                     tools::handle_undo_redo_action,
                     tools::handle_marquee_selection,
-                ).run_if(in_state(tools::OnboardingState::Inactive)),
+                )
+                    .run_if(in_state(tools::OnboardingState::Inactive)),
             )
             .add_systems(
                 Update,
@@ -99,6 +104,11 @@ impl Plugin for StudioPlugin {
                     ui::resources::update_studio_window_title,
                 ),
             )
+            .add_systems(
+                Update,
+                ui::resources::track_document_changes
+                    .after(ui::resources::handle_file_dialog_results),
+            )
             .add_systems(Update, ui::resources::cleanup_play_processes_on_exit)
             .add_systems(
                 PostUpdate,
@@ -110,12 +120,14 @@ impl Plugin for StudioPlugin {
 
 #[cfg(feature = "bench")]
 fn spawn_studio_benchmark(mut commands: Commands) {
-    let target = commands.spawn((
-        Name::new("BenchBrick"),
-        Transform::default(),
-        GlobalTransform::default(),
-        crate::common::game::bricks::components::Brick,
-    )).id();
+    let target = commands
+        .spawn((
+            Name::new("BenchBrick"),
+            Transform::default(),
+            GlobalTransform::default(),
+            crate::common::game::bricks::components::Brick,
+        ))
+        .id();
     commands.insert_resource(tools::Selection {
         entity: Some(target),
         entities: vec![target],
@@ -155,6 +167,12 @@ pub fn add_studio_benchmark(app: &mut App) {
         .init_resource::<tools::Selection>()
         .init_asset::<StandardMaterial>()
         .add_systems(Startup, spawn_studio_benchmark)
-        .add_systems(Update, (update_studio_benchmark, gizmos::update_gizmos).chain())
-        .add_systems(Last, record_studio_assets.before(crate::common::core::bench::bench_finish_frame));
+        .add_systems(
+            Update,
+            (update_studio_benchmark, gizmos::update_gizmos).chain(),
+        )
+        .add_systems(
+            Last,
+            record_studio_assets.before(crate::common::core::bench::bench_finish_frame),
+        );
 }
