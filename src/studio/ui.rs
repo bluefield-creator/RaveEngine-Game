@@ -709,10 +709,10 @@ pub fn studio_ui(
             }
 
             if script_found {
-                let bg_color = egui::Color32::from_rgb(255, 255, 255);
-                let tab_bar_color = egui::Color32::from_rgb(240, 241, 242);
-                let active_tab_color = egui::Color32::from_rgb(255, 255, 255);
-                let border_color = egui::Color32::from_rgb(212, 212, 212);
+                let bg_color = egui::Color32::from_rgb(30, 30, 30);
+                let tab_bar_color = egui::Color32::from_rgb(37, 37, 38);
+                let active_tab_color = egui::Color32::from_rgb(45, 45, 48);
+                let border_color = egui::Color32::from_rgb(60, 60, 60);
 
                 let mut should_close_tab = None;
                 let mut should_save = false;
@@ -766,7 +766,7 @@ pub fn studio_ui(
                             bottom: 12,
                         }))
                     .show(ctx, |ui| {
-                        ui.style_mut().visuals = egui::Visuals::light();
+                        ui.style_mut().visuals = egui::Visuals::dark();
 
                         egui::Frame::none()
                             .fill(bg_color)
@@ -815,7 +815,7 @@ pub fn studio_ui(
                                                         let fill_color = if is_active {
                                                             active_tab_color
                                                         } else if is_hovered {
-                                                            egui::Color32::from_rgb(225, 226, 227)
+                                                            egui::Color32::from_rgb(55, 55, 58)
                                                         } else {
                                                             tab_bar_color
                                                         };
@@ -846,7 +846,7 @@ pub fn studio_ui(
                                                                             egui::RichText::new(&open_script_name)
                                                                                 .strong()
                                                                                 .size(13.0)
-                                                                                .color(if is_active { egui::Color32::BLACK } else { egui::Color32::from_rgb(120, 120, 120) })
+                                                                                .color(if is_active { egui::Color32::from_rgb(220, 220, 220) } else { egui::Color32::from_rgb(150, 150, 150) })
                                                                         ).sense(egui::Sense::click()));
                                                                         label.clicked()
                                                                     }).inner;
@@ -859,7 +859,7 @@ pub fn studio_ui(
                                                                         egui::Button::new(
                                                                             egui::RichText::new("x")
                                                                                 .size(14.0)
-                                                                                .color(egui::Color32::from_rgb(140, 140, 140))
+                                                                                .color(egui::Color32::from_rgb(180, 180, 180))
                                                                         )
                                                                         .frame(false)
                                                                     );
