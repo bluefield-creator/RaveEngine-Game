@@ -938,6 +938,7 @@ pub fn handle_marquee_selection(
     camera_query: Query<(&Camera, &GlobalTransform), With<Camera3d>>,
     bricks_query: Query<(Entity, &GlobalTransform), With<Brick>>,
     brick_physics: Query<&crate::common::game::bricks::components::BrickPhysics>,
+    children_query: Query<&Children>,
 ) {
     let Ok(window) = windows.single() else { return };
 
@@ -981,6 +982,7 @@ pub fn handle_marquee_selection(
                     if let Ok(screen_pos) = camera.world_to_viewport(camera_transform, world_pos) {
                         if screen_pos.x >= min_x && screen_pos.x <= max_x && screen_pos.y >= min_y && screen_pos.y <= max_y {
                             selected_entities.push(entity);
+                            add_children_recursive(entity, &bricks_query, &mut selected_entities);
                         }
                     }
                 }
@@ -1000,5 +1002,21 @@ pub fn handle_marquee_selection(
         marquee_state.active = false;
         marquee_state.start_pos = None;
         marquee_state.current_pos = None;
+    }
+}
+
+fn add_children_recursive(
+    entity: Entity,
+    bricks_query: &Query<(Entity, &GlobalTransform), With<Brick>>,
+    children_query: &Query<&Children>,
+    selected: &mut Vec<Entity>,
+) {
+    if let Ok(children) = children_query.get(entity) {
+        for &child in children.iter() {
+            if bricks_query.get(child).is_ok() && !selected.contains(&child) {
+                selected.push(child);
+                add_children_recursive(child, bricks_query, children_query, selected);
+            }
+        }
     }
 }

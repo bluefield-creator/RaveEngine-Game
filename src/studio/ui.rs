@@ -1099,13 +1099,13 @@ pub fn studio_ui(
                     );
                     ui.painter().rect_filled(
                         rect,
-                        0.0,
-                        egui::Color32::from_rgba_unmultiplied(80, 160, 240, 30),
+                        4.0,
+                        egui::Color32::from_rgba_unmultiplied(80, 160, 240, 20),
                     );
                     ui.painter().rect_stroke(
                         rect,
-                        0.0,
-                        egui::Stroke::new(1.5, egui::Color32::from_rgb(80, 160, 240)),
+                        4.0,
+                        egui::Stroke::new(1.0, egui::Color32::from_rgb(80, 160, 240)),
                         egui::StrokeKind::Inside,
                     );
                 }
