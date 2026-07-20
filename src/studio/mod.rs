@@ -98,8 +98,6 @@ impl Plugin for StudioPlugin {
                 Update,
                 (
                     crate::studio::camera::toggle_editor_camera_active,
-                    crate::studio::camera::sync_primary_egui_camera
-                        .after(crate::studio::camera::toggle_editor_camera_active),
                     crate::studio::camera::disable_cameras_on_minimization,
                     ui::resources::handle_file_dialog_results,
                     ui::resources::update_studio_window_title,

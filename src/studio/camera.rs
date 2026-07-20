@@ -39,7 +39,6 @@ pub fn setup_studio(
         bevy::render::occlusion_culling::OcclusionCulling,
         ShadowFilteringMethod::Gaussian,
         bevy::camera::visibility::RenderLayers::from_layers(&[0, 1]),
-        bevy_egui::PrimaryEguiContext,
     ));
 
     camera.insert((MotionVectorPrepass, Fxaa::default()));
@@ -69,6 +68,19 @@ pub fn setup_studio(
     if let Some(bloom) = bloom_val.clone() {
         camera.insert(bloom);
     }
+
+    commands.spawn((
+        Camera2d,
+        Camera {
+            order: 100,
+            clear_color: ClearColorConfig::None,
+            ..default()
+        },
+        Msaa::Off,
+        bevy::camera::visibility::RenderLayers::layer(31),
+        bevy::ui::prelude::IsDefaultUiCamera,
+        bevy_egui::PrimaryEguiContext,
+    ));
 
     commands.spawn((Name::new("Workspace"),));
 
@@ -122,33 +134,6 @@ pub fn disable_camera_on_ui_interaction(
             state.enabled = !wants_input;
         }
         picking_settings.is_enabled = !wants_input && !camera_moving;
-    }
-}
-
-pub fn sync_primary_egui_camera(
-    mut commands: Commands,
-    camera_query: Query<(Entity, &Camera), With<Camera3d>>,
-    context_query: Query<Entity, With<bevy_egui::PrimaryEguiContext>>,
-) {
-    let target = camera_query
-        .iter()
-        .filter(|(_, camera)| camera.is_active)
-        .max_by_key(|(_, camera)| camera.order)
-        .map(|(entity, _)| entity);
-    let Some(target) = target else {
-        return;
-    };
-    for entity in &context_query {
-        if entity != target {
-            commands
-                .entity(entity)
-                .remove::<bevy_egui::PrimaryEguiContext>();
-        }
-    }
-    if !context_query.contains(target) {
-        commands
-            .entity(target)
-            .insert(bevy_egui::PrimaryEguiContext);
     }
 }
 
