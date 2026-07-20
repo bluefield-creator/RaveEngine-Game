@@ -150,6 +150,14 @@ impl Default for GraphicsSettings {
     }
 }
 
+pub(crate) fn contact_shadow_settings(settings: &GraphicsSettings) -> ContactShadows {
+    ContactShadows {
+        linear_steps: if settings.contact_shadows { 24 } else { 0 },
+        thickness: 0.1,
+        length: settings.contact_shadow_length,
+    }
+}
+
 pub struct PerformancePlugin;
 
 impl Plugin for PerformancePlugin {
@@ -186,15 +194,9 @@ pub fn apply_graphics_settings(
                 .remove::<ScreenSpaceAmbientOcclusion>();
         }
 
-        if settings.contact_shadows {
-            commands.entity(entity).insert(ContactShadows {
-                linear_steps: 24,
-                thickness: 0.1,
-                length: settings.contact_shadow_length,
-            });
-        } else {
-            commands.entity(entity).remove::<ContactShadows>();
-        }
+        commands
+            .entity(entity)
+            .insert(contact_shadow_settings(&settings));
 
         if settings.bloom {
             commands.entity(entity).insert(Bloom {
@@ -344,5 +346,32 @@ pub fn manage_winit_performance(
         winit_settings.focused_mode = UpdateMode::Continuous;
     } else {
         winit_settings.focused_mode = UpdateMode::reactive(Duration::from_millis(16));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn disables_contact_shadows_without_changing_the_render_layout() {
+        let mut settings = GraphicsSettings::default();
+        settings.contact_shadows = false;
+        settings.contact_shadow_length = 1.25;
+
+        let contact_shadows = contact_shadow_settings(&settings);
+
+        assert_eq!(contact_shadows.linear_steps, 0);
+        assert_eq!(contact_shadows.length, 1.25);
+    }
+
+    #[test]
+    fn enables_contact_shadows_through_the_uniform() {
+        let settings = GraphicsSettings::default();
+
+        let contact_shadows = contact_shadow_settings(&settings);
+
+        assert_eq!(contact_shadows.linear_steps, 24);
+        assert_eq!(contact_shadows.length, settings.contact_shadow_length);
     }
 }

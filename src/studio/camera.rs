@@ -3,7 +3,7 @@ use bevy::camera::Hdr;
 use bevy::camera_controller::free_camera::FreeCamera;
 use bevy::core_pipeline::prepass::{DepthPrepass, MotionVectorPrepass, NormalPrepass};
 use bevy::light::ShadowFilteringMethod;
-use bevy::pbr::{ContactShadows, ScreenSpaceAmbientOcclusion};
+use bevy::pbr::ScreenSpaceAmbientOcclusion;
 use bevy::post_process::bloom::Bloom;
 use bevy::prelude::*;
 
@@ -49,11 +49,6 @@ pub fn setup_studio(
     } else {
         None
     };
-    let contact_shadows_val = if graphics_settings.contact_shadows {
-        Some(ContactShadows::default())
-    } else {
-        None
-    };
     let bloom_val = if graphics_settings.bloom {
         Some(Bloom::default())
     } else {
@@ -63,9 +58,9 @@ pub fn setup_studio(
     if let Some(ssao) = ssao_val.clone() {
         camera.insert(ssao);
     }
-    if let Some(contact) = contact_shadows_val.clone() {
-        camera.insert(contact);
-    }
+    camera.insert(crate::common::core::performance::contact_shadow_settings(
+        &graphics_settings,
+    ));
     if let Some(bloom) = bloom_val.clone() {
         camera.insert(bloom);
     }
