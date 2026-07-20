@@ -469,6 +469,7 @@ pub fn select_brick(
     mut selection: ResMut<Selection>,
     mut context_menu: ResMut<CanvasContextMenu>,
     mut contexts: bevy_egui::EguiContexts,
+    keys: Res<ButtonInput<KeyCode>>,
 ) {
     if let Ok(ctx) = contexts.ctx_mut() {
         if ctx.egui_wants_pointer_input() || ctx.egui_wants_keyboard_input() {
@@ -476,19 +477,39 @@ pub fn select_brick(
         }
     }
 
+    let shift = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
+    let ctrl = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
+
     for click in clicks.read() {
         let target = click.event_target();
         if click.button == PointerButton::Primary {
             if bricks.get(target).is_ok() {
-                selection.entity = Some(target);
-                selection.entities = vec![target];
+                if shift {
+                    if !selection.entities.contains(&target) {
+                        selection.entities.push(target);
+                    }
+                    selection.entity = Some(target);
+                } else if ctrl {
+                    if let Some(pos) = selection.entities.iter().position(|&e| e == target) {
+                        selection.entities.remove(pos);
+                        selection.entity = selection.entities.last().copied();
+                    } else {
+                        selection.entities.push(target);
+                        selection.entity = Some(target);
+                    }
+                } else {
+                    selection.entity = Some(target);
+                    selection.entities = vec![target];
+                }
                 selection.workspace_selected = false;
                 selection.players_selected = false;
                 context_menu.entity = None;
                 context_menu.position = None;
             } else if gizmos.get(target).is_err() {
-                selection.entity = None;
-                selection.entities.clear();
+                if !shift && !ctrl {
+                    selection.entity = None;
+                    selection.entities.clear();
+                }
                 selection.workspace_selected = false;
                 selection.players_selected = false;
                 context_menu.entity = None;
