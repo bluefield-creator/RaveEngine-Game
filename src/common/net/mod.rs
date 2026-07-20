@@ -5,6 +5,8 @@ pub mod auth;
 use bevy::prelude::*;
 use lightyear::prelude::*;
 
+pub const NETCODE_PROTOCOL_ID: u64 = 1;
+
 pub mod replicon {
     pub use bevy_replicon::prelude::*;
 }

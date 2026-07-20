@@ -117,7 +117,7 @@ pub fn draw_indicator(
                 let frameres = egui::Frame::new()
                     .fill(egui::Color32::from_rgba_unmultiplied(240, 240, 240, 230))
                     .stroke(egui::Stroke::new(
-                        1.0,
+                        1.0_f32,
                         egui::Color32::from_rgb(180, 180, 180),
                     ))
                     .corner_radius(6.0)
@@ -176,7 +176,7 @@ pub fn draw_fov_indicator(
                 let frameres = egui::Frame::new()
                     .fill(egui::Color32::from_rgba_unmultiplied(240, 240, 240, 230))
                     .stroke(egui::Stroke::new(
-                        1.0,
+                        1.0_f32,
                         egui::Color32::from_rgb(180, 180, 180),
                     ))
                     .corner_radius(6.0)

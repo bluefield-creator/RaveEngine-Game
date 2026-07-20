@@ -397,8 +397,8 @@ pub fn handle_file_dialog_results(
     mut lighting_service: ResMut<crate::common::game::environment::lighting::LightingService>,
     mut gravity: Option<ResMut<avian3d::prelude::Gravity>>,
     mut camera_transform_query: Query<&mut Transform, With<Camera3d>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut studs_materials: ResMut<
+    materials: ResMut<Assets<StandardMaterial>>,
+    studs_materials: ResMut<
         Assets<
             bevy::pbr::ExtendedMaterial<
                 StandardMaterial,
@@ -459,7 +459,7 @@ pub fn handle_file_dialog_results(
         ),
         Without<Camera3d>,
     >,
-    mut document: ResMut<DocumentState>,
+    mut _document: ResMut<DocumentState>,
 ) {
     let rx = file_dialog_state.rx.lock().unwrap();
     while let Ok(result) = rx.try_recv() {

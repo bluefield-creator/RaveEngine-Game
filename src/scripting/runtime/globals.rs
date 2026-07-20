@@ -37,9 +37,13 @@ pub fn setup_globals(lua: &Lua) -> Result<(), mlua::Error> {
         let mut scheduler = scheduler_ref.0.lock().expect("Lua scheduler lock poisoned");
         let thread = lua.create_thread(f)?;
         let key = lua.create_registry_value(thread)?;
+        let delay = if seconds.is_finite() && seconds >= 0.0 { seconds as f64 } else {
+            warn!("task.delay called with invalid seconds: {:?}", seconds);
+            0.0
+        };
         scheduler.tasks.push(crate::scripting::vm::scheduler::LuaTask {
             thread_key: key,
-            wake_time: Some(std::time::Instant::now() + std::time::Duration::from_secs_f64(seconds as f64)),
+            wake_time: Some(std::time::Instant::now() + std::time::Duration::from_secs_f64(delay)),
         });
         Ok(())
     })?;

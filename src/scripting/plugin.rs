@@ -36,7 +36,10 @@ fn spawn_and_run_callback(
         match thread.resume::<Option<f32>>(arg) {
             Ok(yielded_val) => {
                 if thread.status() == LuaThreadStatus::Resumable {
-                    let wake = yielded_val.map(|sec| std::time::Instant::now() + std::time::Duration::from_secs_f64(sec as f64));
+                    let wake = yielded_val.map(|sec| {
+                        let delay = if sec.is_finite() && sec >= 0.0 { sec as f64 } else { 0.0 };
+                        std::time::Instant::now() + std::time::Duration::from_secs_f64(delay)
+                    });
                     let mut sched = scheduler.lock().expect("Lua scheduler lock poisoned");
                     if let Ok(key) = lua.create_registry_value(thread) {
                         sched.tasks.push(crate::scripting::vm::scheduler::LuaTask {
@@ -117,7 +120,10 @@ pub fn discover_and_run_server_scripts(world: &mut World) {
                             match thread.resume::<Option<f32>>(()) {
                                 Ok(yielded_val) => {
                                     if thread.status() == LuaThreadStatus::Resumable {
-                                        let wake = yielded_val.map(|sec| std::time::Instant::now() + std::time::Duration::from_secs_f64(sec as f64));
+                                        let wake = yielded_val.map(|sec| {
+                                            let delay = if sec.is_finite() && sec >= 0.0 { sec as f64 } else { 0.0 };
+                                            std::time::Instant::now() + std::time::Duration::from_secs_f64(delay)
+                                        });
                                         let mut scheduler = server_vm.scheduler.lock().expect("Lua scheduler lock poisoned");
                                         if let Ok(key) = server_vm.lua.create_registry_value(thread) {
                                             scheduler.tasks.push(crate::scripting::vm::scheduler::LuaTask {
@@ -189,7 +195,10 @@ pub fn discover_and_run_local_scripts(world: &mut World) {
                             match thread.resume::<Option<f32>>(()) {
                                 Ok(yielded_val) => {
                                     if thread.status() == LuaThreadStatus::Resumable {
-                                        let wake = yielded_val.map(|sec| std::time::Instant::now() + std::time::Duration::from_secs_f64(sec as f64));
+                                        let wake = yielded_val.map(|sec| {
+                                            let delay = if sec.is_finite() && sec >= 0.0 { sec as f64 } else { 0.0 };
+                                            std::time::Instant::now() + std::time::Duration::from_secs_f64(delay)
+                                        });
                                         let mut scheduler = client_vm.scheduler.lock().expect("Lua scheduler lock poisoned");
                                         if let Ok(key) = client_vm.lua.create_registry_value(thread) {
                                             scheduler.tasks.push(crate::scripting::vm::scheduler::LuaTask {

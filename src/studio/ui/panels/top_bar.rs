@@ -450,7 +450,7 @@ pub fn draw_top_bar(
                     let original_window_stroke = ui.visuals().window_stroke;
 
                     ui.visuals_mut().window_fill = egui::Color32::from_rgb(255, 255, 255);
-                    ui.visuals_mut().window_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(212, 212, 212));
+                    ui.visuals_mut().window_stroke = egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(212, 212, 212));
 
                     let _: Option<()> = egui::popup_below_widget(
                         ui,
@@ -858,8 +858,8 @@ pub fn draw_top_bar(
                                 let auth = lightyear::prelude::Authentication::Manual {
                                     server_addr,
                                     client_id,
-                                    private_key: [0u8; 32],
-                                    protocol_id: 0,
+                                    private_key: rand::random::<[u8; 32]>(),
+                                    protocol_id: crate::common::net::NETCODE_PROTOCOL_ID,
                                 };
 
                                 let netcode_config = lightyear::prelude::client::NetcodeConfig {
@@ -918,7 +918,7 @@ fn ribbonbutton(
         ui.painter().rect_stroke(
             rect,
             4.0,
-            egui::Stroke::new(1.0, egui::Color32::from_rgb(153, 209, 255)),
+            egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(153, 209, 255)),
             egui::StrokeKind::Inside,
         );
     } else if response.hovered() {
@@ -927,7 +927,7 @@ fn ribbonbutton(
         ui.painter().rect_stroke(
             rect,
             4.0,
-            egui::Stroke::new(1.0, egui::Color32::from_rgb(190, 220, 240)),
+            egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(190, 220, 240)),
             egui::StrokeKind::Inside,
         );
     }

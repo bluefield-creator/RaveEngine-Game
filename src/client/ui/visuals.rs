@@ -15,7 +15,7 @@ pub fn configure_client_visuals(
     visuals.window_fill = egui::Color32::TRANSPARENT;
     visuals.window_stroke = egui::Stroke::NONE;
     visuals.selection.bg_fill = egui::Color32::from_rgb(116, 35, 203);
-    visuals.selection.stroke = egui::Stroke::new(1.0, egui::Color32::BLACK);
+    visuals.selection.stroke = egui::Stroke::new(1.0_f32, egui::Color32::BLACK);
     ctx.set_visuals(visuals);
 
     let bold_font_bytes = std::fs::read("assets/content/game/fonts/Ubuntu-Bold.ttf")

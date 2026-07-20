@@ -72,8 +72,8 @@ pub fn initialize_client(
     let auth = Authentication::Manual {
         server_addr,
         client_id,
-        private_key: [0u8; 32],
-        protocol_id: 0,
+        private_key: rand::random::<[u8; 32]>(),
+        protocol_id: crate::common::net::NETCODE_PROTOCOL_ID,
     };
 
     let netcode_config = NetcodeConfig {

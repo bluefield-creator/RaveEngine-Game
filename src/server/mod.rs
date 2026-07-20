@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use lightyear::prelude::*;
 use lightyear::prelude::server::*;
 use std::time::Duration;
+use std::net::SocketAddr;
 use avian3d::prelude::*;
 
 pub mod player;
@@ -11,6 +12,7 @@ pub mod map;
 pub struct ServerSettings {
     pub map_path: String,
     pub port: u16,
+    pub bind_addr: SocketAddr,
 }
 
 pub struct ServerPlugin {
@@ -23,6 +25,7 @@ impl Plugin for ServerPlugin {
         app.insert_resource(ServerSettings {
             map_path: self.map_path.clone(),
             port: self.port,
+            bind_addr: SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)), self.port),
         })
         .insert_resource(Gravity(Vec3::new(0.0, -186.9 * 0.28, 0.0)))
         .add_plugins(server::ServerPlugins {
@@ -43,14 +46,15 @@ impl Plugin for ServerPlugin {
 
 fn setup_server(
     mut commands: Commands,
-    settings: Res<ServerSettings>,
+    mut settings: ResMut<ServerSettings>,
 ) {
     info!("Starting setup_server system on port: {}", settings.port);
     let bind_addr = std::net::SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)), settings.port);
+    settings.bind_addr = bind_addr;
 
     let netcode_config = NetcodeConfig {
-        protocol_id: 0,
-        private_key: [0u8; 32],
+        protocol_id: crate::common::net::NETCODE_PROTOCOL_ID,
+        private_key: rand::random::<[u8; 32]>(),
         client_timeout_secs: 15,
         ..Default::default()
     };

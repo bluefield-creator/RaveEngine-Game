@@ -81,8 +81,8 @@ fn setup_client(mut commands: Commands, settings: Res<ClientConnectSettings>) {
     let auth = Authentication::Manual {
         server_addr,
         client_id,
-        private_key: [0u8; 32],
-        protocol_id: 0,
+        private_key: rand::random::<[u8; 32]>(),
+        protocol_id: RaveEngineLib::common::net::NETCODE_PROTOCOL_ID,
     };
 
     let netcode_config = NetcodeConfig {

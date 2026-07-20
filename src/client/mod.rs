@@ -8,7 +8,6 @@ use avian3d::prelude::Physics;
 use avian3d::schedule::PhysicsTime;
 use lightyear::prelude::*;
 use crate::common::game::bricks::components::{Brick, BrickShapeComponent};
-use crate::common::game::bricks::components;
 use crate::common::game::bricks::studs::{StudsAssets, StudsExtension};
 use crate::common::net::components::NetworkTransform;
 use crate::common::game::physics::PhysicsSimulationState;
@@ -691,8 +690,6 @@ fn handle_auth_success(
         }
     }
 }
-
-fn links_optimizer_system() {}
 
 #[cfg(test)]
 mod tests {

@@ -1589,7 +1589,7 @@ pub fn studio_ui(
 
                         egui::Frame::none()
                             .fill(bg_color)
-                            .stroke(egui::Stroke::new(1.0, border_color))
+                            .stroke(egui::Stroke::new(1.0_f32, border_color))
                             .corner_radius(8.0)
                             .show(ui, |ui| {
                                 ui.vertical(|ui| {
@@ -1642,7 +1642,7 @@ pub fn studio_ui(
                                                         let frame_res = egui::Frame::none()
                                                             .fill(fill_color)
                                                             .stroke(if is_active {
-                                                                egui::Stroke::new(1.0, border_color)
+                                                                egui::Stroke::new(1.0_f32, border_color)
                                                             } else {
                                                                 egui::Stroke::NONE
                                                             })
@@ -1694,7 +1694,7 @@ pub fn studio_ui(
                                                         if is_active {
                                                             active_tab_rect = Some(tab_rect);
 
-                                                            let erase_stroke = egui::Stroke::new(1.5, active_tab_color);
+                                                            let erase_stroke = egui::Stroke::new(1.5_f32, active_tab_color);
                                                             ui.painter().line_segment(
                                                                 [egui::pos2(tab_rect.min.x + 1.0, tab_rect.max.y - 0.5), egui::pos2(tab_rect.max.x - 1.0, tab_rect.max.y - 0.5)],
                                                                 erase_stroke,
@@ -1719,7 +1719,7 @@ pub fn studio_ui(
 
                                     let bar_rect = bar_res.response.rect;
                                     let line_y = bar_rect.max.y;
-                                    let line_stroke = egui::Stroke::new(1.0, border_color);
+                                    let line_stroke = egui::Stroke::new(1.0_f32, border_color);
 
                                     if let Some(tab_rect) = active_tab_rect {
                                         if tab_rect.min.x > bar_rect.min.x {
@@ -1746,7 +1746,7 @@ pub fn studio_ui(
                                     if let Some(err) = &compile_error {
                                         egui::Frame::none()
                                             .fill(egui::Color32::from_rgb(253, 236, 236))
-                                            .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(245, 186, 186)))
+                                            .stroke(egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(245, 186, 186)))
                                             .inner_margin(egui::Margin::symmetric(16, 8))
                                             .show(ui, |ui| {
                                                 ui.horizontal(|ui| {
@@ -1945,7 +1945,7 @@ pub fn studio_ui(
                     ui.painter().rect_stroke(
                         rect,
                         4.0,
-                        egui::Stroke::new(1.0, egui::Color32::from_rgb(80, 160, 240)),
+                        egui::Stroke::new(1.0_f32, egui::Color32::from_rgb(80, 160, 240)),
                         egui::StrokeKind::Inside,
                     );
                 }

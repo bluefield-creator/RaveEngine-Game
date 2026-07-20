@@ -12,8 +12,6 @@ pub struct ServerScriptVM {
 }
 
 pub struct WorldRef(pub *mut World);
-unsafe impl Send for WorldRef {}
-unsafe impl Sync for WorldRef {}
 
 impl ServerScriptVM {
     pub fn new() -> Self {

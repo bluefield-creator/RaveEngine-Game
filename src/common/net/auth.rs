@@ -10,8 +10,30 @@ pub struct ValidateResponse {
     pub username: String,
 }
 
-pub fn validate_user_ukey(ukey: &str) -> Result<ValidateResponse, String> {
-    if ukey == "studio_play_local_key" || ukey.starts_with("offline_") {
+fn percent_encode(s: &str) -> String {
+    s.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' || c == '~' {
+                c.to_string()
+            } else {
+                format!("%{:02X}", c as u8)
+            }
+        })
+        .collect()
+}
+
+pub fn validate_user_ukey_offline(ukey: &str) -> Result<ValidateResponse, String> {
+    if ukey == "studio_play_local_key" {
+        return Ok(ValidateResponse {
+            uid: 1,
+            username: "LocalPlayer".to_string(),
+        });
+    }
+    Err("Invalid offline key".to_string())
+}
+
+pub fn validate_user_ukey(ukey: &str, is_local: bool) -> Result<ValidateResponse, String> {
+    if is_local && ukey == "studio_play_local_key" {
         return Ok(ValidateResponse {
             uid: 1,
             username: "LocalPlayer".to_string(),
@@ -67,7 +89,8 @@ pub fn validate_user_ukey(ukey: &str) -> Result<ValidateResponse, String> {
     stream.set_read_timeout(Some(Duration::from_secs(3))).map_err(|e| e.to_string())?;
     stream.set_write_timeout(Some(Duration::from_secs(3))).map_err(|e| e.to_string())?;
 
-    let path = format!("/api/v1/auth/validate?ukey={}", ukey);
+    let encoded_ukey = percent_encode(ukey);
+    let path = format!("/api/v1/auth/validate?ukey={}", encoded_ukey);
     let req_str = format!(
         "GET {} HTTP/1.1\r\n\
          Host: {}\r\n\
@@ -77,8 +100,19 @@ pub fn validate_user_ukey(ukey: &str) -> Result<ValidateResponse, String> {
     );
 
     stream.write_all(req_str.as_bytes()).map_err(|e| e.to_string())?;
+    let max_size: usize = 1024 * 1024;
     let mut response = Vec::new();
-    stream.read_to_end(&mut response).map_err(|e| e.to_string())?;
+    let mut buf = [0u8; 8192];
+    loop {
+        let n = stream.read(&mut buf).map_err(|e| e.to_string())?;
+        if n == 0 {
+            break;
+        }
+        if response.len() + n > max_size {
+            return Err("Response exceeds maximum size limit".to_string());
+        }
+        response.extend_from_slice(&buf[..n]);
+    }
 
     let response_str = String::from_utf8_lossy(&response);
     let mut parts = response_str.splitn(2, "\r\n\r\n");

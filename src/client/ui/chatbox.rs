@@ -162,7 +162,7 @@ pub fn draw_chatbox(
                         visuals.widgets.hovered.bg_stroke = egui::Stroke::NONE;
                         visuals.widgets.active.bg_stroke = egui::Stroke::NONE;
                         visuals.widgets.noninteractive.bg_stroke = egui::Stroke::NONE;
-                        visuals.selection.stroke = egui::Stroke::new(1.0, egui::Color32::BLACK);
+                        visuals.selection.stroke = egui::Stroke::new(1.0_f32, egui::Color32::BLACK);
                         visuals.selection.bg_fill = egui::Color32::from_rgb(116, 35, 203);
                         visuals.override_text_color = Some(egui::Color32::WHITE);
                         visuals.weak_text_color = Some(egui::Color32::from_rgba_unmultiplied(255, 255, 255, 128));
