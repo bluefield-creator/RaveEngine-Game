@@ -532,36 +532,8 @@ fn on_brick_added(
         }
     };
 
-    let srgba = base_color.to_srgba();
-    let cache_key = [
-        srgba.red.to_bits(),
-        srgba.green.to_bits(),
-        srgba.blue.to_bits(),
-        srgba.alpha.to_bits(),
-    ];
-
-    let material_handle = if let Some(existing) = cache.studs_materials.get(&cache_key) {
-        existing.clone()
-    } else {
-        let new_mat = studs_materials.add(ExtendedMaterial {
-            base: StandardMaterial {
-                base_color,
-                perceptual_roughness: 0.9,
-                alpha_mode: if base_color.alpha() < 1.0 {
-                    AlphaMode::Blend
-                } else {
-                    AlphaMode::Opaque
-                },
-                ..default()
-            },
-            extension: StudsExtension {
-                stud_texture: studs_assets.stud.clone(),
-                inlet_texture: studs_assets.inlet.clone(),
-            },
-        });
-        cache.studs_materials.insert(cache_key, new_mat.clone());
-        new_mat
-    };
+    let material_handle =
+        studs_material_for_color(base_color, &mut cache, &mut studs_materials, &studs_assets);
 
     commands
         .entity(entity)
@@ -671,41 +643,53 @@ fn sync_brick_color_to_material(
     studs_assets: Res<StudsAssets>,
 ) {
     for (entity, brick_color) in &query {
-        let base_color = brick_color.color;
-        let srgba = base_color.to_srgba();
-        let cache_key = [
-            srgba.red.to_bits(),
-            srgba.green.to_bits(),
-            srgba.blue.to_bits(),
-            srgba.alpha.to_bits(),
-        ];
-
-        let material_handle = if let Some(existing) = cache.studs_materials.get(&cache_key) {
-            existing.clone()
-        } else {
-            let new_mat = studs_materials.add(ExtendedMaterial {
-                base: StandardMaterial {
-                    base_color,
-                    perceptual_roughness: 0.9,
-                    alpha_mode: if base_color.alpha() < 1.0 {
-                        AlphaMode::Blend
-                    } else {
-                        AlphaMode::Opaque
-                    },
-                    ..default()
-                },
-                extension: StudsExtension {
-                    stud_texture: studs_assets.stud.clone(),
-                    inlet_texture: studs_assets.inlet.clone(),
-                },
-            });
-            cache.studs_materials.insert(cache_key, new_mat.clone());
-            new_mat
-        };
+        let material_handle = studs_material_for_color(
+            brick_color.color,
+            &mut cache,
+            &mut studs_materials,
+            &studs_assets,
+        );
         commands
             .entity(entity)
             .insert(MeshMaterial3d(material_handle));
     }
+}
+
+fn studs_material_for_color(
+    color: Color,
+    cache: &mut crate::common::game::bricks::BrickMaterialCache,
+    materials: &mut Assets<ExtendedMaterial<StandardMaterial, StudsExtension>>,
+    studs_assets: &StudsAssets,
+) -> Handle<ExtendedMaterial<StandardMaterial, StudsExtension>> {
+    let srgba = color.to_srgba();
+    let cache_key = [
+        srgba.red.to_bits(),
+        srgba.green.to_bits(),
+        srgba.blue.to_bits(),
+        srgba.alpha.to_bits(),
+    ];
+    if let Some(existing) = cache.studs_materials.get(&cache_key) {
+        return existing.clone();
+    }
+
+    let material = materials.add(ExtendedMaterial {
+        base: StandardMaterial {
+            base_color: color,
+            perceptual_roughness: 0.9,
+            alpha_mode: if color.alpha() < 1.0 {
+                AlphaMode::Blend
+            } else {
+                AlphaMode::Opaque
+            },
+            ..default()
+        },
+        extension: StudsExtension {
+            stud_texture: studs_assets.stud.clone(),
+            inlet_texture: studs_assets.inlet.clone(),
+        },
+    });
+    cache.studs_materials.insert(cache_key, material.clone());
+    material
 }
 
 fn hide_confirmed_player_visuals(
@@ -906,6 +890,36 @@ mod tests {
 
         assert_eq!(state, PhysicsSimulationState::Running);
         assert!(!time_physics.is_paused());
+    }
+
+    #[test]
+    fn recoloring_one_brick_does_not_mutate_its_shared_material() {
+        let mut cache = crate::common::game::bricks::BrickMaterialCache::default();
+        let mut materials = Assets::<ExtendedMaterial<StandardMaterial, StudsExtension>>::default();
+        let studs_assets = StudsAssets {
+            stud: Handle::default(),
+            inlet: Handle::default(),
+        };
+        let original_color = Color::srgb(0.84, 0.24, 0.16);
+        let recolored = Color::srgb(0.1, 0.2, 0.9);
+
+        let first =
+            studs_material_for_color(original_color, &mut cache, &mut materials, &studs_assets);
+        let second =
+            studs_material_for_color(original_color, &mut cache, &mut materials, &studs_assets);
+        assert_eq!(first, second);
+
+        let recolored_handle =
+            studs_material_for_color(recolored, &mut cache, &mut materials, &studs_assets);
+        assert_ne!(first, recolored_handle);
+        assert_eq!(
+            materials.get(&first).unwrap().base.base_color,
+            original_color
+        );
+        assert_eq!(
+            materials.get(&recolored_handle).unwrap().base.base_color,
+            recolored
+        );
     }
 
     #[cfg(feature = "bench")]

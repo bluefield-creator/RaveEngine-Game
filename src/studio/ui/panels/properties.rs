@@ -74,10 +74,6 @@ pub fn draw_properties(
         Without<Camera3d>,
     >,
     brick_colors: &mut Query<&mut crate::common::game::bricks::components::BrickColor>,
-    materials: &mut Assets<StandardMaterial>,
-    studs_materials: &mut Assets<
-        ExtendedMaterial<StandardMaterial, crate::common::game::bricks::studs::StudsExtension>,
-    >,
     explorer_query: &Query<
         (
             Entity,
@@ -289,7 +285,6 @@ pub fn draw_properties(
         first_name_str,
         first_shape_opt_val,
         first_color,
-        is_extended,
         first_phys_enabled,
         first_locked,
         first_bounciness,
@@ -309,10 +304,10 @@ pub fn draw_properties(
             first_shape_opt,
             _,
             _,
-            first_mat_opt,
-            first_studs_mat_opt,
-            first_phys_opt,
             _,
+            _,
+            first_phys_opt,
+            first_brick_color,
         )) = properties_query.get(first_entity)
         else {
             return;
@@ -321,18 +316,9 @@ pub fn draw_properties(
         let first_name_str = first_name.to_string();
         let first_shape_opt_val = first_shape_opt.as_ref().map(|s| s.shape);
 
-        let mut first_color = Color::srgb(0.84, 0.24, 0.16);
-        let mut is_extended = false;
-        if let Some(studs_mat_handle) = first_studs_mat_opt {
-            if let Some(mat) = studs_materials.get(&studs_mat_handle.0) {
-                first_color = mat.base.base_color;
-                is_extended = true;
-            }
-        } else if let Some(mat_handle) = first_mat_opt
-            && let Some(mat) = materials.get(&mat_handle.0)
-        {
-            first_color = mat.base_color;
-        }
+        let first_color = first_brick_color
+            .map(|brick_color| brick_color.color)
+            .unwrap_or(Color::srgb(0.84, 0.24, 0.16));
 
         let (
             first_phys_enabled,
@@ -361,7 +347,6 @@ pub fn draw_properties(
             first_name_str,
             first_shape_opt_val,
             first_color,
-            is_extended,
             first_phys_enabled,
             first_locked,
             first_bounciness,
@@ -400,21 +385,8 @@ pub fn draw_properties(
     let mut all_mass_same = true;
 
     for &entity in &selected_entities[1..] {
-        if let Ok((
-            _,
-            transform,
-            name,
-            _,
-            _,
-            _,
-            shape_opt,
-            _,
-            _,
-            mat_opt,
-            studs_mat_opt,
-            phys_opt,
-            _,
-        )) = properties_query.get(entity)
+        if let Ok((_, transform, name, _, _, _, shape_opt, _, _, _, _, phys_opt, brick_color)) =
+            properties_query.get(entity)
         {
             if name.to_string() != first_name_str {
                 all_names_same = false;
@@ -453,16 +425,9 @@ pub fn draw_properties(
                 all_shape_same = false;
             }
 
-            let mut color = Color::srgb(0.84, 0.24, 0.16);
-            if let Some(studs_mat_handle) = studs_mat_opt {
-                if let Some(mat) = studs_materials.get(&studs_mat_handle.0) {
-                    color = mat.base.base_color;
-                }
-            } else if let Some(mat_handle) = mat_opt
-                && let Some(mat) = materials.get(&mat_handle.0)
-            {
-                color = mat.base_color;
-            }
+            let color = brick_color
+                .map(|brick_color| brick_color.color)
+                .unwrap_or(Color::srgb(0.84, 0.24, 0.16));
             if color != first_color {
                 all_color_same = false;
             }
@@ -656,25 +621,9 @@ pub fn draw_properties(
                                 }
                                 if color_btn.changed() {
                                     let new_color = Color::Srgba(Srgba::new(color_array[0], color_array[1], color_array[2], color_array[3]));
-                                    let new_alpha_mode = if new_color.alpha() < 1.0 { AlphaMode::Blend } else { AlphaMode::Opaque };
                                     for &entity in selected_entities {
-                                        if let Ok((_, _, _, _, _, _, _, _, _, mat_opt, studs_mat_opt, _, _)) = properties_query.get_mut(entity) {
-                                            if is_extended {
-                                                if let Some(studs_mat_handle) = studs_mat_opt
-                                                    && let Some(mut mat) = studs_materials.get_mut(&studs_mat_handle.0) {
-                                                        mat.base.base_color = new_color;
-                                                        mat.base.alpha_mode = new_alpha_mode;
-                                                    }
-                                            } else {
-                                                if let Some(mat_handle) = mat_opt
-                                                    && let Some(mut mat) = materials.get_mut(&mat_handle.0) {
-                                                        mat.base_color = new_color;
-                                                        mat.alpha_mode = new_alpha_mode;
-                                                    }
-                                            }
-                                            if let Ok(mut bc) = brick_colors.get_mut(entity) {
-                                                bc.color = new_color;
-                                            }
+                                        if let Ok(mut bc) = brick_colors.get_mut(entity) {
+                                            bc.color = new_color;
                                         }
                                     }
                                 }
@@ -688,36 +637,12 @@ pub fn draw_properties(
                                     let slider_res = ui.add(egui::Slider::new(&mut transparency, 0.0..=1.0).step_by(0.01));
                                     if slider_res.changed() {
                                         for &entity in selected_entities {
-                                            if let Ok((_, _, _, _, _, _, _, _, _, mat_opt, studs_mat_opt, _, _)) = properties_query.get_mut(entity) {
-                                                let mut current_color = Color::srgb(0.84, 0.24, 0.16);
-                                                if let Some(studs_mat_handle) = studs_mat_opt {
-                                                    if let Some(mat) = studs_materials.get(&studs_mat_handle.0) {
-                                                        current_color = mat.base.base_color;
-                                                    }
-                                                } else if let Some(mat_handle) = mat_opt
-                                                    && let Some(mat) = materials.get(&mat_handle.0) {
-                                                        current_color = mat.base_color;
-                                                    }
+                                            if let Ok(mut bc) = brick_colors.get_mut(entity) {
+                                                let current_color = bc.color;
                                                 let mut srgba = current_color.to_srgba();
                                                 srgba.alpha = 1.0 - transparency;
                                                 let new_color = Color::Srgba(srgba);
-                                                let new_alpha_mode = if srgba.alpha < 1.0 { AlphaMode::Blend } else { AlphaMode::Opaque };
-                                                if is_extended {
-                                                    if let Some(studs_mat_handle) = studs_mat_opt
-                                                        && let Some(mut mat) = studs_materials.get_mut(&studs_mat_handle.0) {
-                                                            mat.base.base_color = new_color;
-                                                            mat.base.alpha_mode = new_alpha_mode;
-                                                        }
-                                                } else {
-                                                    if let Some(mat_handle) = mat_opt
-                                                        && let Some(mut mat) = materials.get_mut(&mat_handle.0) {
-                                                            mat.base_color = new_color;
-                                                            mat.alpha_mode = new_alpha_mode;
-                                                        }
-                                                }
-                                                if let Ok(mut bc) = brick_colors.get_mut(entity) {
-                                                    bc.color = new_color;
-                                                }
+                                                bc.color = new_color;
                                             }
                                         }
                                     }
@@ -729,36 +654,12 @@ pub fn draw_properties(
                                     }
                                     if clicked {
                                         for &entity in selected_entities {
-                                            if let Ok((_, _, _, _, _, _, _, _, _, mat_opt, studs_mat_opt, _, _)) = properties_query.get_mut(entity) {
-                                                let mut current_color = Color::srgb(0.84, 0.24, 0.16);
-                                                if let Some(studs_mat_handle) = studs_mat_opt {
-                                                    if let Some(mat) = studs_materials.get(&studs_mat_handle.0) {
-                                                        current_color = mat.base.base_color;
-                                                    }
-                                                } else if let Some(mat_handle) = mat_opt
-                                                    && let Some(mat) = materials.get(&mat_handle.0) {
-                                                        current_color = mat.base_color;
-                                                    }
+                                            if let Ok(mut bc) = brick_colors.get_mut(entity) {
+                                                let current_color = bc.color;
                                                 let mut srgba = current_color.to_srgba();
                                                 srgba.alpha = 1.0 - transparency;
                                                 let new_color = Color::Srgba(srgba);
-                                                let new_alpha_mode = if srgba.alpha < 1.0 { AlphaMode::Blend } else { AlphaMode::Opaque };
-                                                if is_extended {
-                                                    if let Some(studs_mat_handle) = studs_mat_opt
-                                                        && let Some(mut mat) = studs_materials.get_mut(&studs_mat_handle.0) {
-                                                            mat.base.base_color = new_color;
-                                                            mat.base.alpha_mode = new_alpha_mode;
-                                                        }
-                                                } else {
-                                                    if let Some(mat_handle) = mat_opt
-                                                        && let Some(mut mat) = materials.get_mut(&mat_handle.0) {
-                                                            mat.base_color = new_color;
-                                                            mat.alpha_mode = new_alpha_mode;
-                                                        }
-                                                }
-                                                if let Ok(mut bc) = brick_colors.get_mut(entity) {
-                                                    bc.color = new_color;
-                                                }
+                                                bc.color = new_color;
                                             }
                                         }
                                     }

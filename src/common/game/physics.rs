@@ -332,16 +332,20 @@ fn handle_newly_spawned_bricks(
 
 pub fn sync_brick_physics_changes(
     mut commands: Commands,
+    state: Res<PhysicsSimulationState>,
     query: Query<
         (
             Entity,
             &crate::common::game::bricks::components::BrickPhysics,
+            &crate::common::game::bricks::components::BrickShapeComponent,
+            Option<&Collider>,
             Option<&Friction>,
             Option<&Restitution>,
             Option<&GravityScale>,
             Option<&Mass>,
             Option<&RigidBody>,
             Option<&CollisionLayers>,
+            Option<&SleepingDisabled>,
         ),
         Or<(
             Changed<crate::common::game::bricks::components::BrickPhysics>,
@@ -349,51 +353,184 @@ pub fn sync_brick_physics_changes(
         )>,
     >,
 ) {
-    for (entity, physics, friction, restitution, gravity_scale, mass, rigid_body, layers) in &query
+    if *state != PhysicsSimulationState::Running {
+        return;
+    }
+
+    for (
+        entity,
+        physics,
+        shape,
+        collider,
+        friction,
+        restitution,
+        gravity_scale,
+        mass,
+        rigid_body,
+        layers,
+        sleeping_disabled,
+    ) in &query
     {
-        if let Some(rb) = rigid_body {
-            let new_body = if physics.enabled {
-                RigidBody::Dynamic
-            } else {
-                RigidBody::Static
+        let mut entity_commands = commands.entity(entity);
+        let new_body = if physics.enabled {
+            RigidBody::Dynamic
+        } else {
+            RigidBody::Static
+        };
+        if rigid_body != Some(&new_body) {
+            entity_commands.insert(new_body);
+        }
+        let collider_matches_shape = collider.is_some_and(|collider| match shape.shape {
+            crate::common::game::bricks::components::BrickShape::Block => {
+                collider.shape().as_cuboid().is_some()
+            }
+            crate::common::game::bricks::components::BrickShape::Sphere => {
+                collider.shape().as_ball().is_some()
+            }
+        });
+        if !collider_matches_shape {
+            let new_collider = match shape.shape {
+                crate::common::game::bricks::components::BrickShape::Block => {
+                    Collider::cuboid(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28)
+                }
+                crate::common::game::bricks::components::BrickShape::Sphere => {
+                    Collider::sphere(1.0 * 0.28)
+                }
             };
-            if *rb != new_body {
-                commands.entity(entity).insert(new_body);
-            }
+            entity_commands.insert(new_collider);
         }
-        if let Some(f) = friction {
-            let new_f = Friction::new(physics.friction);
-            if *f != new_f {
-                commands.entity(entity).insert(new_f);
-            }
+        let new_friction = Friction::new(physics.friction);
+        if friction != Some(&new_friction) {
+            entity_commands.insert(new_friction);
         }
-        if let Some(r) = restitution {
-            let new_r = Restitution::new(physics.bounciness);
-            if *r != new_r {
-                commands.entity(entity).insert(new_r);
-            }
+        let new_restitution = Restitution::new(physics.bounciness);
+        if restitution != Some(&new_restitution) {
+            entity_commands.insert(new_restitution);
         }
-        if let Some(g) = gravity_scale {
+        let new_layers = if physics.player_can_collide {
+            CollisionLayers::from_bits(0b0001, 0xFFFF_FFFF)
+        } else {
+            CollisionLayers::from_bits(0b0100, 0xFFFF_FFFD)
+        };
+        if layers != Some(&new_layers) {
+            entity_commands.insert(new_layers);
+        }
+
+        if physics.enabled {
             let new_g = GravityScale(physics.gravity_scale);
-            if *g != new_g {
-                commands.entity(entity).insert(new_g);
+            if gravity_scale != Some(&new_g) {
+                entity_commands.insert(new_g);
             }
-        }
-        if let Some(m) = mass {
             let new_m = Mass(physics.mass);
-            if *m != new_m {
-                commands.entity(entity).insert(new_m);
+            if mass != Some(&new_m) {
+                entity_commands.insert(new_m);
             }
-        }
-        if let Some(cl) = layers {
-            let new_layers = if physics.player_can_collide {
-                CollisionLayers::from_bits(0b0001, 0xFFFF_FFFF)
-            } else {
-                CollisionLayers::from_bits(0b0100, 0xFFFF_FFFD)
-            };
-            if *cl != new_layers {
-                commands.entity(entity).insert(new_layers);
+            if sleeping_disabled.is_none() {
+                entity_commands.insert(SleepingDisabled);
             }
+        } else if gravity_scale.is_some() || mass.is_some() || sleeping_disabled.is_some() {
+            entity_commands.remove::<(GravityScale, Mass, SleepingDisabled)>();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::common::game::bricks::components::{BrickPhysics, BrickShape, BrickShapeComponent};
+
+    fn physics_app() -> App {
+        let mut app = App::new();
+        app.insert_resource(PhysicsSimulationState::Running)
+            .add_systems(Update, sync_brick_physics_changes);
+        app
+    }
+
+    #[test]
+    fn shape_changes_replace_block_and_sphere_colliders() {
+        let mut app = physics_app();
+        let entity = app
+            .world_mut()
+            .spawn((
+                BrickPhysics::default(),
+                BrickShapeComponent {
+                    shape: BrickShape::Block,
+                },
+            ))
+            .id();
+
+        app.update();
+        assert!(
+            app.world()
+                .get::<Collider>(entity)
+                .unwrap()
+                .shape()
+                .as_cuboid()
+                .is_some()
+        );
+
+        app.world_mut()
+            .get_mut::<BrickShapeComponent>(entity)
+            .unwrap()
+            .shape = BrickShape::Sphere;
+        app.update();
+        let collider = app.world().get::<Collider>(entity).unwrap();
+        assert_eq!(collider.shape().as_ball().unwrap().radius, 0.28);
+    }
+
+    #[test]
+    fn static_to_dynamic_restores_all_configured_components() {
+        let mut app = physics_app();
+        let entity = app
+            .world_mut()
+            .spawn((
+                BrickPhysics {
+                    enabled: false,
+                    bounciness: 0.65,
+                    player_can_collide: false,
+                    friction: 0.8,
+                    gravity_scale: 0.4,
+                    mass: 7.5,
+                    ..default()
+                },
+                BrickShapeComponent {
+                    shape: BrickShape::Block,
+                },
+            ))
+            .id();
+        app.update();
+        assert_eq!(
+            app.world().get::<RigidBody>(entity),
+            Some(&RigidBody::Static)
+        );
+        assert!(app.world().get::<GravityScale>(entity).is_none());
+        assert!(app.world().get::<Mass>(entity).is_none());
+        assert!(app.world().get::<SleepingDisabled>(entity).is_none());
+
+        app.world_mut()
+            .get_mut::<BrickPhysics>(entity)
+            .unwrap()
+            .enabled = true;
+        app.update();
+
+        assert_eq!(
+            app.world().get::<RigidBody>(entity),
+            Some(&RigidBody::Dynamic)
+        );
+        assert_eq!(
+            app.world().get::<Friction>(entity),
+            Some(&Friction::new(0.8))
+        );
+        assert_eq!(
+            app.world().get::<Restitution>(entity),
+            Some(&Restitution::new(0.65))
+        );
+        assert_eq!(
+            app.world().get::<GravityScale>(entity),
+            Some(&GravityScale(0.4))
+        );
+        assert_eq!(app.world().get::<Mass>(entity), Some(&Mass(7.5)));
+        assert!(app.world().get::<SleepingDisabled>(entity).is_some());
+        assert!(app.world().get::<CollisionLayers>(entity).is_some());
     }
 }

@@ -34,6 +34,22 @@ pub(crate) fn line_numbers(cache: &mut Option<(usize, String)>, total_lines: usi
     cache.as_ref().unwrap().1.as_str()
 }
 
+fn record_insert_undo(
+    history: &mut crate::studio::tools::UndoRedoHistory,
+    entity: Entity,
+    item: resources::EditorItemSnapshot,
+    parent: Option<Entity>,
+) {
+    history.push_command(crate::studio::tools::UndoCommand::SpawnTrees {
+        roots: vec![entity],
+        snapshots: vec![resources::EditorNodeSnapshot {
+            item,
+            parent,
+            children: Vec::new(),
+        }],
+    });
+}
+
 #[derive(SystemParam)]
 pub struct UiResources<'w, 's> {
     pub commands: Commands<'w, 's>,
@@ -646,7 +662,7 @@ pub fn studio_ui(
                         },
                     )
                 });
-                let entity = match kind {
+                let (entity, snapshot_item) = match kind {
                     InsertKind::Part | InsertKind::Sphere => {
                         let shape = if kind == InsertKind::Sphere {
                             crate::common::game::bricks::components::BrickShape::Sphere
@@ -656,6 +672,14 @@ pub fn studio_ui(
                         let position = camera_transform_val
                             .map(|camera| camera.translation + camera.forward() * (10.0 * 0.28))
                             .unwrap_or(Vec3::ZERO);
+                        let name_index = ui_res.count.count;
+                        let mut transform = Transform::from_translation(position);
+                        if let Some(parent_global) = parent.and_then(|parent| {
+                            queries.entities_query.get(parent).ok().map(|item| *item.7)
+                        }) {
+                            transform.translation =
+                                parent_global.affine().inverse().transform_point3(position);
+                        }
                         let entity = crate::common::game::bricks::data::spawn_brick(
                             &mut ui_res.commands,
                             &mut ui_res.meshes,
@@ -665,57 +689,106 @@ pub fn studio_ui(
                             position,
                             shape,
                         );
-                        if let Some(parent_global) = parent.and_then(|parent| {
-                            queries.entities_query.get(parent).ok().map(|item| *item.7)
-                        }) {
-                            let local_position =
-                                parent_global.affine().inverse().transform_point3(position);
-                            ui_res
-                                .commands
-                                .entity(entity)
-                                .insert(Transform::from_translation(local_position));
+                        if parent.is_some() {
+                            ui_res.commands.entity(entity).insert(transform);
                         }
-                        entity
+                        let name_prefix = if shape
+                            == crate::common::game::bricks::components::BrickShape::Sphere
+                        {
+                            "Sphere"
+                        } else {
+                            "Part"
+                        };
+                        (
+                            entity,
+                            resources::EditorItemSnapshot::Part(
+                                crate::common::game::bricks::data::BrickData {
+                                    transform,
+                                    name: format!("{name_prefix}{name_index}"),
+                                    is_brick: true,
+                                    shape,
+                                    mesh: None,
+                                    standard_material: None,
+                                    studs_material: None,
+                                    parent,
+                                    physics: Some(
+                                        crate::common::game::bricks::components::BrickPhysics::default(),
+                                    ),
+                                    color: Some(Color::srgb(0.84, 0.24, 0.16)),
+                                },
+                            ),
+                        )
                     }
-                    InsertKind::ServerScript => ui_res
-                        .commands
-                        .spawn((
-                            Name::new("Script"),
-                            crate::scripting::ecs::ServerScript {
-                                code: "print(\"Hello World from Server!\")\n".into(),
+                    InsertKind::ServerScript => {
+                        let code = "print(\"Hello World from Server!\")\n".to_string();
+                        let entity = ui_res
+                            .commands
+                            .spawn((
+                                Name::new("Script"),
+                                crate::scripting::ecs::ServerScript {
+                                    code: code.clone(),
+                                    enabled: true,
+                                    started: false,
+                                },
+                            ))
+                            .id();
+                        (
+                            entity,
+                            resources::EditorItemSnapshot::Server {
+                                name: "Script".into(),
+                                code,
                                 enabled: true,
-                                started: false,
                             },
-                        ))
-                        .id(),
-                    InsertKind::LocalScript => ui_res
-                        .commands
-                        .spawn((
-                            Name::new("LocalScript"),
-                            crate::scripting::ecs::LocalScript {
-                                code: "print(\"Hello World from Local!\")\n".into(),
+                        )
+                    }
+                    InsertKind::LocalScript => {
+                        let code = "print(\"Hello World from Local!\")\n".to_string();
+                        let entity = ui_res
+                            .commands
+                            .spawn((
+                                Name::new("LocalScript"),
+                                crate::scripting::ecs::LocalScript {
+                                    code: code.clone(),
+                                    enabled: true,
+                                    started: false,
+                                },
+                                lightyear::prelude::Replicate::default(),
+                            ))
+                            .id();
+                        (
+                            entity,
+                            resources::EditorItemSnapshot::Local {
+                                name: "LocalScript".into(),
+                                code,
                                 enabled: true,
-                                started: false,
                             },
-                            lightyear::prelude::Replicate::default(),
-                        ))
-                        .id(),
-                    InsertKind::ModuleScript => ui_res
-                        .commands
-                        .spawn((
-                            Name::new("ModuleScript"),
-                            crate::scripting::ecs::ModuleScript {
-                                code: "local module = {}\nreturn module\n".into(),
+                        )
+                    }
+                    InsertKind::ModuleScript => {
+                        let code = "local module = {}\nreturn module\n".to_string();
+                        let entity = ui_res
+                            .commands
+                            .spawn((
+                                Name::new("ModuleScript"),
+                                crate::scripting::ecs::ModuleScript { code: code.clone() },
+                                lightyear::prelude::Replicate::default(),
+                            ))
+                            .id();
+                        (
+                            entity,
+                            resources::EditorItemSnapshot::Module {
+                                name: "ModuleScript".into(),
+                                code,
                             },
-                            lightyear::prelude::Replicate::default(),
-                        ))
-                        .id(),
+                        )
+                    }
                 };
                 if let Some(parent) = parent {
                     ui_res.commands.entity(parent).add_child(entity);
                 }
                 ui_state.selection.entity = Some(entity);
                 ui_state.selection.entities = vec![entity];
+                record_insert_undo(&mut ui_res.history, entity, snapshot_item, parent);
                 ui_state.document_state.dirty = true;
             }
             EditorAction::ToggleExplorer => {
@@ -1260,8 +1333,6 @@ pub fn studio_ui(
                                 &mut ui_res.commands,
                                 &mut queries.entities_query,
                                 &mut ui_res.brick_colors,
-                                &mut ui_res.materials,
-                                &mut ui_res.studs_materials,
                                 &queries.explorer_query,
                                 &mut ui_state.active_editor,
                             );
@@ -1945,7 +2016,8 @@ pub fn studio_ui(
 
 #[cfg(test)]
 mod tests {
-    use super::line_numbers;
+    use super::{line_numbers, record_insert_undo, resources};
+    use bevy::prelude::*;
 
     #[test]
     fn reuses_line_numbers_for_the_same_count() {
@@ -1968,5 +2040,30 @@ mod tests {
 
         assert_eq!(text, "1\n2\n3\n");
         assert_eq!(cache.as_ref().unwrap().0, 3);
+    }
+
+    #[test]
+    fn inserted_entity_records_spawn_undo_with_parent() {
+        let mut history = crate::studio::tools::UndoRedoHistory::default();
+        let entity = Entity::from_bits(1 << 32);
+        let parent = Entity::from_bits(2 << 32);
+        record_insert_undo(
+            &mut history,
+            entity,
+            resources::EditorItemSnapshot::Module {
+                name: "ModuleScript".into(),
+                code: "return {}".into(),
+            },
+            Some(parent),
+        );
+
+        let crate::studio::tools::UndoCommand::SpawnTrees { roots, snapshots } =
+            &history.undo_stack[0]
+        else {
+            panic!("insert should record a spawn command");
+        };
+        assert_eq!(roots, &[entity]);
+        assert_eq!(snapshots[0].parent, Some(parent));
+        assert!(history.redo_stack.is_empty());
     }
 }
