@@ -99,6 +99,7 @@ pub struct CopiedEntityBuffer {
     pub is_brick: bool,
     pub shape: crate::common::game::bricks::components::BrickShape,
     pub physics: Option<crate::common::game::bricks::components::BrickPhysics>,
+    pub color: Option<Color>,
     pub script: Option<CopiedScript>,
     pub trees: Vec<EditorNodeSnapshot>,
 }
@@ -314,6 +315,95 @@ pub fn spawn_editor_snapshot(
     entity
 }
 
+pub fn snapshots_to_vrtx(
+    snapshots: &[EditorNodeSnapshot],
+) -> (
+    Vec<crate::common::core::vrtx::VrtxBrick>,
+    Vec<crate::common::core::vrtx::VrtxScript>,
+) {
+    fn append(
+        snapshot: &EditorNodeSnapshot,
+        parent_node_id: Option<u64>,
+        next_id: &mut u64,
+        bricks: &mut Vec<crate::common::core::vrtx::VrtxBrick>,
+        scripts: &mut Vec<crate::common::core::vrtx::VrtxScript>,
+    ) {
+        let node_id = *next_id;
+        *next_id += 1;
+        match &snapshot.item {
+            EditorItemSnapshot::Part(data) => {
+                let physics = data.physics.unwrap_or_default();
+                bricks.push(crate::common::core::vrtx::VrtxBrick {
+                    node_id,
+                    parent_node_id,
+                    name: data.name.clone(),
+                    transform: data.transform,
+                    shape: data.shape,
+                    color: data.color.unwrap_or(Color::srgb(0.84, 0.24, 0.16)),
+                    physics_enabled: physics.enabled,
+                    bounciness: physics.bounciness,
+                    player_can_collide: physics.player_can_collide,
+                    friction: physics.friction,
+                    gravity_scale: physics.gravity_scale,
+                    mass: physics.mass,
+                });
+            }
+            EditorItemSnapshot::Server {
+                name,
+                code,
+                enabled,
+            } => {
+                scripts.push(crate::common::core::vrtx::VrtxScript {
+                    node_id,
+                    parent_node_id,
+                    name: name.clone(),
+                    script_type: 0,
+                    code: code.clone(),
+                    parent_name: None,
+                    enabled: *enabled,
+                });
+            }
+            EditorItemSnapshot::Local {
+                name,
+                code,
+                enabled,
+            } => {
+                scripts.push(crate::common::core::vrtx::VrtxScript {
+                    node_id,
+                    parent_node_id,
+                    name: name.clone(),
+                    script_type: 1,
+                    code: code.clone(),
+                    parent_name: None,
+                    enabled: *enabled,
+                });
+            }
+            EditorItemSnapshot::Module { name, code } => {
+                scripts.push(crate::common::core::vrtx::VrtxScript {
+                    node_id,
+                    parent_node_id,
+                    name: name.clone(),
+                    script_type: 2,
+                    code: code.clone(),
+                    parent_name: None,
+                    enabled: true,
+                });
+            }
+        }
+        for child in &snapshot.children {
+            append(child, Some(node_id), next_id, bricks, scripts);
+        }
+    }
+
+    let mut bricks = Vec::new();
+    let mut scripts = Vec::new();
+    let mut next_id = 0;
+    for snapshot in snapshots {
+        append(snapshot, None, &mut next_id, &mut bricks, &mut scripts);
+    }
+    (bricks, scripts)
+}
+
 #[derive(Resource, Default)]
 pub struct HierarchyDraggedEntity {
     pub entity: Option<Entity>,
@@ -331,8 +421,7 @@ pub struct PlayInClientProcesses {
 
 #[derive(Resource, Default)]
 pub struct PlaytestBackup {
-    pub bricks: Vec<crate::common::game::bricks::data::BrickData>,
-    pub scripts: Vec<crate::common::core::vrtx::VrtxScript>,
+    pub snapshots: Vec<EditorNodeSnapshot>,
     pub gravity: Option<Vec3>,
     pub players_service: Option<crate::studio::tools::PlayersService>,
     pub lighting_service: Option<crate::common::game::environment::lighting::LightingService>,
@@ -796,5 +885,81 @@ pub fn track_document_changes(
     }
     if !changed.is_empty() || graphics_settings.is_changed() || lighting_service.is_changed() {
         document.dirty = true;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bevy::ecs::world::CommandQueue;
+
+    fn part(name: &str, color: Color, children: Vec<EditorNodeSnapshot>) -> EditorNodeSnapshot {
+        EditorNodeSnapshot {
+            item: EditorItemSnapshot::Part(crate::common::game::bricks::data::BrickData {
+                transform: Transform::IDENTITY,
+                name: name.into(),
+                is_brick: true,
+                shape: crate::common::game::bricks::components::BrickShape::Block,
+                mesh: None,
+                standard_material: None,
+                studs_material: None,
+                parent: None,
+                physics: Some(default()),
+                color: Some(color),
+            }),
+            parent: None,
+            children,
+        }
+    }
+
+    #[test]
+    fn nested_playtest_snapshot_serializes_and_restores_hierarchy_and_color() {
+        let expected_color = Color::srgb(0.1, 0.2, 0.9);
+        let snapshot = part(
+            "root",
+            expected_color,
+            vec![part(
+                "child",
+                Color::WHITE,
+                vec![EditorNodeSnapshot {
+                    item: EditorItemSnapshot::Server {
+                        name: "nested-script".into(),
+                        code: "print('ok')".into(),
+                        enabled: true,
+                    },
+                    parent: None,
+                    children: Vec::new(),
+                }],
+            )],
+        );
+
+        let (bricks, scripts) = snapshots_to_vrtx(std::slice::from_ref(&snapshot));
+        assert_eq!(bricks[0].node_id, 0);
+        assert_eq!(bricks[1].parent_node_id, Some(0));
+        assert_eq!(scripts[0].parent_node_id, Some(bricks[1].node_id));
+        assert_eq!(bricks[0].color, expected_color);
+
+        let mut world = World::new();
+        let mut queue = CommandQueue::default();
+        let root = {
+            let mut commands = Commands::new(&mut queue, &world);
+            spawn_editor_snapshot(&mut commands, &snapshot, None)
+        };
+        queue.apply(&mut world);
+
+        assert_eq!(
+            world
+                .get::<crate::common::game::bricks::components::BrickColor>(root)
+                .unwrap()
+                .color,
+            expected_color
+        );
+        let child = world.get::<Children>(root).unwrap()[0];
+        let script = world.get::<Children>(child).unwrap()[0];
+        assert!(
+            world
+                .get::<crate::scripting::ecs::ServerScript>(script)
+                .is_some()
+        );
     }
 }

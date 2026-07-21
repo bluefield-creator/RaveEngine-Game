@@ -398,56 +398,12 @@ pub fn studio_ui(
                                     }
                                 }
 
-                                let mut named_entities = std::collections::HashMap::new();
-                                for brick_data in ui_state.playtest_backup.bricks.drain(..) {
-                                    let name = brick_data.name.clone();
-                                    let new_entity =
-                                        crate::common::game::bricks::data::spawn_from_data(
-                                            &mut ui_res.commands,
-                                            &brick_data,
-                                        );
-                                    named_entities.insert(name, new_entity);
-                                }
-
-                                for script_data in ui_state.playtest_backup.scripts.drain(..) {
-                                    let mut cmd =
-                                        ui_res.commands.spawn(Name::new(script_data.name));
-                                    match script_data.script_type {
-                                        0 => {
-                                            cmd.insert(crate::scripting::ecs::ServerScript {
-                                                code: script_data.code,
-                                                enabled: script_data.enabled,
-                                                started: false,
-                                            });
-                                        }
-                                        1 => {
-                                            cmd.insert((
-                                                crate::scripting::ecs::LocalScript {
-                                                    code: script_data.code,
-                                                    enabled: script_data.enabled,
-                                                    started: false,
-                                                },
-                                                lightyear::prelude::Replicate::default(),
-                                            ));
-                                        }
-                                        _ => {
-                                            cmd.insert((
-                                                crate::scripting::ecs::ModuleScript {
-                                                    code: script_data.code,
-                                                },
-                                                lightyear::prelude::Replicate::default(),
-                                            ));
-                                        }
-                                    }
-                                    let new_script_entity = cmd.id();
-                                    if let Some(ref p_name) = script_data.parent_name
-                                        && let Some(&parent_entity) = named_entities.get(p_name)
-                                    {
-                                        ui_res
-                                            .commands
-                                            .entity(parent_entity)
-                                            .add_child(new_script_entity);
-                                    }
+                                for snapshot in ui_state.playtest_backup.snapshots.drain(..) {
+                                    resources::spawn_editor_snapshot(
+                                        &mut ui_res.commands,
+                                        &snapshot,
+                                        snapshot.parent,
+                                    );
                                 }
 
                                 if let Some(gravity_val) = ui_state.playtest_backup.gravity.take()
@@ -947,7 +903,7 @@ pub fn studio_ui(
                         material,
                         studs_material,
                         physics,
-                        _,
+                        color,
                     )) = queries.entities_query.get(entity)
                     {
                         ui_state.copiedbuffer.transform = Some(*transform);
@@ -961,6 +917,7 @@ pub fn studio_ui(
                             .map(|shape| shape.shape)
                             .unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
                         ui_state.copiedbuffer.physics = physics.cloned();
+                        ui_state.copiedbuffer.color = color.map(|color| color.color);
                     } else if let Ok((_, name, _, _, _, server, local, module)) =
                         queries.explorer_query.get(entity)
                     {
@@ -1078,7 +1035,7 @@ pub fn studio_ui(
                         studs_material: ui_state.copiedbuffer.studs_material.clone(),
                         parent,
                         physics: ui_state.copiedbuffer.physics,
-                        color: None,
+                        color: ui_state.copiedbuffer.color,
                     };
                     Some(crate::common::game::bricks::data::spawn_from_data(
                         &mut ui_res.commands,

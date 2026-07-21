@@ -40,6 +40,8 @@ pub fn draw_entity_context_menu(
 ) -> bool {
     let mut closed = false;
     if ui.button("Copy").clicked() {
+        copiedbuffer.trees.clear();
+        copiedbuffer.script = None;
         if let Ok((
             _,
             transform,
@@ -53,7 +55,7 @@ pub fn draw_entity_context_menu(
             mat_opt,
             studs_mat_opt,
             phys_opt,
-            _,
+            color_opt,
         )) = entities_query.get(entity)
         {
             copiedbuffer.transform = Some(*transform);
@@ -67,6 +69,7 @@ pub fn draw_entity_context_menu(
                 .map(|s| s.shape)
                 .unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
             copiedbuffer.physics = phys_opt.cloned();
+            copiedbuffer.color = color_opt.map(|color| color.color);
         }
         ui.close();
         closed = true;
@@ -101,6 +104,9 @@ pub fn draw_entity_context_menu(
                 crate::common::game::bricks::components::BrickShapeComponent {
                     shape: copiedbuffer.shape,
                 },
+                crate::common::game::bricks::components::BrickColor {
+                    color: copiedbuffer.color.unwrap_or(Color::srgb(0.84, 0.24, 0.16)),
+                },
             ));
         }
         if let Some(phys) = copiedbuffer.physics {
@@ -121,7 +127,7 @@ pub fn draw_entity_context_menu(
             studs_material: copiedbuffer.studs_material.clone(),
             parent: None,
             physics: copiedbuffer.physics,
-            color: None,
+            color: copiedbuffer.color,
         };
 
         history.push_command(crate::studio::tools::UndoCommand::Spawn {
@@ -146,7 +152,7 @@ pub fn draw_entity_context_menu(
             mat_opt,
             studs_mat_opt,
             phys_opt,
-            _,
+            color_opt,
         )) = entities_query.get(entity)
     {
         let newtransform = *transform;
@@ -176,6 +182,11 @@ pub fn draw_entity_context_menu(
             commands.entity(new_entity).insert((
                 Brick,
                 crate::common::game::bricks::components::BrickShapeComponent { shape },
+                crate::common::game::bricks::components::BrickColor {
+                    color: color_opt
+                        .map(|color| color.color)
+                        .unwrap_or(Color::srgb(0.84, 0.24, 0.16)),
+                },
             ));
         }
         if let Some(phys) = phys_opt {
@@ -203,7 +214,7 @@ pub fn draw_entity_context_menu(
             studs_material: studs_mat_opt.cloned(),
             parent: parent_entity,
             physics: phys_opt.cloned(),
-            color: None,
+            color: color_opt.map(|color| color.color),
         };
 
         history.push_command(crate::studio::tools::UndoCommand::Spawn {

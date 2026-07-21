@@ -8,6 +8,43 @@ use avian3d::prelude::*;
 use bevy::prelude::*;
 use lightyear::prelude::Replicate;
 
+fn validate_hierarchy(state: &VrtxFileState) -> Result<(), &'static str> {
+    if state.version < 6 {
+        return Ok(());
+    }
+    let parents: std::collections::HashMap<_, _> = state
+        .bricks
+        .iter()
+        .map(|item| (item.node_id, item.parent_node_id))
+        .chain(
+            state
+                .scripts
+                .iter()
+                .map(|item| (item.node_id, item.parent_node_id)),
+        )
+        .collect();
+    if parents.len() != state.bricks.len() + state.scripts.len() {
+        return Err("map contains duplicate node IDs");
+    }
+    for (&id, &parent) in &parents {
+        if parent == Some(id) {
+            return Err("map contains a self-parenting node");
+        }
+        if parent.is_some_and(|parent| !parents.contains_key(&parent)) {
+            return Err("map contains a dangling parent ID");
+        }
+        let mut seen = std::collections::HashSet::new();
+        let mut current = Some(id);
+        while let Some(node) = current {
+            if !seen.insert(node) {
+                return Err("map hierarchy contains a cycle");
+            }
+            current = parents.get(&node).copied().flatten();
+        }
+    }
+    Ok(())
+}
+
 pub fn load_fallback_map(commands: &mut Commands) {
     commands.spawn((
         Transform::from_xyz(0.0, -0.14, 0.0).with_scale(Vec3::new(25.0, 1.0, 50.0)),
@@ -76,27 +113,35 @@ pub fn load_map(mut commands: Commands, settings: Res<ServerSettings>) {
 
     let loaded_state = VrtxFileState::load_from_file(&settings.map_path).ok();
 
-    if let Some(state) = loaded_state {
+    if let Some(state) = loaded_state.filter(|state| {
+        validate_hierarchy(state)
+            .inspect_err(|error| error!("Failed to load map hierarchy: {error}"))
+            .is_ok()
+    }) {
+        let version = state.version;
         let mut node_id_to_entity = std::collections::HashMap::new();
         let mut pending_parents: Vec<(Entity, u64)> = Vec::new();
+        let mut pending_parent_names: Vec<(Entity, String)> = Vec::new();
         let mut name_to_entity = std::collections::HashMap::new();
+        let mut ambiguous_names = std::collections::HashSet::new();
         for brick in state.bricks {
             let node_id = brick.node_id;
             let parent_node_id = brick.parent_node_id;
             let name = brick.name.clone();
             let entity = spawn_brick_entity(&mut commands, brick);
             node_id_to_entity.insert(node_id, entity);
-            name_to_entity.insert(name, entity);
+            if name_to_entity.insert(name.clone(), entity).is_some() {
+                ambiguous_names.insert(name);
+            }
             if let Some(parent_id) = parent_node_id {
                 pending_parents.push((entity, parent_id));
             }
         }
-        for (child, parent_id) in pending_parents {
-            if let Some(&parent) = node_id_to_entity.get(&parent_id) {
-                commands.entity(parent).add_child(child);
-            }
-        }
         for script in state.scripts {
+            let node_id = script.node_id;
+            let parent_node_id = script.parent_node_id;
+            let parent_name = script.parent_name.clone();
+            let name = script.name.clone();
             let mut cmd = commands.spawn(Name::new(script.name));
             match script.script_type {
                 0 => {
@@ -124,18 +169,31 @@ pub fn load_map(mut commands: Commands, settings: Res<ServerSettings>) {
                 }
             }
             let new_script_entity = cmd.id();
-            let mut parented = false;
-            if let Some(parent_id) = script.parent_node_id
-                && let Some(&parent_entity) = node_id_to_entity.get(&parent_id)
+            node_id_to_entity.insert(node_id, new_script_entity);
+            if name_to_entity
+                .insert(name.clone(), new_script_entity)
+                .is_some()
             {
-                commands.entity(parent_entity).add_child(new_script_entity);
-                parented = true;
+                ambiguous_names.insert(name);
             }
-            if !parented
-                && let Some(ref p_name) = script.parent_name
-                && let Some(&parent_entity) = name_to_entity.get(p_name)
+            if let Some(parent_id) = parent_node_id {
+                pending_parents.push((new_script_entity, parent_id));
+            } else if version < 6
+                && let Some(parent_name) = parent_name
             {
-                commands.entity(parent_entity).add_child(new_script_entity);
+                pending_parent_names.push((new_script_entity, parent_name));
+            }
+        }
+        for (child, parent_id) in pending_parents {
+            if let Some(&parent) = node_id_to_entity.get(&parent_id) {
+                commands.entity(parent).add_child(child);
+            }
+        }
+        for (child, parent_name) in pending_parent_names {
+            if !ambiguous_names.contains(&parent_name)
+                && let Some(&parent) = name_to_entity.get(&parent_name)
+            {
+                commands.entity(parent).add_child(child);
             }
         }
         loaded = true;
@@ -145,6 +203,73 @@ pub fn load_map(mut commands: Commands, settings: Res<ServerSettings>) {
     if !loaded {
         info!("Failed to load map, spawning fallback map instead");
         load_fallback_map(&mut commands);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::common::core::vrtx::{VrtxBrick, VrtxScript, VrtxSettings};
+
+    fn state(bricks: Vec<VrtxBrick>, scripts: Vec<VrtxScript>) -> VrtxFileState {
+        VrtxFileState {
+            version: 7,
+            gravity: Vec3::ZERO,
+            settings: VrtxSettings::default(),
+            lighting: default(),
+            camera_transform: Transform::IDENTITY,
+            bricks,
+            scripts,
+        }
+    }
+
+    fn brick(id: u64, parent: Option<u64>) -> VrtxBrick {
+        VrtxBrick {
+            node_id: id,
+            parent_node_id: parent,
+            name: format!("brick-{id}"),
+            transform: Transform::IDENTITY,
+            shape: BrickShape::Block,
+            color: Color::WHITE,
+            physics_enabled: false,
+            bounciness: 0.3,
+            player_can_collide: true,
+            friction: 0.3,
+            gravity_scale: 1.0,
+            mass: 1.0,
+        }
+    }
+
+    #[test]
+    fn rejects_duplicate_and_invalid_hierarchy_ids() {
+        let duplicate = state(vec![brick(1, None), brick(1, None)], vec![]);
+        assert_eq!(
+            validate_hierarchy(&duplicate),
+            Err("map contains duplicate node IDs")
+        );
+
+        let dangling = state(vec![brick(1, Some(2))], vec![]);
+        assert_eq!(
+            validate_hierarchy(&dangling),
+            Err("map contains a dangling parent ID")
+        );
+
+        let cycle = state(vec![brick(1, Some(2)), brick(2, Some(1))], vec![]);
+        assert_eq!(
+            validate_hierarchy(&cycle),
+            Err("map hierarchy contains a cycle")
+        );
+
+        let script = VrtxScript {
+            node_id: 2,
+            parent_node_id: Some(1),
+            name: "nested".into(),
+            script_type: 0,
+            code: String::new(),
+            parent_name: None,
+            enabled: true,
+        };
+        assert!(validate_hierarchy(&state(vec![brick(1, None)], vec![script])).is_ok());
     }
 }
 

@@ -10,6 +10,22 @@ fn read_f32(reader: &mut impl Read) -> std::io::Result<f32> {
     Ok(f32::from_le_bytes(bytes))
 }
 
+fn read_file_with_limit(path: &str, max_size: u64) -> std::io::Result<Vec<u8>> {
+    let mut file = File::open(path)?;
+    let mut data = Vec::new();
+    let read_limit = max_size.checked_add(1).ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, "File size limit overflow")
+    })?;
+    (&mut file).take(read_limit).read_to_end(&mut data)?;
+    if data.len() as u64 > max_size {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "File exceeds maximum allowed size",
+        ));
+    }
+    Ok(data)
+}
+
 #[derive(Debug, Clone)]
 pub struct VrtxBrick {
     pub node_id: u64,
@@ -126,15 +142,28 @@ enum GodotVariant {
 struct GodotParser<'a> {
     data: &'a [u8],
     offset: usize,
+    variants_parsed: usize,
 }
+
+const MAX_GODOT_COLLECTION_COUNT: u32 = 100_000;
+const MAX_GODOT_RECURSION_DEPTH: usize = 64;
+const MAX_GODOT_STRING_LENGTH: usize = 1_048_576;
 
 impl<'a> GodotParser<'a> {
     fn new(data: &'a [u8]) -> Self {
-        Self { data, offset: 0 }
+        Self {
+            data,
+            offset: 0,
+            variants_parsed: 0,
+        }
     }
 
     fn read_u32(&mut self) -> std::io::Result<u32> {
-        if self.offset + 4 > self.data.len() {
+        if self
+            .offset
+            .checked_add(4)
+            .is_none_or(|end| end > self.data.len())
+        {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::UnexpectedEof,
                 "Unexpected EOF",
@@ -151,7 +180,11 @@ impl<'a> GodotParser<'a> {
     }
 
     fn read_f32(&mut self) -> std::io::Result<f32> {
-        if self.offset + 4 > self.data.len() {
+        if self
+            .offset
+            .checked_add(4)
+            .is_none_or(|end| end > self.data.len())
+        {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::UnexpectedEof,
                 "Unexpected EOF",
@@ -168,7 +201,11 @@ impl<'a> GodotParser<'a> {
     }
 
     fn read_f64(&mut self) -> std::io::Result<f64> {
-        if self.offset + 8 > self.data.len() {
+        if self
+            .offset
+            .checked_add(8)
+            .is_none_or(|end| end > self.data.len())
+        {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::UnexpectedEof,
                 "Unexpected EOF",
@@ -189,7 +226,11 @@ impl<'a> GodotParser<'a> {
     }
 
     fn read_bytes(&mut self, len: usize) -> std::io::Result<&'a [u8]> {
-        if self.offset + len > self.data.len() {
+        if self
+            .offset
+            .checked_add(len)
+            .is_none_or(|end| end > self.data.len())
+        {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::UnexpectedEof,
                 "Unexpected EOF",
@@ -201,6 +242,28 @@ impl<'a> GodotParser<'a> {
     }
 
     fn parse_variant(&mut self) -> std::io::Result<GodotVariant> {
+        self.parse_variant_at_depth(0)
+    }
+
+    fn parse_variant_at_depth(&mut self, depth: usize) -> std::io::Result<GodotVariant> {
+        if depth > MAX_GODOT_RECURSION_DEPTH {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Godot variant recursion depth exceeds maximum allowed",
+            ));
+        }
+        self.variants_parsed = self.variants_parsed.checked_add(1).ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Godot variant count overflow",
+            )
+        })?;
+        if self.variants_parsed > MAX_GODOT_COLLECTION_COUNT as usize {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Godot variant count exceeds maximum allowed",
+            ));
+        }
         let start_offset = self.offset;
         let type_header = self.read_u32()?;
         let type_id = type_header & 0xFFFF;
@@ -242,7 +305,18 @@ impl<'a> GodotParser<'a> {
             }
             4 | 21 | 22 => {
                 let len = self.read_u32()? as usize;
-                let padded_len = (len + 3) & !3;
+                if len > MAX_GODOT_STRING_LENGTH {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Godot string exceeds maximum allowed length",
+                    ));
+                }
+                let padded_len = len.checked_add(3).ok_or_else(|| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Godot string length overflow",
+                    )
+                })? & !3;
                 let str_bytes = self.read_bytes(len)?;
                 let _padding = self.read_bytes(padded_len - len)?;
                 let string = String::from_utf8_lossy(str_bytes).into_owned();
@@ -377,13 +451,30 @@ impl<'a> GodotParser<'a> {
                 let object_type = self.read_u32()?;
                 if object_type == 1 {
                     let len = self.read_u32()? as usize;
-                    let padded_len = (len + 3) & !3;
+                    if len > MAX_GODOT_STRING_LENGTH {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "Godot class name exceeds maximum allowed length",
+                        ));
+                    }
+                    let padded_len = len.checked_add(3).ok_or_else(|| {
+                        std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "Godot class name length overflow",
+                        )
+                    })? & !3;
                     let _class_name = self.read_bytes(len)?;
                     let _padding = self.read_bytes(padded_len - len)?;
                     let prop_count = self.read_u32()?;
+                    if prop_count > MAX_GODOT_COLLECTION_COUNT {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "Godot property count exceeds maximum allowed",
+                        ));
+                    }
                     for _ in 0..prop_count {
-                        let _name = self.parse_variant()?;
-                        let _val = self.parse_variant()?;
+                        let _name = self.parse_variant_at_depth(depth + 1)?;
+                        let _val = self.parse_variant_at_depth(depth + 1)?;
                     }
                 } else if object_type == 2 {
                     let _bytes = self.read_bytes(8)?;
@@ -393,14 +484,20 @@ impl<'a> GodotParser<'a> {
             27 => {
                 let count_header = self.read_u32()?;
                 let count = count_header & 0x7FFFFFFF;
+                if count > MAX_GODOT_COLLECTION_COUNT {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Godot dictionary count exceeds maximum allowed",
+                    ));
+                }
                 trace!(
                     "parse_variant at offset {}: parsing dictionary with {} elements",
                     start_offset, count
                 );
                 let mut dict = std::collections::HashMap::new();
                 for i in 0..count {
-                    let key_var = self.parse_variant()?;
-                    let val_var = self.parse_variant()?;
+                    let key_var = self.parse_variant_at_depth(depth + 1)?;
+                    let val_var = self.parse_variant_at_depth(depth + 1)?;
                     trace!(
                         "parse_variant dictionary element {}: key={:?}, val_type={:?}",
                         i, key_var, val_var
@@ -414,13 +511,19 @@ impl<'a> GodotParser<'a> {
             28 => {
                 let count_header = self.read_u32()?;
                 let count = count_header & 0x7FFFFFFF;
+                if count > MAX_GODOT_COLLECTION_COUNT {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Godot array count exceeds maximum allowed",
+                    ));
+                }
                 trace!(
                     "parse_variant at offset {}: parsing array with {} elements",
                     start_offset, count
                 );
                 let mut arr = Vec::with_capacity(count as usize);
                 for _ in 0..count {
-                    let val_var = self.parse_variant()?;
+                    let val_var = self.parse_variant_at_depth(depth + 1)?;
                     arr.push(val_var);
                 }
                 Ok(GodotVariant::Array(arr))
@@ -465,6 +568,13 @@ fn decompress_gcpf_file(data: &[u8]) -> std::io::Result<Vec<u8>> {
     let block_size = u32::from_le_bytes([data[8], data[9], data[10], data[11]]) as usize;
     let uncompressed_size = u32::from_le_bytes([data[12], data[13], data[14], data[15]]) as usize;
 
+    if uncompressed_size as u64 > VrtxFileState::MAX_FILE_SIZE {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "GCPF: Declared decompressed size exceeds maximum allowed",
+        ));
+    }
+
     debug!(
         "GCPF decompress: mode={}, block_size={}, uncompressed_size={}",
         comp_mode, block_size, uncompressed_size
@@ -478,7 +588,21 @@ fn decompress_gcpf_file(data: &[u8]) -> std::io::Result<Vec<u8>> {
     }
 
     let num_blocks = uncompressed_size.div_ceil(block_size);
-    let header_size = 16 + num_blocks * 4;
+    if num_blocks > MAX_GODOT_COLLECTION_COUNT as usize {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "GCPF: Block count exceeds maximum allowed",
+        ));
+    }
+    let header_size = num_blocks
+        .checked_mul(4)
+        .and_then(|size| 16usize.checked_add(size))
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "GCPF: Header size overflow",
+            )
+        })?;
     debug!(
         "GCPF decompress: num_blocks={}, header_size={}",
         num_blocks, header_size
@@ -493,7 +617,15 @@ fn decompress_gcpf_file(data: &[u8]) -> std::io::Result<Vec<u8>> {
 
     let mut block_sizes = Vec::with_capacity(num_blocks);
     for i in 0..num_blocks {
-        let offset = 16 + i * 4;
+        let offset = i
+            .checked_mul(4)
+            .and_then(|value| 16usize.checked_add(value))
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "GCPF: Block table offset overflow",
+                )
+            })?;
         let size = u32::from_le_bytes([
             data[offset],
             data[offset + 1],
@@ -511,8 +643,14 @@ fn decompress_gcpf_file(data: &[u8]) -> std::io::Result<Vec<u8>> {
             "GCPF decompressing block {}: offset={}, size={}",
             i, current_offset, size
         );
-        if current_offset + size > data.len() {
-            if current_offset + 4 == data.len()
+        let block_end = current_offset.checked_add(size).ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "GCPF: Block offset overflow",
+            )
+        })?;
+        if block_end > data.len() {
+            if current_offset.checked_add(4) == Some(data.len())
                 && &data[current_offset..current_offset + 4] == b"GCPF"
             {
                 debug!("GCPF footer magic reached, stopping decompression cleanly");
@@ -523,26 +661,53 @@ fn decompress_gcpf_file(data: &[u8]) -> std::io::Result<Vec<u8>> {
                 "GCPF: Block data truncated",
             ));
         }
-        let compressed_block = &data[current_offset..current_offset + size];
-        current_offset += size;
+        let compressed_block = &data[current_offset..block_end];
+        current_offset = block_end;
 
-        let decompressed_block = match comp_mode {
-            0 | 2 => zstd::decode_all(compressed_block)?,
-            _ => match zstd::decode_all(compressed_block) {
-                Ok(decoded) => decoded,
-                Err(_) => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        format!("GCPF: Unsupported compression mode {}", comp_mode),
-                    ));
-                }
-            },
-        };
+        if !matches!(comp_mode, 0 | 2) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("GCPF: Unsupported compression mode {}", comp_mode),
+            ));
+        }
+        let remaining = uncompressed_size
+            .checked_sub(uncompressed_data.len())
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "GCPF: Decompressed size overflow",
+                )
+            })?;
+        let expected_block_size = remaining.min(block_size);
+        let decoder = zstd::Decoder::new(compressed_block)?;
+        let mut decompressed_block = Vec::with_capacity(expected_block_size);
+        decoder
+            .take(expected_block_size as u64 + 1)
+            .read_to_end(&mut decompressed_block)?;
+        if decompressed_block.len() != expected_block_size {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "GCPF: Block decompressed to an unexpected size",
+            ));
+        }
+        uncompressed_data
+            .len()
+            .checked_add(decompressed_block.len())
+            .filter(|total| *total <= uncompressed_size)
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "GCPF: Total decompressed size exceeds declared size",
+                )
+            })?;
         uncompressed_data.extend_from_slice(&decompressed_block);
     }
 
-    if uncompressed_data.len() > uncompressed_size {
-        uncompressed_data.truncate(uncompressed_size);
+    if uncompressed_data.len() != uncompressed_size {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "GCPF: Decompressed data is truncated",
+        ));
     }
 
     Ok(uncompressed_data)
@@ -823,10 +988,86 @@ impl VrtxFileState {
     const MAX_CODE_LENGTH: usize = 1_048_576;
     const MAX_VRTX_VERSION: u32 = 7;
 
+    fn validate_for_save(&self) -> std::io::Result<()> {
+        let invalid = |message| std::io::Error::new(std::io::ErrorKind::InvalidInput, message);
+        if self.version != CURRENT_VRTX_VERSION {
+            return Err(invalid("New saves must use the current VRTX version"));
+        }
+        let brick_count = u32::try_from(self.bricks.len())
+            .map_err(|_| invalid("Brick count cannot be represented in VRTX"))?;
+        let script_count = u32::try_from(self.scripts.len())
+            .map_err(|_| invalid("Script count cannot be represented in VRTX"))?;
+        if brick_count > Self::MAX_BRICK_COUNT || script_count > Self::MAX_SCRIPT_COUNT {
+            return Err(invalid("Project item count exceeds maximum allowed"));
+        }
+        for brick in &self.bricks {
+            if brick.name.len() > Self::MAX_NAME_LENGTH || u16::try_from(brick.name.len()).is_err()
+            {
+                return Err(invalid("Brick name exceeds maximum allowed length"));
+            }
+        }
+        for script in &self.scripts {
+            if script.name.len() > Self::MAX_NAME_LENGTH
+                || u16::try_from(script.name.len()).is_err()
+            {
+                return Err(invalid("Script name exceeds maximum allowed length"));
+            }
+            if script.code.len() > Self::MAX_CODE_LENGTH
+                || u32::try_from(script.code.len()).is_err()
+            {
+                return Err(invalid("Script code exceeds maximum allowed length"));
+            }
+            if script.parent_name.as_ref().is_some_and(|name| {
+                name.len() > Self::MAX_NAME_LENGTH || u16::try_from(name.len()).is_err()
+            }) {
+                return Err(invalid("Script parent name exceeds maximum allowed length"));
+            }
+        }
+
+        let parents: std::collections::HashMap<_, _> = self
+            .bricks
+            .iter()
+            .map(|item| (item.node_id, item.parent_node_id))
+            .chain(
+                self.scripts
+                    .iter()
+                    .map(|item| (item.node_id, item.parent_node_id)),
+            )
+            .collect();
+        if parents.len() != self.bricks.len() + self.scripts.len() {
+            return Err(invalid("Duplicate VRTX node ID"));
+        }
+        for (&id, &parent) in &parents {
+            if parent == Some(id) {
+                return Err(invalid("VRTX node cannot parent itself"));
+            }
+            if parent.is_some_and(|parent| !parents.contains_key(&parent)) {
+                return Err(invalid("VRTX node references a missing parent"));
+            }
+            let mut seen = std::collections::HashSet::new();
+            let mut current = Some(id);
+            while let Some(node) = current {
+                if !seen.insert(node) {
+                    return Err(invalid("VRTX hierarchy contains a cycle"));
+                }
+                current = parents.get(&node).copied().flatten();
+            }
+        }
+        Ok(())
+    }
+
     pub fn save_to_file(&self, path: &str) -> std::io::Result<()> {
-        let temp_path = format!("{}.tmp", path);
-        let file = File::create(&temp_path)?;
-        let mut writer = BufWriter::new(file);
+        self.validate_for_save()?;
+        let destination = std::path::Path::new(path);
+        let parent = destination
+            .parent()
+            .filter(|path| !path.as_os_str().is_empty())
+            .unwrap_or_else(|| std::path::Path::new("."));
+        let mut temp_file = tempfile::Builder::new()
+            .prefix(".vrtx-")
+            .suffix(".tmp")
+            .tempfile_in(parent)?;
+        let mut writer = BufWriter::new(temp_file.as_file_mut());
 
         writer.write_all(b"VRTX")?;
         writer.write_all(&self.version.to_le_bytes())?;
@@ -953,24 +1194,17 @@ impl VrtxFileState {
         }
 
         writer.flush()?;
-        if let Err(e) = std::fs::rename(&temp_path, path) {
-            let _ = std::fs::remove_file(&temp_path);
-            return Err(e);
-        }
+        writer.get_ref().sync_all()?;
+        drop(writer);
+        temp_file
+            .persist(destination)
+            .map_err(|error| error.error)?;
         Ok(())
     }
 
     pub fn load_from_file(path: &str) -> std::io::Result<Self> {
         debug!("load_from_file: Attempting to open file: {}", path);
-        let mut file = File::open(path)?;
-        let mut data = Vec::new();
-        file.read_to_end(&mut data)?;
-        if data.len() as u64 > Self::MAX_FILE_SIZE {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "File exceeds maximum allowed size of 256 MB",
-            ));
-        }
+        let data = read_file_with_limit(path, Self::MAX_FILE_SIZE)?;
         debug!("load_from_file: Read {} bytes from {}", data.len(), path);
 
         if data.len() >= 4 && &data[0..4] == b"VRTX" {
@@ -1285,87 +1519,92 @@ impl VrtxFileState {
             let mut scripts = Vec::new();
             if version >= 4 {
                 let mut script_count_bytes = [0u8; 4];
-                if reader.read_exact(&mut script_count_bytes).is_ok() {
-                    let script_count = u32::from_le_bytes(script_count_bytes);
-                    if script_count > Self::MAX_SCRIPT_COUNT {
+                reader.read_exact(&mut script_count_bytes)?;
+                let script_count = u32::from_le_bytes(script_count_bytes);
+                if script_count > Self::MAX_SCRIPT_COUNT {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "Script count exceeds maximum allowed",
+                    ));
+                }
+                for _ in 0..script_count {
+                    let mut name_len_bytes = [0u8; 2];
+                    reader.read_exact(&mut name_len_bytes)?;
+                    let name_len = u16::from_le_bytes(name_len_bytes) as usize;
+                    if name_len > Self::MAX_NAME_LENGTH {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
-                            "Script count exceeds maximum allowed",
+                            "Script name exceeds maximum allowed length",
                         ));
                     }
-                    for _ in 0..script_count {
-                        let mut name_len_bytes = [0u8; 2];
-                        reader.read_exact(&mut name_len_bytes)?;
-                        let name_len = u16::from_le_bytes(name_len_bytes) as usize;
-                        if name_len > Self::MAX_NAME_LENGTH {
-                            return Err(std::io::Error::new(
-                                std::io::ErrorKind::InvalidData,
-                                "Script name exceeds maximum allowed length",
-                            ));
-                        }
-                        let mut name_bytes = vec![0u8; name_len];
-                        reader.read_exact(&mut name_bytes)?;
-                        let name = String::from_utf8(name_bytes).unwrap_or_default();
-                        let (node_id, parent_node_id) = if version >= 6 {
-                            let mut id = [0u8; 8];
-                            reader.read_exact(&mut id)?;
-                            let mut parent = [0u8; 8];
-                            reader.read_exact(&mut parent)?;
-                            let parent = u64::from_le_bytes(parent);
-                            (
-                                u64::from_le_bytes(id),
-                                (parent != u64::MAX).then_some(parent),
-                            )
-                        } else {
-                            ((bricks.len() + scripts.len()) as u64, None)
-                        };
+                    let mut name_bytes = vec![0u8; name_len];
+                    reader.read_exact(&mut name_bytes)?;
+                    let name = String::from_utf8(name_bytes).unwrap_or_default();
+                    let (node_id, parent_node_id) = if version >= 6 {
+                        let mut id = [0u8; 8];
+                        reader.read_exact(&mut id)?;
+                        let mut parent = [0u8; 8];
+                        reader.read_exact(&mut parent)?;
+                        let parent = u64::from_le_bytes(parent);
+                        (
+                            u64::from_le_bytes(id),
+                            (parent != u64::MAX).then_some(parent),
+                        )
+                    } else {
+                        ((bricks.len() + scripts.len()) as u64, None)
+                    };
 
-                        let mut type_bytes = [0u8; 1];
-                        reader.read_exact(&mut type_bytes)?;
-                        let script_type = type_bytes[0];
+                    let mut type_bytes = [0u8; 1];
+                    reader.read_exact(&mut type_bytes)?;
+                    let script_type = type_bytes[0];
 
-                        let mut code_len_bytes = [0u8; 4];
-                        reader.read_exact(&mut code_len_bytes)?;
-                        let code_len = u32::from_le_bytes(code_len_bytes) as usize;
-                        if code_len > Self::MAX_CODE_LENGTH {
-                            return Err(std::io::Error::new(
-                                std::io::ErrorKind::InvalidData,
-                                "Script code exceeds maximum allowed length",
-                            ));
-                        }
-                        let mut code_bytes = vec![0u8; code_len];
-                        reader.read_exact(&mut code_bytes)?;
-                        let code = String::from_utf8(code_bytes).unwrap_or_default();
-
-                        let mut p_len_bytes = [0u8; 2];
-                        reader.read_exact(&mut p_len_bytes)?;
-                        let p_len = u16::from_le_bytes(p_len_bytes) as usize;
-                        let parent_name = if p_len > 0 {
-                            let mut p_bytes = vec![0u8; p_len];
-                            reader.read_exact(&mut p_bytes)?;
-                            Some(String::from_utf8(p_bytes).unwrap_or_default())
-                        } else {
-                            None
-                        };
-
-                        let enabled = if version >= 5 {
-                            let mut enabled_byte = [0u8; 1];
-                            reader.read_exact(&mut enabled_byte)?;
-                            enabled_byte[0] != 0
-                        } else {
-                            true
-                        };
-
-                        scripts.push(VrtxScript {
-                            node_id,
-                            parent_node_id,
-                            name,
-                            script_type,
-                            code,
-                            parent_name,
-                            enabled,
-                        });
+                    let mut code_len_bytes = [0u8; 4];
+                    reader.read_exact(&mut code_len_bytes)?;
+                    let code_len = u32::from_le_bytes(code_len_bytes) as usize;
+                    if code_len > Self::MAX_CODE_LENGTH {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "Script code exceeds maximum allowed length",
+                        ));
                     }
+                    let mut code_bytes = vec![0u8; code_len];
+                    reader.read_exact(&mut code_bytes)?;
+                    let code = String::from_utf8(code_bytes).unwrap_or_default();
+
+                    let mut p_len_bytes = [0u8; 2];
+                    reader.read_exact(&mut p_len_bytes)?;
+                    let p_len = u16::from_le_bytes(p_len_bytes) as usize;
+                    if p_len > Self::MAX_NAME_LENGTH {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "Script parent name exceeds maximum allowed length",
+                        ));
+                    }
+                    let parent_name = if p_len > 0 {
+                        let mut p_bytes = vec![0u8; p_len];
+                        reader.read_exact(&mut p_bytes)?;
+                        Some(String::from_utf8(p_bytes).unwrap_or_default())
+                    } else {
+                        None
+                    };
+
+                    let enabled = if version >= 5 {
+                        let mut enabled_byte = [0u8; 1];
+                        reader.read_exact(&mut enabled_byte)?;
+                        enabled_byte[0] != 0
+                    } else {
+                        true
+                    };
+
+                    scripts.push(VrtxScript {
+                        node_id,
+                        parent_node_id,
+                        name,
+                        script_type,
+                        code,
+                        parent_name,
+                        enabled,
+                    });
                 }
             }
 
@@ -1472,16 +1711,95 @@ mod hierarchy_tests {
         );
         assert_eq!(loaded.settings.contact_shadow_length, 0.8);
         assert_eq!(loaded.settings.bloom_intensity, 0.12);
+    }
 
-        let legacy_path =
-            std::env::temp_dir().join(format!("rave-vrtx-v6-{}.vrtx", std::process::id()));
-        let mut legacy = state;
-        legacy.version = 6;
-        legacy.save_to_file(legacy_path.to_str().unwrap()).unwrap();
-        let loaded_legacy = VrtxFileState::load_from_file(legacy_path.to_str().unwrap()).unwrap();
-        std::fs::remove_file(legacy_path).unwrap();
-        assert_eq!(loaded_legacy.version, 6);
-        assert_eq!(loaded_legacy.lighting.time_of_day, 12.0);
-        assert_eq!(loaded_legacy.bricks[0].node_id, 10);
+    #[test]
+    fn atomic_save_overwrites_an_existing_file() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("project.vrtx");
+        std::fs::write(&path, b"existing contents").unwrap();
+        let mut state = VrtxFileState {
+            version: CURRENT_VRTX_VERSION,
+            gravity: Vec3::new(1.0, 2.0, 3.0),
+            settings: VrtxSettings::default(),
+            lighting: default(),
+            camera_transform: Transform::IDENTITY,
+            bricks: Vec::new(),
+            scripts: Vec::new(),
+        };
+
+        state.save_to_file(path.to_str().unwrap()).unwrap();
+        state.gravity = Vec3::new(4.0, 5.0, 6.0);
+        state.save_to_file(path.to_str().unwrap()).unwrap();
+
+        let loaded = VrtxFileState::load_from_file(path.to_str().unwrap()).unwrap();
+        assert_eq!(loaded.gravity, state.gravity);
+        assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn rejects_oversized_gcpf_declaration_before_allocating() {
+        let mut data = Vec::from(&b"GCPF"[..]);
+        data.extend_from_slice(&0u32.to_le_bytes());
+        data.extend_from_slice(&4096u32.to_le_bytes());
+        data.extend_from_slice(&((VrtxFileState::MAX_FILE_SIZE + 1) as u32).to_le_bytes());
+        assert_eq!(
+            decompress_gcpf_file(&data).unwrap_err().kind(),
+            std::io::ErrorKind::InvalidData
+        );
+    }
+
+    #[test]
+    fn rejects_gcpf_block_output_larger_than_declared() {
+        let compressed = zstd::encode_all(&b"ab"[..], 0).unwrap();
+        let mut data = Vec::from(&b"GCPF"[..]);
+        data.extend_from_slice(&0u32.to_le_bytes());
+        data.extend_from_slice(&1u32.to_le_bytes());
+        data.extend_from_slice(&1u32.to_le_bytes());
+        data.extend_from_slice(&(compressed.len() as u32).to_le_bytes());
+        data.extend_from_slice(&compressed);
+
+        assert_eq!(
+            decompress_gcpf_file(&data).unwrap_err().kind(),
+            std::io::ErrorKind::InvalidData
+        );
+    }
+
+    #[test]
+    fn bounded_reader_rejects_oversized_input() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("oversized.vrtx");
+        std::fs::write(&path, [0u8; 9]).unwrap();
+        assert_eq!(
+            read_file_with_limit(path.to_str().unwrap(), 8)
+                .unwrap_err()
+                .kind(),
+            std::io::ErrorKind::InvalidData
+        );
+    }
+
+    #[test]
+    fn version_four_and_later_require_script_count() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("truncated.vrtx");
+        let state = VrtxFileState {
+            version: CURRENT_VRTX_VERSION,
+            gravity: Vec3::ZERO,
+            settings: VrtxSettings::default(),
+            lighting: default(),
+            camera_transform: Transform::IDENTITY,
+            bricks: Vec::new(),
+            scripts: Vec::new(),
+        };
+        state.save_to_file(path.to_str().unwrap()).unwrap();
+        let file = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+        file.set_len(file.metadata().unwrap().len() - 4).unwrap();
+
+        assert_eq!(
+            VrtxFileState::load_from_file(path.to_str().unwrap())
+                .unwrap_err()
+                .kind(),
+            std::io::ErrorKind::UnexpectedEof
+        );
     }
 }
