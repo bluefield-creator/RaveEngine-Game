@@ -71,7 +71,7 @@ pub struct UiResources<'w, 's> {
         MessageWriter<'w, crate::common::game::physics::PhysicsSimulationAction>,
     pub gravity: Option<ResMut<'w, avian3d::prelude::Gravity>>,
     pub brick_colors:
-        Query<'w, 's, &'static mut crate::common::game::bricks::components::BrickColor>,
+        Query<'w, 's, &'static crate::common::game::bricks::components::BrickColor>,
     pub players_service: Option<ResMut<'w, crate::studio::tools::PlayersService>>,
     pub lighting_service:
         Option<ResMut<'w, crate::common::game::environment::lighting::LightingService>>,
@@ -1289,7 +1289,7 @@ pub fn studio_ui(
                                 &ui_state.selection.entities,
                                 &mut ui_res.commands,
                                 &mut queries.entities_query,
-                                &mut ui_res.brick_colors,
+                                &ui_res.brick_colors,
                                 &queries.explorer_query,
                                 &mut ui_state.active_editor,
                             );

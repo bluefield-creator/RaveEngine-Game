@@ -73,7 +73,7 @@ pub fn draw_properties(
         ),
         Without<Camera3d>,
     >,
-    brick_colors: &mut Query<&mut crate::common::game::bricks::components::BrickColor>,
+    brick_colors: &Query<&crate::common::game::bricks::components::BrickColor>,
     explorer_query: &Query<
         (
             Entity,
@@ -622,9 +622,7 @@ pub fn draw_properties(
                                 if color_btn.changed() {
                                     let new_color = Color::Srgba(Srgba::new(color_array[0], color_array[1], color_array[2], color_array[3]));
                                     for &entity in selected_entities {
-                                        if let Ok(mut bc) = brick_colors.get_mut(entity) {
-                                            bc.color = new_color;
-                                        }
+                                        commands.entity(entity).insert(crate::common::game::bricks::components::BrickColor { color: new_color });
                                     }
                                 }
                             });
@@ -637,12 +635,11 @@ pub fn draw_properties(
                                     let slider_res = ui.add(egui::Slider::new(&mut transparency, 0.0..=1.0).step_by(0.01));
                                     if slider_res.changed() {
                                         for &entity in selected_entities {
-                                            if let Ok(mut bc) = brick_colors.get_mut(entity) {
+                                            if let Ok(bc) = brick_colors.get(entity) {
                                                 let current_color = bc.color;
                                                 let mut srgba = current_color.to_srgba();
                                                 srgba.alpha = 1.0 - transparency;
-                                                let new_color = Color::Srgba(srgba);
-                                                bc.color = new_color;
+                                                commands.entity(entity).insert(crate::common::game::bricks::components::BrickColor { color: Color::Srgba(srgba) });
                                             }
                                         }
                                     }
@@ -654,12 +651,11 @@ pub fn draw_properties(
                                     }
                                     if clicked {
                                         for &entity in selected_entities {
-                                            if let Ok(mut bc) = brick_colors.get_mut(entity) {
+                                            if let Ok(bc) = brick_colors.get(entity) {
                                                 let current_color = bc.color;
                                                 let mut srgba = current_color.to_srgba();
                                                 srgba.alpha = 1.0 - transparency;
-                                                let new_color = Color::Srgba(srgba);
-                                                bc.color = new_color;
+                                                commands.entity(entity).insert(crate::common::game::bricks::components::BrickColor { color: Color::Srgba(srgba) });
                                             }
                                         }
                                     }
