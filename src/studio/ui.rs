@@ -2045,8 +2045,9 @@ mod tests {
     #[test]
     fn inserted_entity_records_spawn_undo_with_parent() {
         let mut history = crate::studio::tools::UndoRedoHistory::default();
-        let entity = Entity::from_bits(1 << 32);
-        let parent = Entity::from_bits(2 << 32);
+        let mut world = World::new();
+        let entity = world.spawn_empty().id();
+        let parent = world.spawn_empty().id();
         record_insert_undo(
             &mut history,
             entity,
