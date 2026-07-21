@@ -1117,6 +1117,7 @@ pub fn studio_ui(
                 ui.horizontal(|ui| {
                     if ui.button("Save").clicked() {
                         ui_state.action_queue.0.push(resources::EditorAction::Save);
+                        ui_state.document_state.dirty = false;
                     }
                     if ui.button("Discard").clicked() {
                         ui_state.document_state.dirty = false;
