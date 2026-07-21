@@ -2,17 +2,24 @@ use crate::common::net::components::{NetworkTransform, Player};
 use crate::common::net::messages::PlayerInputMessage;
 use avian3d::prelude::*;
 use bevy::prelude::*;
+use bevy::tasks::{IoTaskPool, Task, block_on, poll_once};
 use lightyear::prelude::server::*;
 use lightyear::prelude::*;
 
 #[derive(Component)]
-pub struct AuthPending;
+pub struct AuthPending {
+    task: Task<Result<crate::common::net::auth::ValidateResponse, String>>,
+}
 
 #[derive(Component)]
 pub struct Authenticated;
 
 fn is_local_auth_eligible(embedded_server: bool, peer_addr: Option<&PeerAddr>) -> bool {
     embedded_server && peer_addr.is_some_and(|address| address.0.ip().is_loopback())
+}
+
+fn can_start_authentication(pending: bool, authenticated: bool, replication_enabled: bool) -> bool {
+    !pending && !authenticated && !replication_enabled
 }
 
 pub fn handle_new_client(
@@ -44,7 +51,6 @@ pub fn handle_hello_messages(
         Option<&Authenticated>,
         Option<&PeerAddr>,
     )>,
-    mut sender_query: Query<&mut MessageSender<crate::common::net::messages::KickMessage>>,
     mut success_sender_query: Query<
         &mut MessageSender<crate::common::net::messages::AuthSuccessMessage>,
     >,
@@ -53,102 +59,158 @@ pub fn handle_hello_messages(
     for (client_entity, remote_id, mut receiver, rep_sender, pending, authenticated, peer_addr) in
         receivers.iter_mut()
     {
-        if rep_sender.is_some() || pending.is_some() || authenticated.is_some() {
+        if !can_start_authentication(
+            pending.is_some(),
+            authenticated.is_some(),
+            rep_sender.is_some(),
+        ) {
+            receiver.receive().for_each(drop);
             continue;
         }
         let client_id = remote_id.0.to_bits();
-        if let Some(hello) = receiver.receive().next() {
-            commands.entity(client_entity).insert(AuthPending);
+        let mut messages = receiver.receive();
+        if let Some(hello) = messages.next() {
+            messages.for_each(drop);
             debug!("Received HelloMessage from client {}", client_id);
 
             let allow_local_auth = is_local_auth_eligible(settings.embedded_server, peer_addr);
-            match crate::common::net::auth::validate_user_ukey(&hello.ukey, allow_local_auth) {
-                Ok(response) => {
-                    if let Ok(mut success_sender) = success_sender_query.get_mut(client_entity) {
-                        success_sender.send::<crate::common::net::messages::GameChannel>(
-                            crate::common::net::messages::AuthSuccessMessage {
-                                uid: response.uid,
-                                username: response.username.clone(),
-                            },
-                        );
-                    }
-
-                    commands
-                        .entity(client_entity)
-                        .remove::<AuthPending>()
-                        .insert((Authenticated, ReplicationSender));
-
-                    let (speed, jump_power, gravity_scale, friction, bounciness) =
-                        if let Ok(shared) = crate::studio::tools::SHARED_PLAYERS_SERVICE.read() {
-                            (
-                                shared.speed,
-                                shared.jump_power,
-                                shared.gravity_scale,
-                                shared.friction,
-                                shared.bounciness,
-                            )
-                        } else {
-                            (16.0 * 0.28, 50.0 * 0.28, 1.0, 0.0, 0.0)
-                        };
-
-                    let player_entity = commands
-                        .spawn((
-                            Name::new(response.username.clone()),
-                            Player {
-                                client_id,
-                                speed,
-                                jump_power,
-                                username: response.username.clone(),
-                            },
-                            Transform::from_xyz(0.0, 5.0, 0.0),
-                            NetworkTransform {
-                                translation: Vec3::new(0.0, 5.0, 0.0),
-                                rotation: Quat::IDENTITY,
-                                scale: Vec3::ONE,
-                            },
-                            ControlledBy {
-                                owner: client_entity,
-                                lifetime: Default::default(),
-                            },
-                            RigidBody::Dynamic,
-                            Collider::capsule(1.0 * 0.28, 3.0 * 0.28),
-                            CollisionLayers::from_bits(0b0010, 0b0011),
-                            LockedAxes::ROTATION_LOCKED,
-                        ))
-                        .insert((
-                            Friction::new(friction),
-                            Restitution::new(bounciness),
-                            GravityScale(gravity_scale),
-                            CollidingEntities::default(),
-                            SleepingDisabled,
-                            Replicate::default(),
-                        ))
-                        .id();
-
-                    info!(
-                        "Server successfully spawned player entity {:?} for client {}",
-                        player_entity, response.username
-                    );
-                }
-                Err(e) => {
-                    warn!(
-                        "Authentication failed for client {}: {}. Sending KickMessage...",
-                        client_id, e
-                    );
-                    if let Ok(mut sender) = sender_query.get_mut(client_entity) {
-                        sender.send::<crate::common::net::messages::GameChannel>(
-                            crate::common::net::messages::KickMessage {
-                                reason: format!("Authentication failed: {}", e),
-                            },
-                        );
-                    }
-                    commands.trigger(Disconnect {
-                        entity: client_entity,
-                    });
-                }
+            if allow_local_auth && crate::common::net::auth::is_studio_local_key(&hello.ukey) {
+                let response = crate::common::net::auth::validate_user_ukey_offline(&hello.ukey)
+                    .expect("the Studio local key was checked before validation");
+                let success_sender = success_sender_query.get_mut(client_entity).ok();
+                accept_authenticated_client(
+                    &mut commands,
+                    client_entity,
+                    client_id,
+                    response,
+                    success_sender,
+                );
+            } else {
+                let ukey = hello.ukey;
+                let task = IoTaskPool::get().spawn(async move {
+                    crate::common::net::auth::validate_user_ukey(&ukey, false)
+                });
+                commands.entity(client_entity).insert(AuthPending { task });
             }
         }
     }
+}
+
+pub fn complete_authentication_tasks(
+    mut commands: Commands,
+    mut pending_clients: Query<(Entity, &RemoteId, &mut AuthPending), With<Connected>>,
+    mut sender_query: Query<&mut MessageSender<crate::common::net::messages::KickMessage>>,
+    mut success_sender_query: Query<
+        &mut MessageSender<crate::common::net::messages::AuthSuccessMessage>,
+    >,
+) {
+    for (client_entity, remote_id, mut pending) in &mut pending_clients {
+        let Some(result) = block_on(poll_once(&mut pending.task)) else {
+            continue;
+        };
+        let client_id = remote_id.0.to_bits();
+
+        match result {
+            Ok(response) => {
+                let success_sender = success_sender_query.get_mut(client_entity).ok();
+                accept_authenticated_client(
+                    &mut commands,
+                    client_entity,
+                    client_id,
+                    response,
+                    success_sender,
+                );
+            }
+            Err(error) => {
+                warn!("Authentication failed for client {}: {}", client_id, error);
+                if let Ok(mut sender) = sender_query.get_mut(client_entity) {
+                    sender.send::<crate::common::net::messages::GameChannel>(
+                        crate::common::net::messages::KickMessage {
+                            reason: "Authentication failed".to_string(),
+                        },
+                    );
+                }
+                commands.entity(client_entity).remove::<AuthPending>();
+                commands.trigger(Disconnect {
+                    entity: client_entity,
+                });
+            }
+        }
+    }
+}
+
+fn accept_authenticated_client(
+    commands: &mut Commands,
+    client_entity: Entity,
+    client_id: u64,
+    response: crate::common::net::auth::ValidateResponse,
+    success_sender: Option<Mut<MessageSender<crate::common::net::messages::AuthSuccessMessage>>>,
+) {
+    if let Some(mut success_sender) = success_sender {
+        success_sender.send::<crate::common::net::messages::GameChannel>(
+            crate::common::net::messages::AuthSuccessMessage {
+                uid: response.uid,
+                username: response.username.clone(),
+            },
+        );
+    }
+
+    commands
+        .entity(client_entity)
+        .remove::<AuthPending>()
+        .insert((Authenticated, ReplicationSender));
+
+    let (speed, jump_power, gravity_scale, friction, bounciness) =
+        if let Ok(shared) = crate::studio::tools::SHARED_PLAYERS_SERVICE.read() {
+            (
+                shared.speed,
+                shared.jump_power,
+                shared.gravity_scale,
+                shared.friction,
+                shared.bounciness,
+            )
+        } else {
+            (16.0 * 0.28, 50.0 * 0.28, 1.0, 0.0, 0.0)
+        };
+
+    let player_entity = commands
+        .spawn((
+            Name::new(response.username.clone()),
+            Player {
+                client_id,
+                speed,
+                jump_power,
+                username: response.username.clone(),
+            },
+            Transform::from_xyz(0.0, 5.0, 0.0),
+            NetworkTransform {
+                translation: Vec3::new(0.0, 5.0, 0.0),
+                rotation: Quat::IDENTITY,
+                scale: Vec3::ONE,
+            },
+            ControlledBy {
+                owner: client_entity,
+                lifetime: Default::default(),
+            },
+            RigidBody::Dynamic,
+            Collider::capsule(1.0 * 0.28, 3.0 * 0.28),
+            CollisionLayers::from_bits(0b0010, 0b0011),
+            LockedAxes::ROTATION_LOCKED,
+        ))
+        .insert((
+            Friction::new(friction),
+            Restitution::new(bounciness),
+            GravityScale(gravity_scale),
+            CollidingEntities::default(),
+            SleepingDisabled,
+            Replicate::default(),
+        ))
+        .id();
+
+    info!(
+        "Server successfully spawned player entity {:?} for client {}",
+        player_entity, response.username
+    );
 }
 
 #[cfg(test)]
@@ -170,6 +232,14 @@ mod tests {
         assert!(!is_local_auth_eligible(false, Some(&ipv4_loopback)));
         assert!(!is_local_auth_eligible(true, Some(&remote)));
         assert!(!is_local_auth_eligible(true, None));
+    }
+
+    #[test]
+    fn authentication_starts_only_for_new_clients() {
+        assert!(can_start_authentication(false, false, false));
+        assert!(!can_start_authentication(true, false, false));
+        assert!(!can_start_authentication(false, true, false));
+        assert!(!can_start_authentication(false, false, true));
     }
 }
 

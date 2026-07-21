@@ -45,6 +45,7 @@ impl Plugin for ServerPlugin {
             (
                 player::handle_player_inputs,
                 player::handle_hello_messages,
+                player::complete_authentication_tasks,
                 player::sync_players_service_properties,
             ),
         )
