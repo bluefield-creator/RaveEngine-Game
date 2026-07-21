@@ -4,6 +4,7 @@ pub struct ClientAppConfig {
     pub ip: IpAddr,
     pub port: u16,
     pub ukey: String,
+    pub netcode_key: [u8; 32],
 }
 
 impl ClientAppConfig {
@@ -11,6 +12,7 @@ impl ClientAppConfig {
         let mut ip = IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1));
         let mut port = 5000;
         let mut ukey = "".to_string();
+        let mut configured_key = std::env::var(crate::common::net::NETCODE_KEY_ENV).ok();
 
         if let Ok(env_ukey) = std::env::var("VERTIGO_CLIENT_UKEY") {
             ukey = env_ukey;
@@ -43,8 +45,20 @@ impl ClientAppConfig {
             if args[i] == "--ukey" && i + 1 < args.len() {
                 ukey = args[i + 1].clone();
             }
+            if args[i] == "--netcode-key" && i + 1 < args.len() {
+                configured_key = Some(args[i + 1].clone());
+            }
         }
 
-        Self { ip, port, ukey }
+        let netcode_key =
+            crate::common::net::resolve_netcode_key(configured_key.as_deref(), ip.is_loopback())
+                .unwrap_or_else(|error| panic!("Invalid client Netcode configuration: {error}"));
+
+        Self {
+            ip,
+            port,
+            ukey,
+            netcode_key,
+        }
     }
 }

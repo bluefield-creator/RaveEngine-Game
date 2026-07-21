@@ -8,6 +8,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 pub struct ClientConnectSettings {
     pub ip: IpAddr,
     pub port: u16,
+    pub netcode_key: [u8; 32],
 }
 
 #[derive(Resource, Default)]
@@ -18,6 +19,8 @@ pub struct LaunchInfo {
     pub ip: String,
     pub port: u16,
     pub ukey: String,
+    #[serde(default)]
+    pub netcode_key: String,
 }
 
 pub fn poll_launch_details(
@@ -35,14 +38,28 @@ pub fn poll_launch_details(
         && let Ok(info) = serde_json::from_str::<LaunchInfo>(&file_content)
         && let Ok(parsed_ip) = info.ip.parse::<IpAddr>()
     {
+        let configured_key = if info.netcode_key.is_empty() {
+            std::env::var(crate::common::net::NETCODE_KEY_ENV).ok()
+        } else {
+            Some(info.netcode_key)
+        };
+        let Ok(netcode_key) = crate::common::net::resolve_netcode_key(
+            configured_key.as_deref(),
+            parsed_ip.is_loopback(),
+        ) else {
+            error!("CLIENT_CONNECT: Invalid Netcode key in launch configuration");
+            return;
+        };
         commands.insert_resource(crate::client::ClientUkey(info.ukey));
         if let Some(ref mut s) = settings {
             s.ip = parsed_ip;
             s.port = info.port;
+            s.netcode_key = netcode_key;
         } else {
             commands.insert_resource(ClientConnectSettings {
                 ip: parsed_ip,
                 port: info.port,
+                netcode_key,
             });
         }
         info!("CLIENT_CONNECT: Successfully loaded connection details from launch_info.json");
@@ -74,7 +91,7 @@ pub fn initialize_client(
     let auth = Authentication::Manual {
         server_addr,
         client_id,
-        private_key: rand::random::<[u8; 32]>(),
+        private_key: settings.netcode_key,
         protocol_id: crate::common::net::NETCODE_PROTOCOL_ID,
     };
 
@@ -128,10 +145,7 @@ pub fn trigger_delayed_connect(
     if *frame_count >= 30 {
         for entity in &client_query {
             commands.trigger(Connect { entity });
-            info!(
-                "CLIENT_CONNECT: Handshake connection triggered after rendering warmup with ukey: {}",
-                ukey.0
-            );
+            info!("CLIENT_CONNECT: Handshake connection triggered after rendering warmup");
         }
         *connected = true;
     }

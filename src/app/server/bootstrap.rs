@@ -32,6 +32,9 @@ impl RaveServerApp {
         app.add_plugins(ServerPlugin {
             map_path: self.config.map_path,
             port: self.config.port,
+            bind_ip: self.config.bind_ip,
+            netcode_key: self.config.netcode_key,
+            embedded_server: self.config.embedded_server,
         });
         app.add_systems(Update, check_thread_shutdown);
         app.run();

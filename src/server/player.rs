@@ -5,6 +5,16 @@ use bevy::prelude::*;
 use lightyear::prelude::server::*;
 use lightyear::prelude::*;
 
+#[derive(Component)]
+pub struct AuthPending;
+
+#[derive(Component)]
+pub struct Authenticated;
+
+fn is_local_auth_eligible(embedded_server: bool, peer_addr: Option<&PeerAddr>) -> bool {
+    embedded_server && peer_addr.is_some_and(|address| address.0.ip().is_loopback())
+}
+
 pub fn handle_new_client(
     trigger: On<Add, Connected>,
     query: Query<&RemoteId, With<ClientOf>>,
@@ -30,6 +40,9 @@ pub fn handle_hello_messages(
         &RemoteId,
         &mut MessageReceiver<crate::common::net::messages::HelloMessage>,
         Option<&ReplicationSender>,
+        Option<&AuthPending>,
+        Option<&Authenticated>,
+        Option<&PeerAddr>,
     )>,
     mut sender_query: Query<&mut MessageSender<crate::common::net::messages::KickMessage>>,
     mut success_sender_query: Query<
@@ -37,16 +50,19 @@ pub fn handle_hello_messages(
     >,
     settings: Res<crate::server::ServerSettings>,
 ) {
-    let is_local = settings.bind_addr.ip().to_string().starts_with("127.");
-    for (client_entity, remote_id, mut receiver, rep_sender) in receivers.iter_mut() {
-        if rep_sender.is_some() {
+    for (client_entity, remote_id, mut receiver, rep_sender, pending, authenticated, peer_addr) in
+        receivers.iter_mut()
+    {
+        if rep_sender.is_some() || pending.is_some() || authenticated.is_some() {
             continue;
         }
         let client_id = remote_id.0.to_bits();
-        for _hello in receiver.receive() {
+        if let Some(hello) = receiver.receive().next() {
+            commands.entity(client_entity).insert(AuthPending);
             debug!("Received HelloMessage from client {}", client_id);
 
-            match crate::common::net::auth::validate_user_ukey(&_hello.ukey, is_local) {
+            let allow_local_auth = is_local_auth_eligible(settings.embedded_server, peer_addr);
+            match crate::common::net::auth::validate_user_ukey(&hello.ukey, allow_local_auth) {
                 Ok(response) => {
                     if let Ok(mut success_sender) = success_sender_query.get_mut(client_entity) {
                         success_sender.send::<crate::common::net::messages::GameChannel>(
@@ -57,7 +73,10 @@ pub fn handle_hello_messages(
                         );
                     }
 
-                    commands.entity(client_entity).insert(ReplicationSender);
+                    commands
+                        .entity(client_entity)
+                        .remove::<AuthPending>()
+                        .insert((Authenticated, ReplicationSender));
 
                     let (speed, jump_power, gravity_scale, friction, bounciness) =
                         if let Ok(shared) = crate::studio::tools::SHARED_PLAYERS_SERVICE.read() {
@@ -123,9 +142,34 @@ pub fn handle_hello_messages(
                             },
                         );
                     }
+                    commands.trigger(Disconnect {
+                        entity: client_entity,
+                    });
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+
+    #[test]
+    fn local_auth_requires_embedded_mode_and_loopback_peer() {
+        let ipv4_loopback = PeerAddr(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 5000));
+        let ipv6_loopback = PeerAddr(SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), 5000));
+        let remote = PeerAddr(SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1)),
+            5000,
+        ));
+
+        assert!(is_local_auth_eligible(true, Some(&ipv4_loopback)));
+        assert!(is_local_auth_eligible(true, Some(&ipv6_loopback)));
+        assert!(!is_local_auth_eligible(false, Some(&ipv4_loopback)));
+        assert!(!is_local_auth_eligible(true, Some(&remote)));
+        assert!(!is_local_auth_eligible(true, None));
     }
 }
 

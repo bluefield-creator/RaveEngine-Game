@@ -827,11 +827,15 @@ pub fn draw_top_bar(
 
                             if state.save_to_file(&temp_map_path).is_ok() {
                                 crate::app::server::bootstrap::SHUTDOWN_SERVER.store(false, std::sync::atomic::Ordering::Relaxed);
+                                let netcode_key = rand::random::<[u8; 32]>();
 
                                 let server_app = crate::app::server::bootstrap::RaveServerApp::new(
                                     crate::app::server::config::ServerAppConfig {
                                         port: 5000,
                                         map_path: temp_map_path,
+                                        bind_ip: std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+                                        netcode_key,
+                                        embedded_server: true,
                                     }
                                 );
                                 std::thread::spawn(move || {
@@ -852,7 +856,7 @@ pub fn draw_top_bar(
                                 let auth = lightyear::prelude::Authentication::Manual {
                                     server_addr,
                                     client_id,
-                                    private_key: rand::random::<[u8; 32]>(),
+                                    private_key: netcode_key,
                                     protocol_id: crate::common::net::NETCODE_PROTOCOL_ID,
                                 };
 

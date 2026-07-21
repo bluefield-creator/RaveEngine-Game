@@ -9,6 +9,7 @@ use lightyear::prelude::*;
 struct ClientConnectSettings {
     ip: std::net::IpAddr,
     port: u16,
+    netcode_key: [u8; 32],
 }
 
 fn main() {
@@ -28,6 +29,7 @@ fn main() {
     let mut ip = std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1));
     let mut port = 5000;
     let mut ukey = "".to_string();
+    let mut configured_key = std::env::var(RaveEngineLib::common::net::NETCODE_KEY_ENV).ok();
 
     let args: Vec<String> = std::env::args().collect();
     for i in 0..args.len() {
@@ -46,7 +48,15 @@ fn main() {
         if args[i] == "--ukey" && i + 1 < args.len() {
             ukey = args[i + 1].clone();
         }
+        if args[i] == "--netcode-key" && i + 1 < args.len() {
+            configured_key = Some(args[i + 1].clone());
+        }
     }
+    let netcode_key = RaveEngineLib::common::net::resolve_netcode_key(
+        configured_key.as_deref(),
+        ip.is_loopback(),
+    )
+    .unwrap_or_else(|error| panic!("Invalid client Netcode configuration: {error}"));
 
     let mut app = App::new();
     app.add_plugins(DefaultPlugins.set(LogPlugin {
@@ -62,7 +72,11 @@ fn main() {
         )),
         ..default()
     }));
-    app.insert_resource(ClientConnectSettings { ip, port });
+    app.insert_resource(ClientConnectSettings {
+        ip,
+        port,
+        netcode_key,
+    });
     app.insert_resource(RaveEngineLib::client::ClientUkey(ukey));
     app.add_plugins(client::ClientPlugins {
         tick_duration: core::time::Duration::from_secs_f64(1.0 / 60.0),
@@ -86,7 +100,7 @@ fn setup_client(mut commands: Commands, settings: Res<ClientConnectSettings>) {
     let auth = Authentication::Manual {
         server_addr,
         client_id,
-        private_key: rand::random::<[u8; 32]>(),
+        private_key: settings.netcode_key,
         protocol_id: RaveEngineLib::common::net::NETCODE_PROTOCOL_ID,
     };
 

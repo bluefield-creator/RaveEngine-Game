@@ -82,6 +82,13 @@ fn main() {
 
     let mut port = 5000;
     let mut map_path = "assets/maps/temp_playtest.vrtx".to_string();
+    let mut bind_ip = std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED);
+    let mut configured_key = std::env::var(RaveEngineLib::common::net::NETCODE_KEY_ENV).ok();
+    if let Ok(value) = std::env::var("VERTIGO_SERVER_BIND_IP")
+        && let Ok(value) = value.parse()
+    {
+        bind_ip = value;
+    }
     #[cfg(feature = "bench")]
     let mut bench_mode = false;
     #[cfg(feature = "bench")]
@@ -101,6 +108,15 @@ fn main() {
         }
         if args[i] == "--map" && i + 1 < args.len() {
             map_path = args[i + 1].clone();
+        }
+        if args[i] == "--bind-ip"
+            && i + 1 < args.len()
+            && let Ok(value) = args[i + 1].parse()
+        {
+            bind_ip = value;
+        }
+        if args[i] == "--netcode-key" && i + 1 < args.len() {
+            configured_key = Some(args[i + 1].clone());
         }
         #[cfg(feature = "bench")]
         if args[i] == "--benchmark" {
@@ -125,6 +141,10 @@ fn main() {
             bench_scenario = args[i + 1].clone();
         }
     }
+    let netcode_key = RaveEngineLib::common::net::resolve_netcode_key(
+        configured_key.as_deref(),
+        bind_ip.is_loopback(),
+    );
 
     let mut app = App::new();
     app.add_plugins(LogPlugin {
@@ -143,10 +163,21 @@ fn main() {
         app.add_plugins(ServerPlugin {
             map_path: map_path.clone(),
             port,
+            bind_ip,
+            netcode_key: netcode_key
+                .unwrap_or_else(|error| panic!("Invalid server Netcode configuration: {error}")),
+            embedded_server: false,
         });
     }
     #[cfg(not(feature = "bench"))]
-    app.add_plugins(ServerPlugin { map_path, port });
+    app.add_plugins(ServerPlugin {
+        map_path,
+        port,
+        bind_ip,
+        netcode_key: netcode_key
+            .unwrap_or_else(|error| panic!("Invalid server Netcode configuration: {error}")),
+        embedded_server: false,
+    });
 
     #[cfg(feature = "bench")]
     if bench_mode {
