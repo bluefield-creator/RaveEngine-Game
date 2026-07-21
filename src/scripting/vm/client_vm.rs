@@ -6,9 +6,9 @@ use std::sync::{Arc, Mutex};
 
 #[derive(Resource)]
 pub struct ClientScriptVM {
-    pub lua: Lua,
-    pub scheduler: Arc<Mutex<LuaScheduler>>,
-    pub registry: Arc<Mutex<ScriptRegistry>>,
+    pub(crate) lua: Lua,
+    pub(crate) scheduler: Arc<Mutex<LuaScheduler>>,
+    pub(crate) registry: Arc<Mutex<ScriptRegistry>>,
 }
 
 impl Default for ClientScriptVM {

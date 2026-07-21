@@ -30,7 +30,8 @@ pub fn register_require(lua: &Lua) -> Result<(), mlua::Error> {
             }
         };
 
-        let world = unsafe { crate::scripting::vm::server_vm::world_from_lua_shared(lua)? };
+        let world_ptr = crate::scripting::vm::server_vm::world_ptr_from_lua(lua)?;
+        let world = unsafe { &*world_ptr };
 
         let module_comp = world
             .get::<crate::scripting::ecs::ModuleScript>(instance.entity)

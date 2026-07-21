@@ -8,7 +8,8 @@ pub struct RunService;
 impl LuaUserData for RunService {
     fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
         methods.add_meta_method(LuaMetaMethod::Index, |lua, _, key: String| {
-            let world = unsafe { crate::scripting::vm::server_vm::world_from_lua(lua)? };
+            let world_ptr = crate::scripting::vm::server_vm::world_ptr_from_lua(lua)?;
+            let world = unsafe { &mut *world_ptr };
 
             match key.as_str() {
                 "ClassName" => Ok(LuaValue::String(lua.create_string("RunService")?)),

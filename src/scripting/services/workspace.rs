@@ -7,7 +7,8 @@ pub struct WorkspaceService;
 impl LuaUserData for WorkspaceService {
     fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
         methods.add_meta_method(LuaMetaMethod::Index, |lua, _, key: String| {
-            let world = unsafe { crate::scripting::vm::server_vm::world_from_lua(lua)? };
+            let world_ptr = crate::scripting::vm::server_vm::world_ptr_from_lua(lua)?;
+            let world = unsafe { &mut *world_ptr };
 
             match key.as_str() {
                 "Gravity" => {
@@ -43,7 +44,8 @@ impl LuaUserData for WorkspaceService {
         methods.add_meta_method(
             LuaMetaMethod::NewIndex,
             |lua, _, (key, value): (String, LuaValue)| {
-                let world = unsafe { crate::scripting::vm::server_vm::world_from_lua(lua)? };
+                let world_ptr = crate::scripting::vm::server_vm::world_ptr_from_lua(lua)?;
+                let world = unsafe { &mut *world_ptr };
 
                 if key.as_str() == "Gravity" {
                     let opt_val = match value {

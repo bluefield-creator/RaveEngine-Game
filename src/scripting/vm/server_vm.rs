@@ -6,26 +6,37 @@ use std::sync::{Arc, Mutex};
 
 #[derive(Resource)]
 pub struct ServerScriptVM {
-    pub lua: Lua,
-    pub scheduler: Arc<Mutex<LuaScheduler>>,
-    pub registry: Arc<Mutex<ScriptRegistry>>,
+    pub(crate) lua: Lua,
+    pub(crate) scheduler: Arc<Mutex<LuaScheduler>>,
+    pub(crate) registry: Arc<Mutex<ScriptRegistry>>,
 }
 
-pub struct WorldRef(pub *mut World);
+struct WorldPtr(usize);
 
-pub fn world_ptr_from_lua(lua: &Lua) -> *mut World {
-    *lua.app_data_ref::<usize>()
-        .expect("WorldRef not set in Lua app data") as *mut World
+pub(crate) fn world_ptr_from_lua(lua: &Lua) -> Result<*mut World, mlua::Error> {
+    lua.app_data_ref::<WorldPtr>()
+        .map(|world| world.0 as *mut World)
+        .ok_or_else(|| mlua::Error::RuntimeError("World access is unavailable".into()))
 }
 
-#[allow(clippy::missing_safety_doc)]
-pub unsafe fn world_from_lua(lua: &Lua) -> Result<&mut World, mlua::Error> {
-    Ok(unsafe { &mut *world_ptr_from_lua(lua) })
+pub(crate) struct WorldAccess<'lua> {
+    lua: &'lua Lua,
 }
 
-#[allow(clippy::missing_safety_doc)]
-pub unsafe fn world_from_lua_shared(lua: &Lua) -> Result<&World, mlua::Error> {
-    Ok(unsafe { &*world_ptr_from_lua(lua) })
+impl<'lua> WorldAccess<'lua> {
+    pub(crate) fn new(lua: &'lua Lua, world: *mut World) -> Self {
+        if lua.set_app_data(WorldPtr(world as usize)).is_some() {
+            lua.remove_app_data::<WorldPtr>();
+            panic!("world access is already installed");
+        }
+        Self { lua }
+    }
+}
+
+impl Drop for WorldAccess<'_> {
+    fn drop(&mut self) {
+        self.lua.remove_app_data::<WorldPtr>();
+    }
 }
 
 impl Default for ServerScriptVM {

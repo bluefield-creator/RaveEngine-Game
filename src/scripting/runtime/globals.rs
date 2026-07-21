@@ -13,7 +13,7 @@ pub fn setup_globals(lua: &Lua) -> Result<(), mlua::Error> {
         match val {
             LuaValue::Function(f) => {
                 let thread = lua.create_thread(f)?;
-                thread.resume::<Option<f32>>(())?;
+                let yielded = thread.resume::<Option<f32>>(())?;
                 if thread.status() == LuaThreadStatus::Resumable {
                     let scheduler_ref = lua
                         .app_data_ref::<crate::scripting::vm::scheduler::SchedulerRef>()
@@ -25,12 +25,17 @@ pub fn setup_globals(lua: &Lua) -> Result<(), mlua::Error> {
                         .tasks
                         .push(crate::scripting::vm::scheduler::LuaTask {
                             thread_key: key,
-                            wake_time: None,
+                            wake_time: yielded.and_then(|seconds| {
+                                crate::scripting::vm::scheduler::checked_wake_time(
+                                    std::time::Instant::now(),
+                                    seconds,
+                                )
+                            }),
                         });
                 }
             }
             LuaValue::Thread(t) => {
-                t.resume::<Option<f32>>(())?;
+                let yielded = t.resume::<Option<f32>>(())?;
                 if t.status() == LuaThreadStatus::Resumable {
                     let scheduler_ref = lua
                         .app_data_ref::<crate::scripting::vm::scheduler::SchedulerRef>()
@@ -42,7 +47,12 @@ pub fn setup_globals(lua: &Lua) -> Result<(), mlua::Error> {
                         .tasks
                         .push(crate::scripting::vm::scheduler::LuaTask {
                             thread_key: key,
-                            wake_time: None,
+                            wake_time: yielded.and_then(|seconds| {
+                                crate::scripting::vm::scheduler::checked_wake_time(
+                                    std::time::Instant::now(),
+                                    seconds,
+                                )
+                            }),
                         });
                 }
             }
@@ -75,19 +85,16 @@ pub fn setup_globals(lua: &Lua) -> Result<(), mlua::Error> {
         let mut scheduler = scheduler_ref.0.lock().expect("Lua scheduler lock poisoned");
         let thread = lua.create_thread(f)?;
         let key = lua.create_registry_value(thread)?;
-        let delay = if seconds.is_finite() && seconds >= 0.0 {
-            seconds as f64
-        } else {
+        let wake_time =
+            crate::scripting::vm::scheduler::checked_wake_time(std::time::Instant::now(), seconds);
+        if wake_time.is_none() {
             warn!("task.delay called with invalid seconds: {:?}", seconds);
-            0.0
-        };
+        }
         scheduler
             .tasks
             .push(crate::scripting::vm::scheduler::LuaTask {
                 thread_key: key,
-                wake_time: Some(
-                    std::time::Instant::now() + std::time::Duration::from_secs_f64(delay),
-                ),
+                wake_time,
             });
         Ok(())
     })?;
