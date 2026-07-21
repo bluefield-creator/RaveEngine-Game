@@ -206,6 +206,63 @@ pub fn load_map(mut commands: Commands, settings: Res<ServerSettings>) {
     }
 }
 
+pub fn spawn_brick_entity(
+    commands: &mut Commands,
+    brick: crate::common::core::vrtx::VrtxBrick,
+) -> Entity {
+    let collider = match brick.shape {
+        BrickShape::Block => Collider::cuboid(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28),
+        BrickShape::Sphere => Collider::sphere(1.0 * 0.28),
+    };
+
+    let body_type = if brick.physics_enabled {
+        RigidBody::Dynamic
+    } else {
+        RigidBody::Static
+    };
+
+    let layers = if brick.player_can_collide {
+        CollisionLayers::from_bits(0b0001, 0xFFFF_FFFF)
+    } else {
+        CollisionLayers::from_bits(0b0100, 0xFFFF_FFFD)
+    };
+
+    commands
+        .spawn((
+            brick.transform,
+            Name::new(brick.name.clone()),
+            Brick,
+            BrickShapeComponent { shape: brick.shape },
+            BrickPhysics {
+                enabled: brick.physics_enabled,
+                locked: false,
+                bounciness: brick.bounciness,
+                player_can_collide: brick.player_can_collide,
+                friction: brick.friction,
+                gravity_scale: brick.gravity_scale,
+                mass: brick.mass,
+            },
+            BrickColor { color: brick.color },
+            NetworkTransform {
+                translation: brick.transform.translation,
+                rotation: brick.transform.rotation,
+                scale: brick.transform.scale,
+            },
+            body_type,
+            collider,
+            layers,
+        ))
+        .insert((
+            Friction::new(brick.friction),
+            Restitution::new(brick.bounciness),
+            GravityScale(brick.gravity_scale),
+            Mass(brick.mass),
+            SleepingDisabled,
+            Replicate::default(),
+        ))
+        .id()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -271,61 +328,4 @@ mod tests {
         };
         assert!(validate_hierarchy(&state(vec![brick(1, None)], vec![script])).is_ok());
     }
-}
-
-pub fn spawn_brick_entity(
-    commands: &mut Commands,
-    brick: crate::common::core::vrtx::VrtxBrick,
-) -> Entity {
-    let collider = match brick.shape {
-        BrickShape::Block => Collider::cuboid(4.0 * 0.28, 1.0 * 0.28, 2.0 * 0.28),
-        BrickShape::Sphere => Collider::sphere(1.0 * 0.28),
-    };
-
-    let body_type = if brick.physics_enabled {
-        RigidBody::Dynamic
-    } else {
-        RigidBody::Static
-    };
-
-    let layers = if brick.player_can_collide {
-        CollisionLayers::from_bits(0b0001, 0xFFFF_FFFF)
-    } else {
-        CollisionLayers::from_bits(0b0100, 0xFFFF_FFFD)
-    };
-
-    commands
-        .spawn((
-            brick.transform,
-            Name::new(brick.name.clone()),
-            Brick,
-            BrickShapeComponent { shape: brick.shape },
-            BrickPhysics {
-                enabled: brick.physics_enabled,
-                locked: false,
-                bounciness: brick.bounciness,
-                player_can_collide: brick.player_can_collide,
-                friction: brick.friction,
-                gravity_scale: brick.gravity_scale,
-                mass: brick.mass,
-            },
-            BrickColor { color: brick.color },
-            NetworkTransform {
-                translation: brick.transform.translation,
-                rotation: brick.transform.rotation,
-                scale: brick.transform.scale,
-            },
-            body_type,
-            collider,
-            layers,
-        ))
-        .insert((
-            Friction::new(brick.friction),
-            Restitution::new(brick.bounciness),
-            GravityScale(brick.gravity_scale),
-            Mass(brick.mass),
-            SleepingDisabled,
-            Replicate::default(),
-        ))
-        .id()
 }

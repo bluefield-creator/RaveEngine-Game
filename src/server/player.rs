@@ -213,36 +213,6 @@ fn accept_authenticated_client(
     );
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
-
-    #[test]
-    fn local_auth_requires_embedded_mode_and_loopback_peer() {
-        let ipv4_loopback = PeerAddr(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 5000));
-        let ipv6_loopback = PeerAddr(SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), 5000));
-        let remote = PeerAddr(SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1)),
-            5000,
-        ));
-
-        assert!(is_local_auth_eligible(true, Some(&ipv4_loopback)));
-        assert!(is_local_auth_eligible(true, Some(&ipv6_loopback)));
-        assert!(!is_local_auth_eligible(false, Some(&ipv4_loopback)));
-        assert!(!is_local_auth_eligible(true, Some(&remote)));
-        assert!(!is_local_auth_eligible(true, None));
-    }
-
-    #[test]
-    fn authentication_starts_only_for_new_clients() {
-        assert!(can_start_authentication(false, false, false));
-        assert!(!can_start_authentication(true, false, false));
-        assert!(!can_start_authentication(false, true, false));
-        assert!(!can_start_authentication(false, false, true));
-    }
-}
-
 pub fn handle_player_inputs(
     mut receivers: Query<(Entity, &RemoteId, &mut MessageReceiver<PlayerInputMessage>)>,
     mut players: Query<(
@@ -474,5 +444,35 @@ pub fn sync_transforms_to_network(
         net_transform.translation = transform.translation;
         net_transform.rotation = transform.rotation;
         net_transform.scale = transform.scale;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+
+    #[test]
+    fn local_auth_requires_embedded_mode_and_loopback_peer() {
+        let ipv4_loopback = PeerAddr(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 5000));
+        let ipv6_loopback = PeerAddr(SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), 5000));
+        let remote = PeerAddr(SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1)),
+            5000,
+        ));
+
+        assert!(is_local_auth_eligible(true, Some(&ipv4_loopback)));
+        assert!(is_local_auth_eligible(true, Some(&ipv6_loopback)));
+        assert!(!is_local_auth_eligible(false, Some(&ipv4_loopback)));
+        assert!(!is_local_auth_eligible(true, Some(&remote)));
+        assert!(!is_local_auth_eligible(true, None));
+    }
+
+    #[test]
+    fn authentication_starts_only_for_new_clients() {
+        assert!(can_start_authentication(false, false, false));
+        assert!(!can_start_authentication(true, false, false));
+        assert!(!can_start_authentication(false, true, false));
+        assert!(!can_start_authentication(false, false, true));
     }
 }

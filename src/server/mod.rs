@@ -55,10 +55,8 @@ impl Plugin for ServerPlugin {
     }
 }
 
-fn setup_server(mut commands: Commands, mut settings: ResMut<ServerSettings>) {
+fn setup_server(mut commands: Commands, settings: Res<ServerSettings>) {
     info!("Starting setup_server system on port: {}", settings.port);
-    let bind_addr = settings.bind_addr;
-    settings.bind_addr = bind_addr;
 
     let netcode_config = NetcodeConfig {
         protocol_id: crate::common::net::NETCODE_PROTOCOL_ID,
@@ -71,7 +69,7 @@ fn setup_server(mut commands: Commands, mut settings: ResMut<ServerSettings>) {
         .spawn((
             Server::default(),
             ServerUdpIo::default(),
-            LocalAddr(bind_addr),
+            LocalAddr(settings.bind_addr),
             NetcodeServer::new(netcode_config),
         ))
         .id();
