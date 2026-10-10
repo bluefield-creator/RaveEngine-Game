@@ -5,6 +5,9 @@ use crate::common::game::bricks::BRICK_METALLIC;
 use crate::common::game::bricks::BRICK_PERCEPTUAL_ROUGHNESS;
 use crate::common::game::bricks::BRICK_REFLECTANCE;
 use crate::studio::tools::{Selection, SnapConfig, ToolState};
+use super::playtest::{
+    EntitiesQuery, ExplorerQuery, ImagesQuery, PlaytestClientQuery, ReplicatedImagesQuery,
+};
 use bevy::pbr::ExtendedMaterial;
 use bevy::prelude::*;
 use bevy_egui::egui;
@@ -59,63 +62,14 @@ pub fn draw_top_bar(
     lighting_config: &mut ResMut<crate::client::sky::LightingConfig>,
     gravity: &mut Option<ResMut<avian3d::prelude::Gravity>>,
     camera_transform_query: &mut Query<&mut Transform, With<Camera3d>>,
-    entities_query: &mut Query<
-        (
-            Entity,
-            &mut Transform,
-            &Name,
-            Option<&ChildOf>,
-            Option<&Children>,
-            Option<&crate::common::game::bricks::components::Brick>,
-            Option<&mut crate::common::game::bricks::components::BrickShapeComponent>,
-            &GlobalTransform,
-            Option<&Mesh3d>,
-            Option<
-                &MeshMaterial3d<
-                    ExtendedMaterial<
-                        StandardMaterial,
-                        crate::common::game::bricks::studs::ShadowOpacityExtension,
-                    >,
-                >,
-            >,
-            Option<
-                &MeshMaterial3d<
-                    ExtendedMaterial<
-                        StandardMaterial,
-                        crate::common::game::bricks::studs::StudsExtension,
-                    >,
-                >,
-            >,
-            Option<&mut crate::common::game::bricks::components::BrickPhysics>,
-        ),
-        Without<Camera3d>,
-    >,
+    entities_query: &mut EntitiesQuery,
     onboarding_data: &mut crate::studio::ui::panels::onboarding::OnboardingData,
     _play_processes: &mut ResMut<crate::studio::ui::resources::PlayInClientProcesses>,
     playtest_state: &mut ResMut<crate::client::PlaytestState>,
     playtest_backup: &mut ResMut<crate::studio::ui::resources::PlaytestBackup>,
-    playtest_client_query: &Query<
-        Entity,
-        With<crate::studio::ui::resources::InEditorPlaytestClient>,
-    >,
+    playtest_client_query: &PlaytestClientQuery,
     selection: &mut Selection,
-    explorer_query: &Query<
-        (
-            Entity,
-            &Name,
-            Option<&ChildOf>,
-            Option<&Children>,
-            Option<&crate::common::game::bricks::components::Brick>,
-            Option<&crate::scripting::ecs::ServerScript>,
-            Option<&crate::scripting::ecs::LocalScript>,
-            Option<&crate::scripting::ecs::ModuleScript>,
-            Option<&crate::common::game::assets::components::Image>,
-            Option<&crate::common::game::assets::components::Texture>,
-            Option<&crate::common::game::assets::components::Mesh>,
-            Option<&crate::common::game::assets::components::Sound>,
-        ),
-        Without<Camera3d>,
-    >,
+    explorer_query: &ExplorerQuery,
     onboarding_active: bool,
     players_service: &mut Option<ResMut<crate::studio::tools::PlayersService>>,
     file_dialog_state: &crate::studio::ui::resources::FileDialogState,
@@ -124,22 +78,8 @@ pub fn draw_top_bar(
     mesh_assets: &Query<&crate::common::game::assets::components::Mesh>,
     workspace_studs: &mut ResMut<crate::common::game::bricks::WorkspaceShowStuds>,
     show_audio: &mut ResMut<crate::studio::sound_icons::StudioShowAudio>,
-    images_query: &Query<
-        (
-            Entity,
-            &Name,
-            Option<&ChildOf>,
-            Option<&crate::common::game::assets::components::Image>,
-        ),
-        Without<Camera3d>,
-    >,
-    replicated_images: &Query<
-        Entity,
-        (
-            With<crate::common::game::assets::components::Image>,
-            With<lightyear::prelude::Replicate>,
-        ),
-    >,
+    images_query: &ImagesQuery,
+    replicated_images: &ReplicatedImagesQuery,
     copied_buffer: &mut ResMut<crate::studio::ui::CopiedEntityBuffer>,
     texture_assets: &Query<&crate::common::game::assets::components::Texture>,
     sound_assets: &Query<&crate::common::game::assets::components::Sound>,
@@ -977,187 +917,40 @@ pub fn draw_top_bar(
                         ui.separator();
                         let playtesting_active = playtest_state.active;
                         if ui.add_enabled(!playtesting_active, egui::Button::new("Play In Studio")).clicked() {
-                            playtest_state.active = true;
-                            selection.entity = None;
-                            selection.entities.clear();
-                            selection.workspace_selected = false;
-                            selection.players_selected = false;
-                            selection.lighting_selected = false;
-                            crate::scripting::output::start_run("Playtest");
-                            if let Some(g) = gravity.as_ref() { playtest_backup.gravity = Some(g.0); } else { playtest_backup.gravity = None; }
-                            if let Some(ps) = players_service.as_ref() { playtest_backup.players_service = Some((**ps).clone()); } else { playtest_backup.players_service = None; }
-                            let mut backup_bricks = Vec::new();
-                            for (entity, _, _name, _, _, brick_opt, _, _, _, _, _, _) in entities_query.iter() {
-                                if brick_opt.is_some() {
-                                    if let Some(data) = crate::common::game::bricks::data::capture_brick_data(entity, entities_query, studs_query, brick_colors, mesh_assets, sound_assets) {
-                                        backup_bricks.push(data);
-                                    }
-                                    commands.entity(entity).despawn();
-                                }
-                            }
-                            playtest_backup.bricks = backup_bricks;
-                            let mut backup_scripts = Vec::new();
-                            for (_entity, _name, child_of_opt, _, _, s_opt, l_opt, m_opt, _, _, _, _) in explorer_query.iter() {
-                                let mut script_type_opt = None;
-                                let mut code = String::new();
-                                let mut enabled = true;
-                                if let Some(s) = s_opt { script_type_opt = Some(0); code = s.code.clone(); enabled = s.enabled; } else if let Some(l) = l_opt { script_type_opt = Some(1); code = l.code.clone(); enabled = l.enabled; } else if let Some(m) = m_opt { script_type_opt = Some(2); code = m.code.clone(); }
-                                if let Some(script_type) = script_type_opt {
-                                    let mut parent_name = None;
-                                    if let Some(child_of) = child_of_opt { if let Ok((_, p_name, _, _, _, _, _, _, _, _, _, _)) = explorer_query.get(child_of.parent()) { parent_name = Some(p_name.to_string()); } }
-                                    backup_scripts.push(crate::common::core::vrtx::VrtxScript { name: _name.to_string(), script_type, code, parent_name, enabled });
-                                    commands.entity(_entity).despawn();
-                                }
-                            }
-                            playtest_backup.scripts = backup_scripts;
-                            let mut backup_images = Vec::new();
-                            for (_entity, _name, child_of_opt, image_opt) in images_query.iter() {
-                                if let Some(image) = image_opt {
-                                    let mut parent_name = None;
-                                    if let Some(child_of) = child_of_opt { if let Ok((_, p_name, _, _)) = images_query.get(child_of.parent()) { parent_name = Some(p_name.to_string()); } }
-                                    let transform = entities_query.get(_entity).map(|(_, t, _, _, _, _, _, _, _, _, _, _)| *t).unwrap_or_default();
-                                    backup_images.push(crate::common::core::vrtx::VrtxImage { name: _name.to_string(), asset_id: image.asset_id, face: image.face.as_ref().map(|f| f.as_str().to_string()), parent_name, transform });
-                                    commands.entity(_entity).despawn();
-                                }
-                            }
-                            playtest_backup.images = backup_images;
-                            let mut backup_meshes = Vec::new();
-                            for (_entity, _name, child_of_opt, _, _, _, _, _, _, _, mesh_opt, _) in explorer_query.iter() {
-                                if let Some(mesh) = mesh_opt {
-                                    let mut parent_name = None;
-                                    if let Some(child_of) = child_of_opt { if let Ok((_, p_name, _, _, _, _, _, _, _, _, _, _)) = explorer_query.get(child_of.parent()) { parent_name = Some(p_name.to_string()); } }
-                                    let transform = entities_query.get(_entity).map(|(_, t, _, _, _, _, _, _, _, _, _, _)| *t).unwrap_or_default();
-                                    let (physics_enabled, bounciness, player_can_collide, friction, gravity_scale, mass) = entities_query.get(_entity).map(|(_, _, _, _, _, _, _, _, _, _, _, phys_opt)| { if let Some(phys) = phys_opt { (phys.enabled, phys.bounciness, phys.player_can_collide, phys.friction, phys.gravity_scale, phys.mass) } else { (true, 0.3, true, 0.3, 1.0, 1.0) } }).unwrap_or((true, 0.3, true, 0.3, 1.0, 1.0));
-                                    backup_meshes.push(crate::common::core::vrtx::VrtxMesh { name: _name.to_string(), asset_id: mesh.asset_id, normalize: mesh.normalize, parent_name, transform, physics_enabled, bounciness, player_can_collide, friction, gravity_scale, mass });
-                                    commands.entity(_entity).despawn();
-                                }
-                            }
-                            playtest_backup.meshes = backup_meshes;
-                            let mut backup_textures = Vec::new();
-                            for (_entity, _name, child_of_opt, _, _, _, _, _, _, texture_opt, _, _) in explorer_query.iter() {
-                                if let Some(texture) = texture_opt {
-                                    let mut parent_name = None;
-                                    if let Some(child_of) = child_of_opt { if let Ok((_, p_name, _, _, _, _, _, _, _, _, _, _)) = explorer_query.get(child_of.parent()) { parent_name = Some(p_name.to_string()); } }
-                                    backup_textures.push(crate::common::core::vrtx::VrtxTexture { name: _name.to_string(), id_string: texture.as_content_id(), parent_name });
-                                    commands.entity(_entity).despawn();
-                                }
-                            }
-                            playtest_backup.textures = backup_textures;
-                            let mut backup_sounds = Vec::new();
-                            for (_entity, _name, child_of_opt, _, _, _, _, _, _, _, _, sound_opt) in explorer_query.iter() {
-                                if let Some(sound) = sound_opt {
-                                    let mut parent_name = None;
-                                    if let Some(child_of) = child_of_opt { if let Ok((_, p_name, _, _, _, _, _, _, _, _, _, _)) = explorer_query.get(child_of.parent()) { parent_name = Some(p_name.to_string()); } }
-                                    let transform = entities_query.get(_entity).map(|(_, t, _, _, _, _, _, _, _, _, _, _)| *t).unwrap_or_default();
-                                    backup_sounds.push(crate::common::core::vrtx::VrtxSound { name: _name.to_string(), asset_id: sound.asset_id, volume: sound.volume, speed: sound.speed, looped: sound.looped, replicate_time: sound.replicate_time, playing: sound.playing, spatial: sound.spatial, parent_name, transform });
-                                    commands.entity(_entity).despawn();
-                                }
-                            }
-                            playtest_backup.sounds = backup_sounds;
-                            let temp_map_path = "temp_play.vrtx".to_string();
-                            let players = if let Some(ps) = players_service.as_ref() {
-                                crate::common::core::vrtx::VrtxPlayers {
-                                    speed: ps.speed,
-                                    jump_power: ps.jump_power,
-                                    gravity: ps.gravity,
-                                    speed_response: ps.speed_response,
-                                    friction: ps.friction,
-                                    bounciness: ps.bounciness,
-                                }
-                            } else {
-                                crate::common::core::vrtx::VrtxPlayers::default()
-                            };
-                            let state = crate::common::core::vrtx::VrtxFileState {
-                                version: crate::common::core::vrtx::FORMAT_VERSION,
-                                gravity: Vec3::new(0.0, -186.9 * 0.28, 0.0),
-                                settings: crate::common::core::vrtx::VrtxSettings { ssao: graphics_settings.ssao, contact_shadows: graphics_settings.contact_shadows, bloom: graphics_settings.bloom },
-                                lighting: crate::common::core::vrtx::VrtxLighting::from(&**lighting_config),
-                                players,
-                                camera_transform: Transform::IDENTITY,
-                                bricks: playtest_backup.bricks.iter().map(|b| {
-                                    let mut current_color = Color::Srgba(Srgba::new(0.84, 0.24, 0.16, 1.0));
-                                    if let Some(ref studs_material_handle) = b.studs_material { if let Some(mat) = studs_materials.get(&studs_material_handle.0) { current_color = mat.base.base_color; } } else if let Some(ref mat_handle) = b.standard_material { if let Some(mat) = materials.get(&mat_handle.0) { current_color = mat.base.base_color; } }
-                                    let (physics_enabled, bounciness, player_can_collide, friction, gravity_scale, mass) = if let Some(phys) = b.physics { (phys.enabled, phys.bounciness, phys.player_can_collide, phys.friction, phys.gravity_scale, phys.mass) } else { (true, 0.3, true, 0.3, 1.0, 1.0) };
-                                    crate::common::core::vrtx::VrtxBrick { name: b.name.clone(), transform: b.transform, shape: b.shape, color: current_color, physics_enabled, bounciness, player_can_collide, friction, gravity_scale, mass, show_studs: b.studs }
-                                }).collect(),
-                                scripts: playtest_backup.scripts.clone(),
-                                images: playtest_backup.images.clone(),
-                                meshes: playtest_backup.meshes.clone(),
-                                textures: playtest_backup.textures.clone(),
-                                sounds: playtest_backup.sounds.clone(),
-                            };
-                            if state.save_to_file(&temp_map_path).is_ok() {
-                                crate::app::server::bootstrap::begin_playtest_server_epoch();
-                                let playtest_port = crate::app::server::bootstrap::pick_free_playtest_port();
-                                let playtest_key: [u8; 32] = rand::random();
-                                let playtest_protocol_id: u64 = rand::random();
-                                let server_app = crate::app::server::bootstrap::RaveServerApp::new(crate::app::server::config::ServerAppConfig { port: playtest_port, map_path: temp_map_path, bind_addr: std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)), netcode_key: playtest_key, protocol_id: playtest_protocol_id, allow_unauthenticated: true });
-                                std::thread::spawn(move || { server_app.run(); });
-                                std::thread::sleep(std::time::Duration::from_millis(100));
-                                let server_addr = std::net::SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)), playtest_port);
-                                let client_id = rand::random::<u64>();
-                                commands.insert_resource(crate::client::LocalClientId(client_id));
-                                commands.insert_resource(crate::client::ClientUkey("studio_play_local_key".to_string()));
-                                let auth = lightyear::prelude::Authentication::Manual { server_addr, client_id, private_key: playtest_key, protocol_id: playtest_protocol_id };
-                                let netcode_config = lightyear::prelude::client::NetcodeConfig { client_timeout_secs: 15, ..default() };
-                                let client_entity = commands.spawn((lightyear::prelude::client::Client::default(), lightyear::prelude::UdpIo::default(), lightyear::prelude::client::NetcodeClient::new(auth, netcode_config).unwrap(), lightyear::prelude::LocalAddr(std::net::SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)), 0)), lightyear::prelude::PeerAddr(server_addr), crate::studio::ui::resources::InEditorPlaytestClient)).id();
-                                commands.trigger(lightyear::prelude::client::Connect { entity: client_entity });
-                            }
+                            super::playtest::start_playtest(
+                                commands,
+                                playtest_state,
+                                playtest_backup,
+                                selection,
+                                gravity,
+                                players_service,
+                                entities_query,
+                                explorer_query,
+                                images_query,
+                                studs_query,
+                                brick_colors,
+                                mesh_assets,
+                                sound_assets,
+                                graphics_settings,
+                                lighting_config,
+                                materials,
+                                studs_materials,
+                            );
                             ui.close_menu();
                         }
                         if ui.add_enabled(playtesting_active, egui::Button::new("Stop Playtest")).clicked() {
-                            playtest_state.active = false;
-                            selection.entity = None;
-                            selection.entities.clear();
-                            selection.workspace_selected = false;
-                            selection.players_selected = false;
-                            selection.lighting_selected = false;
-                            crate::scripting::output::end_run();
-                            crate::app::server::bootstrap::request_playtest_server_shutdown();
-                            if let Some(client_entity) = playtest_client_query.iter().next() {
-                                commands.trigger(lightyear::prelude::client::Disconnect { entity: client_entity });
-                                commands.entity(client_entity).try_despawn();
-                            }
-                            for (entity, _, _name, _, _, brick_opt, _, _, _, _, _, _) in entities_query.iter() {
-                                let name_str = _name.as_str();
-                                if brick_opt.is_some() || name_str == "Player" || name_str.starts_with("Player_") { commands.entity(entity).try_despawn(); }
-                            }
-                            for entity in replicated_images { commands.entity(entity).try_despawn(); }
-                            for (entity, _, _, _, _, _, _, _, _, _, mesh_opt, sound_opt) in explorer_query.iter() { if mesh_opt.is_some() || sound_opt.is_some() { commands.entity(entity).try_despawn(); } }
-                            let mut named_entities = std::collections::HashMap::new();
-                            for brick_data in playtest_backup.bricks.drain(..) { let name = brick_data.name.clone(); let new_entity = crate::common::game::bricks::data::spawn_from_data(commands, &brick_data); named_entities.insert(name, new_entity); }
-                            for script_data in playtest_backup.scripts.drain(..) {
-                                let mut cmd = commands.spawn(Name::new(script_data.name));
-                                match script_data.script_type {
-                                    0 => { cmd.insert(crate::scripting::ecs::ServerScript { code: script_data.code, enabled: script_data.enabled, started: false, running_code: String::new() }); },
-                                    1 => { cmd.insert((crate::scripting::ecs::LocalScript { code: script_data.code, enabled: script_data.enabled, started: false, running_code: String::new() }, lightyear::prelude::Replicate::default())); },
-                                    _ => { cmd.insert((crate::scripting::ecs::ModuleScript { code: script_data.code }, lightyear::prelude::Replicate::default())); },
-                                }
-                                let new_script_entity = cmd.id();
-                                if let Some(ref p_name) = script_data.parent_name { if let Some(&parent_entity) = named_entities.get(p_name) { commands.entity(parent_entity).add_child(new_script_entity); } }
-                            }
-                            for image_data in playtest_backup.images.drain(..) {
-                                let face = image_data.face.as_deref().and_then(crate::common::game::assets::components::ImageFace::from_str);
-                                let cmd = commands.spawn((image_data.transform, Name::new(image_data.name), crate::common::game::assets::components::Image { asset_id: image_data.asset_id, face }, Pickable::default(), Visibility::Visible));
-                                let new_image_entity = cmd.id();
-                                if let Some(ref p_name) = image_data.parent_name { if let Some(&parent_entity) = named_entities.get(p_name) { commands.entity(parent_entity).add_child(new_image_entity); } }
-                            }
-                            for mesh_data in playtest_backup.meshes.drain(..) {
-                                let cmd = commands.spawn((mesh_data.transform, Name::new(mesh_data.name), crate::common::game::assets::components::Mesh { asset_id: mesh_data.asset_id, normalize: mesh_data.normalize }, crate::common::game::bricks::components::BrickPhysics { enabled: mesh_data.physics_enabled, bounciness: mesh_data.bounciness, player_can_collide: mesh_data.player_can_collide, friction: mesh_data.friction, gravity_scale: mesh_data.gravity_scale, mass: mesh_data.mass }, avian3d::prelude::CollisionLayers::from_bits(0b0001, 0xFFFF_FFFF), Pickable::default(), Visibility::Visible));
-                                let new_mesh_entity = cmd.id();
-                                if let Some(ref p_name) = mesh_data.parent_name { if let Some(&parent_entity) = named_entities.get(p_name) { commands.entity(parent_entity).add_child(new_mesh_entity); } }
-                            }
-                            for sound_data in playtest_backup.sounds.drain(..) {
-                                let cmd = commands.spawn((sound_data.transform, Name::new(sound_data.name.clone()), crate::common::game::assets::components::Sound { asset_id: sound_data.asset_id, volume: crate::common::game::assets::components::Sound::clamp_volume(sound_data.volume), speed: crate::common::game::assets::components::Sound::clamp_speed(sound_data.speed), looped: sound_data.looped, replicate_time: sound_data.replicate_time, playing: sound_data.playing, spatial: sound_data.spatial, position: 0.0 }, Pickable::default(), Visibility::Visible));
-                                let new_sound_entity = cmd.id();
-                                named_entities.insert(sound_data.name, new_sound_entity);
-                                if let Some(ref p_name) = sound_data.parent_name { if let Some(&parent_entity) = named_entities.get(p_name) { commands.entity(parent_entity).add_child(new_sound_entity); } }
-                            }
-                            for (entity, _, _, _, _, _, _, _, _, _, _, _) in entities_query.iter() {
-                                commands.entity(entity).remove::<(avian3d::prelude::RigidBody, avian3d::prelude::Collider, crate::common::game::physics::TransformBackup, crate::common::game::physics::PhysicsAttached, avian3d::prelude::Friction, avian3d::prelude::Restitution, avian3d::prelude::GravityScale, avian3d::prelude::Mass, avian3d::prelude::LinearDamping, avian3d::prelude::AngularDamping, avian3d::prelude::SleepThreshold)>();
-                            }
-                            if let Some(gravity_val) = playtest_backup.gravity.take() { if let Some(g) = gravity { g.0 = gravity_val; } }
-                            if let Some(ps_val) = playtest_backup.players_service.take() { if let Some(ps) = players_service { **ps = ps_val.clone(); } if let Ok(mut shared) = crate::studio::tools::SHARED_PLAYERS_SERVICE.write() { *shared = ps_val; } }
+                            super::playtest::stop_playtest(
+                                commands,
+                                playtest_state,
+                                playtest_backup,
+                                selection,
+                                gravity,
+                                players_service,
+                                entities_query,
+                                explorer_query,
+                                replicated_images,
+                                playtest_client_query,
+                            );
                             ui.close_menu();
                         }
                         ui.separator();
@@ -1667,470 +1460,38 @@ pub fn draw_top_bar(
 
                     if ribbonbutton(ui, Some(playc_btn_tex), playc_btn_label, playtesting_active).clicked() {
                         if playtesting_active {
-                            playtest_state.active = false;
-                            selection.entity = None;
-                            selection.entities.clear();
-                            selection.workspace_selected = false;
-                            selection.players_selected = false;
-                            selection.lighting_selected = false;
-
-                            crate::scripting::output::end_run();
-                            crate::app::server::bootstrap::request_playtest_server_shutdown();
-
-                            if let Some(client_entity) = playtest_client_query.iter().next() {
-                                commands.trigger(lightyear::prelude::client::Disconnect { entity: client_entity });
-                                commands.entity(client_entity).try_despawn();
-                            }
-
-                            for (entity, _, _name, _, _, brick_opt, _, _, _, _, _, _) in entities_query.iter() {
-                                let name_str = _name.as_str();
-                                if brick_opt.is_some() || name_str == "Player" || name_str == "LocalPlayer" || name_str.starts_with("Player_") {
-                                    commands.entity(entity).try_despawn();
-                                }
-                            }
-
-                            for entity in replicated_images {
-                                commands.entity(entity).try_despawn();
-                            }
-
-                            for (entity, _, _, _, _, _, _, _, _, _, mesh_opt, sound_opt) in explorer_query.iter() {
-                                if mesh_opt.is_some() || sound_opt.is_some() {
-                                    commands.entity(entity).try_despawn();
-                                }
-                            }
-
-                            let mut named_entities = std::collections::HashMap::new();
-                            for brick_data in playtest_backup.bricks.drain(..) {
-                                let name = brick_data.name.clone();
-                                let new_entity = crate::common::game::bricks::data::spawn_from_data(commands, &brick_data);
-                                named_entities.insert(name, new_entity);
-                            }
-
-                            for script_data in playtest_backup.scripts.drain(..) {
-                                let mut cmd = commands.spawn(Name::new(script_data.name));
-                                match script_data.script_type {
-                                    0 => {
-                                        cmd.insert(crate::scripting::ecs::ServerScript {
-                                            code: script_data.code,
-                                            enabled: script_data.enabled,
-                                            started: false,
-                                            running_code: String::new(),
-                                        });
-                                    }
-                                    1 => {
-                                        cmd.insert((
-                                            crate::scripting::ecs::LocalScript {
-                                                code: script_data.code,
-                                                enabled: script_data.enabled,
-                                                started: false,
-                                                running_code: String::new(),
-                                            },
-                                            lightyear::prelude::Replicate::default(),
-                                        ));
-                                    }
-                                    _ => {
-                                        cmd.insert((
-                                            crate::scripting::ecs::ModuleScript {
-                                                code: script_data.code,
-                                            },
-                                            lightyear::prelude::Replicate::default(),
-                                        ));
-                                    }
-                                }
-                                let new_script_entity = cmd.id();
-                                if let Some(ref p_name) = script_data.parent_name {
-                                    if let Some(&parent_entity) = named_entities.get(p_name) {
-                                        commands.entity(parent_entity).add_child(new_script_entity);
-                                    }
-                                }
-                            }
-
-                            for image_data in playtest_backup.images.drain(..) {
-                                let face = image_data.face.as_deref().and_then(crate::common::game::assets::components::ImageFace::from_str);
-                                let cmd = commands.spawn((
-                                    image_data.transform,
-                                    Name::new(image_data.name),
-                                    crate::common::game::assets::components::Image {
-                                        asset_id: image_data.asset_id,
-                                        face,
-                                    },
-                                    Pickable::default(),
-                                    Visibility::Visible,
-                                ));
-                                let new_image_entity = cmd.id();
-                                if let Some(ref p_name) = image_data.parent_name {
-                                    if let Some(&parent_entity) = named_entities.get(p_name) {
-                                        commands.entity(parent_entity).add_child(new_image_entity);
-                                    }
-                                }
-                            }
-
-                            for mesh_data in playtest_backup.meshes.drain(..) {
-                                let cmd = commands.spawn((
-                                    mesh_data.transform,
-                                    Name::new(mesh_data.name),
-                                    crate::common::game::assets::components::Mesh {
-                                        asset_id: mesh_data.asset_id,
-                                        normalize: mesh_data.normalize,
-                                    },
-                                    crate::common::game::bricks::components::BrickPhysics {
-                                        enabled: mesh_data.physics_enabled,
-                                        bounciness: mesh_data.bounciness,
-                                        player_can_collide: mesh_data.player_can_collide,
-                                        friction: mesh_data.friction,
-                                        gravity_scale: mesh_data.gravity_scale,
-                                        mass: mesh_data.mass,
-                                    },
-                                    avian3d::prelude::CollisionLayers::from_bits(0b0001, 0xFFFF_FFFF),
-                                    Pickable::default(),
-                                    Visibility::Visible,
-                                ));
-                                let new_mesh_entity = cmd.id();
-                                if let Some(ref p_name) = mesh_data.parent_name {
-                                    if let Some(&parent_entity) = named_entities.get(p_name) {
-                                        commands.entity(parent_entity).add_child(new_mesh_entity);
-                                    }
-                                }
-                            }
-
-                            for sound_data in playtest_backup.sounds.drain(..) {
-                                let cmd = commands.spawn((
-                                    sound_data.transform,
-                                    Name::new(sound_data.name.clone()),
-                                    crate::common::game::assets::components::Sound {
-                                        asset_id: sound_data.asset_id,
-                                        volume: crate::common::game::assets::components::Sound::clamp_volume(sound_data.volume),
-                                        speed: crate::common::game::assets::components::Sound::clamp_speed(sound_data.speed),
-                                        looped: sound_data.looped,
-                                        replicate_time: sound_data.replicate_time,
-                                        playing: sound_data.playing,
-                                        spatial: sound_data.spatial,
-                                        position: 0.0,
-                                    },
-                                    Pickable::default(),
-                                    Visibility::Visible,
-                                ));
-                                let new_sound_entity = cmd.id();
-                                named_entities.insert(sound_data.name, new_sound_entity);
-                                if let Some(ref p_name) = sound_data.parent_name {
-                                    if let Some(&parent_entity) = named_entities.get(p_name) {
-                                        commands.entity(parent_entity).add_child(new_sound_entity);
-                                    }
-                                }
-                            }
-
-                            for (entity, _, _, _, _, _, _, _, _, _, _, _) in entities_query.iter() {
-                                commands.entity(entity).remove::<(
-                                    avian3d::prelude::RigidBody,
-                                    avian3d::prelude::Collider,
-                                    crate::common::game::physics::TransformBackup,
-                                    crate::common::game::physics::PhysicsAttached,
-                                    avian3d::prelude::Friction,
-                                    avian3d::prelude::Restitution,
-                                    avian3d::prelude::GravityScale,
-                                    avian3d::prelude::Mass,
-                                    avian3d::prelude::LinearDamping,
-                                    avian3d::prelude::AngularDamping,
-                                    avian3d::prelude::SleepThreshold,
-                                )>();
-                            }
-
-                            if let Some(gravity_val) = playtest_backup.gravity.take() {
-                                if let Some(g) = gravity {
-                                    g.0 = gravity_val;
-                                }
-                            }
-                            if let Some(ps_val) = playtest_backup.players_service.take() {
-                                if let Some(ps) = players_service {
-                                    **ps = ps_val.clone();
-                                }
-                                if let Ok(mut shared) = crate::studio::tools::SHARED_PLAYERS_SERVICE.write() {
-                                    *shared = ps_val;
-                                }
-                            }
+                            super::playtest::stop_playtest(
+                                commands,
+                                playtest_state,
+                                playtest_backup,
+                                selection,
+                                gravity,
+                                players_service,
+                                entities_query,
+                                explorer_query,
+                                replicated_images,
+                                playtest_client_query,
+                            );
                         } else {
-                            playtest_state.active = true;
-                            selection.entity = None;
-                            selection.entities.clear();
-                            selection.workspace_selected = false;
-                            selection.players_selected = false;
-                            selection.lighting_selected = false;
-
-                            crate::scripting::output::start_run("Playtest");
-
-                            if let Some(g) = gravity.as_ref() {
-                                playtest_backup.gravity = Some(g.0);
-                            } else {
-                                playtest_backup.gravity = None;
-                            }
-                            if let Some(ps) = players_service.as_ref() {
-                                playtest_backup.players_service = Some((**ps).clone());
-                            } else {
-                                playtest_backup.players_service = None;
-                            }
-
-                            let mut backup_bricks = Vec::new();
-                            for (entity, _, _name, _, _, brick_opt, _, _, _, _, _, _) in entities_query.iter() {
-                                if brick_opt.is_some() {
-                                    if let Some(data) = crate::common::game::bricks::data::capture_brick_data(entity, entities_query, studs_query, brick_colors, mesh_assets, sound_assets) {
-                                        backup_bricks.push(data);
-                                    }
-                                    commands.entity(entity).despawn();
-                                }
-                            }
-                            playtest_backup.bricks = backup_bricks;
-
-                            let mut backup_scripts = Vec::new();
-                            for (_entity, _name, child_of_opt, _, _, s_opt, l_opt, m_opt, _, _, _, _) in explorer_query.iter() {
-                                let mut script_type_opt = None;
-                                let mut code = String::new();
-                                let mut enabled = true;
-                                if let Some(s) = s_opt {
-                                    script_type_opt = Some(0);
-                                    code = s.code.clone();
-                                    enabled = s.enabled;
-                                } else if let Some(l) = l_opt {
-                                    script_type_opt = Some(1);
-                                    code = l.code.clone();
-                                    enabled = l.enabled;
-                                } else if let Some(m) = m_opt {
-                                    script_type_opt = Some(2);
-                                    code = m.code.clone();
-                                }
-                                if let Some(script_type) = script_type_opt {
-                                    let mut parent_name = None;
-                                    if let Some(child_of) = child_of_opt {
-                                        if let Ok((_, p_name, _, _, _, _, _, _, _, _, _, _)) = explorer_query.get(child_of.parent()) {
-                                            parent_name = Some(p_name.to_string());
-                                        }
-                                    }
-                                    backup_scripts.push(crate::common::core::vrtx::VrtxScript {
-                                        name: _name.to_string(),
-                                        script_type,
-                                        code,
-                                        parent_name,
-                                        enabled,
-                                    });
-                                    commands.entity(_entity).despawn();
-                                }
-                            }
-                            playtest_backup.scripts = backup_scripts;
-
-                            let mut backup_images = Vec::new();
-                            for (_entity, _name, child_of_opt, image_opt) in images_query.iter() {
-                                if let Some(image) = image_opt {
-                                    let mut parent_name = None;
-                                    if let Some(child_of) = child_of_opt {
-                                        if let Ok((_, p_name, _, _)) = images_query.get(child_of.parent()) {
-                                            parent_name = Some(p_name.to_string());
-                                        }
-                                    }
-                                    let transform = entities_query
-                                        .get(_entity)
-                                        .map(|(_, t, _, _, _, _, _, _, _, _, _, _)| *t)
-                                        .unwrap_or_default();
-                                    backup_images.push(crate::common::core::vrtx::VrtxImage {
-                                        name: _name.to_string(),
-                                        asset_id: image.asset_id,
-                                        face: image.face.as_ref().map(|f| f.as_str().to_string()),
-                                        parent_name,
-                                        transform,
-                                    });
-                                    commands.entity(_entity).despawn();
-                                }
-                            }
-                            playtest_backup.images = backup_images;
-
-                            let mut backup_meshes = Vec::new();
-                            for (_entity, _name, child_of_opt, _, _, _, _, _, _, _, mesh_opt, _) in explorer_query.iter() {
-                                if let Some(mesh) = mesh_opt {
-                                    let mut parent_name = None;
-                                    if let Some(child_of) = child_of_opt {
-                                        if let Ok((_, p_name, _, _, _, _, _, _, _, _, _, _)) = explorer_query.get(child_of.parent()) {
-                                            parent_name = Some(p_name.to_string());
-                                        }
-                                    }
-                                    let transform = entities_query
-                                        .get(_entity)
-                                        .map(|(_, t, _, _, _, _, _, _, _, _, _, _)| *t)
-                                        .unwrap_or_default();
-                                    let (physics_enabled, bounciness, player_can_collide, friction, gravity_scale, mass) = entities_query
-                                        .get(_entity)
-                                        .map(|(_, _, _, _, _, _, _, _, _, _, _, phys_opt)| {
-                                            if let Some(phys) = phys_opt {
-                                                (phys.enabled, phys.bounciness, phys.player_can_collide, phys.friction, phys.gravity_scale, phys.mass)
-                                            } else {
-                                                (true, 0.3, true, 0.3, 1.0, 1.0)
-                                            }
-                                        })
-                                        .unwrap_or((true, 0.3, true, 0.3, 1.0, 1.0));
-                                    backup_meshes.push(crate::common::core::vrtx::VrtxMesh {
-                                        name: _name.to_string(),
-                                        asset_id: mesh.asset_id,
-                                        normalize: mesh.normalize,
-                                        parent_name,
-                                        transform,
-                                        physics_enabled,
-                                        bounciness,
-                                        player_can_collide,
-                                        friction,
-                                        gravity_scale,
-                                        mass,
-                                    });
-                                    commands.entity(_entity).despawn();
-                                }
-                            }
-                            playtest_backup.meshes = backup_meshes;
-
-                            let mut backup_textures = Vec::new();
-                            for (_entity, _name, child_of_opt, _, _, _, _, _, _, texture_opt, _, _) in explorer_query.iter() {
-                                if let Some(texture) = texture_opt {
-                                    let mut parent_name = None;
-                                    if let Some(child_of) = child_of_opt {
-                                        if let Ok((_, p_name, _, _, _, _, _, _, _, _, _, _)) = explorer_query.get(child_of.parent()) {
-                                            parent_name = Some(p_name.to_string());
-                                        }
-                                    }
-                                    backup_textures.push(crate::common::core::vrtx::VrtxTexture {
-                                        name: _name.to_string(),
-                                        id_string: texture.as_content_id(),
-                                        parent_name,
-                                    });
-                                    commands.entity(_entity).despawn();
-                                }
-                            }
-                            playtest_backup.textures = backup_textures;
-                            let mut backup_sounds = Vec::new();
-                            for (_entity, _name, child_of_opt, _, _, _, _, _, _, _, _, sound_opt) in explorer_query.iter() {
-                                if let Some(sound) = sound_opt {
-                                    let mut parent_name = None;
-                                    if let Some(child_of) = child_of_opt { if let Ok((_, p_name, _, _, _, _, _, _, _, _, _, _)) = explorer_query.get(child_of.parent()) { parent_name = Some(p_name.to_string()); } }
-                                    let transform = entities_query.get(_entity).map(|(_, t, _, _, _, _, _, _, _, _, _, _)| *t).unwrap_or_default();
-                                    backup_sounds.push(crate::common::core::vrtx::VrtxSound { name: _name.to_string(), asset_id: sound.asset_id, volume: sound.volume, speed: sound.speed, looped: sound.looped, replicate_time: sound.replicate_time, playing: sound.playing, spatial: sound.spatial, parent_name, transform });
-                                    commands.entity(_entity).despawn();
-                                }
-                            }
-                            playtest_backup.sounds = backup_sounds;
-
-                            let temp_map_path = "temp_play.vrtx".to_string();
-                            let players = if let Some(ps) = players_service.as_ref() {
-                                crate::common::core::vrtx::VrtxPlayers {
-                                    speed: ps.speed,
-                                    jump_power: ps.jump_power,
-                                    gravity: ps.gravity,
-                                    speed_response: ps.speed_response,
-                                    friction: ps.friction,
-                                    bounciness: ps.bounciness,
-                                }
-                            } else {
-                                crate::common::core::vrtx::VrtxPlayers::default()
-                            };
-                            let state = crate::common::core::vrtx::VrtxFileState {
-                                version: crate::common::core::vrtx::FORMAT_VERSION,
-                                gravity: Vec3::new(0.0, -186.9 * 0.28, 0.0),
-                                settings: crate::common::core::vrtx::VrtxSettings {
-                                    ssao: graphics_settings.ssao,
-                                    contact_shadows: graphics_settings.contact_shadows,
-                                    bloom: graphics_settings.bloom,
-                                },
-                                lighting: crate::common::core::vrtx::VrtxLighting::from(&**lighting_config),
-                                players,
-                                camera_transform: Transform::IDENTITY,
-                                bricks: playtest_backup.bricks.iter().map(|b| {
-                                    let mut current_color = Color::Srgba(Srgba::new(0.84, 0.24, 0.16, 1.0));
-                                    if let Some(ref studs_material_handle) = b.studs_material {
-                                        if let Some(mat) = studs_materials.get(&studs_material_handle.0) {
-                                            current_color = mat.base.base_color;
-                                        }
-                                    } else if let Some(ref mat_handle) = b.standard_material {
-                                        if let Some(mat) = materials.get(&mat_handle.0) {
-                                            current_color = mat.base.base_color;
-                                        }
-                                    }
-                                    let (physics_enabled, bounciness, player_can_collide, friction, gravity_scale, mass) = if let Some(phys) = b.physics {
-                                        (phys.enabled, phys.bounciness, phys.player_can_collide, phys.friction, phys.gravity_scale, phys.mass)
-                                    } else {
-                                        (true, 0.3, true, 0.3, 1.0, 1.0)
-                                    };
-                                    crate::common::core::vrtx::VrtxBrick {
-                                        name: b.name.clone(),
-                                        transform: b.transform,
-                                        shape: b.shape,
-                                        color: current_color,
-                                        physics_enabled,
-                                        bounciness,
-                                        player_can_collide,
-                                        friction,
-                                        gravity_scale,
-                                        mass,
-                                        show_studs: b.studs,
-                                    }
-                                }).collect(),
-                                scripts: playtest_backup.scripts.clone(),
-                                images: playtest_backup.images.clone(),
-                                meshes: playtest_backup.meshes.clone(),
-                                textures: playtest_backup.textures.clone(),
-                                sounds: playtest_backup.sounds.clone(),
-                            };
-
-                            if state.save_to_file(&temp_map_path).is_ok() {
-                                crate::app::server::bootstrap::begin_playtest_server_epoch();
-                                let playtest_port = crate::app::server::bootstrap::pick_free_playtest_port();
-
-                                let playtest_key: [u8; 32] = rand::random();
-                                let playtest_protocol_id: u64 = rand::random();
-
-                                let server_app = crate::app::server::bootstrap::RaveServerApp::new(
-                                    crate::app::server::config::ServerAppConfig {
-                                        port: playtest_port,
-                                        map_path: temp_map_path,
-                                        bind_addr: std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
-                                        netcode_key: playtest_key,
-                                        protocol_id: playtest_protocol_id,
-                                        allow_unauthenticated: true,
-                                    }
-                                );
-                                std::thread::spawn(move || {
-                                    server_app.run();
-                                });
-
-                                std::thread::sleep(std::time::Duration::from_millis(100));
-
-                                let server_addr = std::net::SocketAddr::new(
-                                    std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
-                                    playtest_port,
-                                );
-                                let client_id = rand::random::<u64>();
-
-                                commands.insert_resource(crate::client::LocalClientId(client_id));
-                                commands.insert_resource(crate::client::ClientUkey("studio_play_local_key".to_string()));
-
-                                let auth = lightyear::prelude::Authentication::Manual {
-                                    server_addr,
-                                    client_id,
-                                    private_key: playtest_key,
-                                    protocol_id: playtest_protocol_id,
-                                };
-
-                                let netcode_config = lightyear::prelude::client::NetcodeConfig {
-                                    client_timeout_secs: 15,
-                                    ..default()
-                                };
-
-                                let client_entity = commands.spawn((
-                                    lightyear::prelude::client::Client::default(),
-                                    lightyear::prelude::UdpIo::default(),
-                                    lightyear::prelude::client::NetcodeClient::new(auth, netcode_config).unwrap(),
-                                    lightyear::prelude::LocalAddr(std::net::SocketAddr::new(
-                                        std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
-                                        0,
-                                    )),
-                                    lightyear::prelude::PeerAddr(server_addr),
-                                    crate::studio::ui::resources::InEditorPlaytestClient,
-                                )).id();
-
-                                commands.trigger(lightyear::prelude::client::Connect { entity: client_entity });
-                            }
+                            super::playtest::start_playtest(
+                                commands,
+                                playtest_state,
+                                playtest_backup,
+                                selection,
+                                gravity,
+                                players_service,
+                                entities_query,
+                                explorer_query,
+                                images_query,
+                                studs_query,
+                                brick_colors,
+                                mesh_assets,
+                                sound_assets,
+                                graphics_settings,
+                                lighting_config,
+                                materials,
+                                studs_materials,
+                            );
                         }
                     }
                 });

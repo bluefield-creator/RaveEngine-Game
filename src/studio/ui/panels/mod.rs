@@ -2,6 +2,7 @@ pub mod context_menu;
 pub mod explorer;
 pub mod onboarding;
 pub mod output;
+pub mod playtest;
 pub mod properties;
 pub mod settings;
 pub mod top_bar;
