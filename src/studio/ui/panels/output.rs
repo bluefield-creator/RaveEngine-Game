@@ -1,3 +1,4 @@
+use crate::common::core::sync::LockExt;
 use crate::scripting::output::{OutputEntry, OutputLevel, RunInfo};
 use bevy::prelude::Resource;
 use bevy_egui::egui;
@@ -254,7 +255,7 @@ fn draw_entry_row(
 }
 
 fn draw_output_tab(ui: &mut egui::Ui, state: &mut OutputPanelState) {
-    let guard = crate::scripting::output::buffer().lock().unwrap();
+    let guard = crate::scripting::output::buffer().lock_or_recover();
 
     ui.horizontal(|ui| {
         ui.label("Run:");
@@ -324,7 +325,7 @@ fn draw_output_tab(ui: &mut egui::Ui, state: &mut OutputPanelState) {
 }
 
 fn draw_stack_trace_tab(ui: &mut egui::Ui, state: &mut OutputPanelState) {
-    let guard = crate::scripting::output::buffer().lock().unwrap();
+    let guard = crate::scripting::output::buffer().lock_or_recover();
     let selected = state
         .selected_error
         .and_then(|id| guard.entries.iter().find(|e| e.id == id).cloned());

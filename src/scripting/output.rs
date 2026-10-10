@@ -1,3 +1,4 @@
+use crate::common::core::sync::LockExt;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
@@ -125,11 +126,11 @@ pub fn buffer() -> &'static Arc<Mutex<OutputBuffer>> {
 }
 
 pub fn start_run(label: &str) -> u64 {
-    buffer().lock().unwrap().start_run(label)
+    buffer().lock_or_recover().start_run(label)
 }
 
 pub fn end_run() {
-    buffer().lock().unwrap().end_run();
+    buffer().lock_or_recover().end_run();
 }
 
 pub fn push(
@@ -140,8 +141,7 @@ pub fn push(
     traceback: Option<String>,
 ) {
     buffer()
-        .lock()
-        .unwrap()
+        .lock_or_recover()
         .push(level, source, line, message, traceback);
 }
 
@@ -151,11 +151,11 @@ pub fn push_error(source: &str, detail: String) {
 }
 
 pub fn record_script_start() {
-    buffer().lock().unwrap().record_script_start();
+    buffer().lock_or_recover().record_script_start();
 }
 
 pub fn clear_entries() {
-    buffer().lock().unwrap().clear_entries();
+    buffer().lock_or_recover().clear_entries();
 }
 
 pub fn split_error(detail: &str) -> (String, Option<String>) {

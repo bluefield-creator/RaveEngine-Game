@@ -1,3 +1,4 @@
+use crate::common::core::sync::LockExt;
 use std::time::Duration;
 
 use bevy::prelude::*;
@@ -128,7 +129,7 @@ impl AssetFetchPool {
     pub fn drain_results(&self) -> Vec<(u32, AssetKind, Result<Vec<u8>, String>)> {
         match &self.0 {
             Some(workers) => {
-                let rx = workers.rx.lock().unwrap();
+                let rx = workers.rx.lock_or_recover();
                 rx.try_iter().collect()
             }
             None => Vec::new(),

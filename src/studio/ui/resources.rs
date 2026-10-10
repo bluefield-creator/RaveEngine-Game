@@ -1,3 +1,4 @@
+use crate::common::core::sync::LockExt;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
@@ -273,7 +274,7 @@ pub fn handle_file_dialog_results(
     studs_query: Query<&crate::common::game::bricks::components::BrickStuds>,
     auth_store: Res<crate::studio::auth::StudioAuthStore>,
 ) {
-    let rx = file_dialog_state.rx.lock().unwrap();
+    let rx = file_dialog_state.rx.lock_or_recover();
     while let Ok(result) = rx.try_recv() {
         match result {
             FileDialogResult::BrowseSavePath(path) => {
