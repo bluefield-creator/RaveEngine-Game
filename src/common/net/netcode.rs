@@ -1,4 +1,48 @@
-use bevy::log::warn;
+use bevy::log::{error, warn};
+use bevy::prelude::{Bundle, Commands, Entity, default};
+use lightyear::prelude::client::{Client, NetcodeClient, NetcodeConfig};
+use lightyear::prelude::{Authentication, LocalAddr, PeerAddr, UdpIo};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+pub const CLIENT_TIMEOUT_SECS: i32 = 15;
+
+pub fn spawn_netcode_client(
+    commands: &mut Commands,
+    server_addr: SocketAddr,
+    client_id: u64,
+    private_key: [u8; 32],
+    protocol_id: u64,
+    extra: impl Bundle,
+) -> Option<Entity> {
+    let auth = Authentication::Manual {
+        server_addr,
+        client_id,
+        private_key,
+        protocol_id,
+    };
+    let config = NetcodeConfig {
+        client_timeout_secs: CLIENT_TIMEOUT_SECS,
+        ..default()
+    };
+    let netcode = match NetcodeClient::new(auth, config) {
+        Ok(netcode) => netcode,
+        Err(e) => {
+            error!("Failed to create netcode client for {server_addr}: {e}");
+            return None;
+        }
+    };
+    let entity = commands
+        .spawn((
+            Client::default(),
+            UdpIo::default(),
+            netcode,
+            LocalAddr(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0)),
+            PeerAddr(server_addr),
+            extra,
+        ))
+        .id();
+    Some(entity)
+}
 
 pub fn parse_hex_key(s: &str) -> Option<[u8; 32]> {
     let s = s.trim();

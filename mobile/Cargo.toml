@@ -20,7 +20,6 @@ lightyear = { version = "0.28.0", default-features = false, features = [
   "input_native",
   "compression_lz4"
 ] }
-rand = "0.10.1"
 rave-engine-lib = { path = "..", package = "VERTIGO-ProjectRave" }
 
 [package.metadata.android]

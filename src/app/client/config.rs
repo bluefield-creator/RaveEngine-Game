@@ -1,4 +1,6 @@
-use std::net::IpAddr;
+use crate::app::common::args::CliArgs;
+use crate::common::net::netcode::parse_hex_key;
+use std::net::{IpAddr, Ipv4Addr};
 
 pub struct ClientAppConfig {
     pub ip: IpAddr,
@@ -10,69 +12,41 @@ pub struct ClientAppConfig {
 
 impl ClientAppConfig {
     pub fn from_env_and_args() -> Self {
-        let mut ip = IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1));
-        let mut port = 5000;
-        let mut ukey = "".to_string();
-        let mut netcode_key_cli: Option<String> = None;
-        let mut protocol_id_cli: Option<u64> = None;
+        Self::from_args(&CliArgs::from_env())
+    }
 
-        if let Ok(env_ukey) = std::env::var("VERTIGO_CLIENT_UKEY") {
-            ukey = env_ukey;
-        }
-        if let Ok(ip_str) = std::env::var("VERTIGO_SERVER_IP") {
-            if let Ok(parsed_ip) = ip_str.parse::<IpAddr>() {
-                ip = parsed_ip;
-            }
-        }
-        if let Ok(port_str) = std::env::var("VERTIGO_SERVER_PORT") {
-            if let Ok(parsed_port) = port_str.parse::<u16>() {
-                port = parsed_port;
-            }
-        }
+    pub fn from_args(args: &CliArgs) -> Self {
+        let env = |name: &str| std::env::var(name).ok();
 
-        let args: Vec<String> = std::env::args().collect();
-        for i in 0..args.len() {
-            if let Some(join) = crate::client::uri::parse_client_join_uri(&args[i]) {
-                ip = join.ip;
-                port = join.port;
-                ukey = join.ukey;
-            }
-            if args[i] == "--port" && i + 1 < args.len() {
-                if let Ok(p) = args[i + 1].parse::<u16>() {
-                    port = p;
-                }
-            }
-            if args[i] == "--ip" && i + 1 < args.len() {
-                if let Ok(ip_addr) = args[i + 1].parse::<IpAddr>() {
-                    ip = ip_addr;
-                }
-            }
-            if args[i] == "--ukey" && i + 1 < args.len() {
-                ukey = args[i + 1].clone();
-            }
-            if args[i] == "--netcode-key" && i + 1 < args.len() {
-                netcode_key_cli = Some(args[i + 1].clone());
-            }
-            if args[i] == "--protocol-id" && i + 1 < args.len() {
-                if let Ok(id) = args[i + 1].parse::<u64>() {
-                    protocol_id_cli = Some(id);
-                }
-            }
+        let mut ip = env("VERTIGO_SERVER_IP")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
+        let mut port = env("VERTIGO_SERVER_PORT")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(5000);
+        let mut ukey = env("VERTIGO_CLIENT_UKEY").unwrap_or_default();
+
+        if let Some(join) = args
+            .iter()
+            .filter_map(crate::client::uri::parse_client_join_uri)
+            .last()
+        {
+            ip = join.ip;
+            port = join.port;
+            ukey = join.ukey;
+        }
+        ip = args.parsed("--ip").unwrap_or(ip);
+        port = args.parsed("--port").unwrap_or(port);
+        if let Some(value) = args.value("--ukey") {
+            ukey = value.to_string();
         }
 
-        let netcode_key = netcode_key_cli
-            .as_deref()
-            .and_then(crate::common::net::netcode::parse_hex_key)
-            .or_else(|| {
-                std::env::var("NETCODE_PRIVATE_KEY")
-                    .ok()
-                    .as_deref()
-                    .and_then(crate::common::net::netcode::parse_hex_key)
-            });
-        let protocol_id = protocol_id_cli.or_else(|| {
-            std::env::var("NETCODE_PROTOCOL_ID")
-                .ok()
-                .and_then(|v| v.trim().parse::<u64>().ok())
+        let netcode_key = args
+            .value("--netcode-key")
+            .and_then(parse_hex_key)
+            .or_else(|| env("NETCODE_PRIVATE_KEY").as_deref().and_then(parse_hex_key));
+        let protocol_id = args.parsed("--protocol-id").or_else(|| {
+            env("NETCODE_PROTOCOL_ID").and_then(|v| v.trim().parse().ok())
         });
 
         Self {
@@ -82,5 +56,15 @@ impl ClientAppConfig {
             netcode_key,
             protocol_id,
         }
+    }
+
+    pub fn resolved_netcode_key(&self) -> [u8; 32] {
+        self.netcode_key
+            .unwrap_or_else(|| crate::common::net::netcode::netcode_private_key(None))
+    }
+
+    pub fn resolved_protocol_id(&self) -> u64 {
+        self.protocol_id
+            .unwrap_or_else(|| crate::common::net::netcode::netcode_protocol_id(None))
     }
 }

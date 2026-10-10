@@ -1,15 +1,24 @@
+use RaveEngineLib::app::common::args::CliArgs;
+use RaveEngineLib::app::common::log::configure_logging;
+use RaveEngineLib::app::server::config::ServerAppConfig;
 use RaveEngineLib::common::CommonPlugin;
 #[cfg(feature = "bench")]
 use RaveEngineLib::common::net::components::NetworkTransform;
 #[cfg(feature = "bench")]
 use RaveEngineLib::common::net::components::Player;
-use RaveEngineLib::server::ServerPlugin;
 #[cfg(feature = "bench")]
 use avian3d::prelude::*;
 use bevy::app::ScheduleRunnerPlugin;
-use bevy::log::LogPlugin;
 use bevy::prelude::*;
 use bevy::state::app::StatesPlugin;
+
+#[cfg(feature = "bench")]
+const DEFAULT_LOG_FILTER: &str = "info,wgpu=error,bevy_render=error,bevy_ecs=warn,lightyear=error,naga=warn,wgpu_hal=warn,wgpu_core=warn,offset_allocator=off";
+#[cfg(not(feature = "bench"))]
+const DEFAULT_LOG_FILTER: &str = RaveEngineLib::app::common::log::VERBOSE_NET_FILTER;
+
+#[cfg(feature = "bench")]
+const BENCH_SCENARIOS: [&str; 4] = ["server", "client", "studio", "bricks"];
 
 #[cfg(feature = "bench")]
 fn spawn_bench_players(mut commands: Commands) {
@@ -63,162 +72,60 @@ fn bench_move_players(
 }
 
 fn main() {
-    let rust_log = std::env::var("RUST_LOG").unwrap_or_default();
-    let new_rust_log = if rust_log.is_empty() {
-        #[cfg(feature = "bench")]
-        {
-            "info,wgpu=error,bevy_render=error,bevy_ecs=warn,lightyear=error,naga=warn,wgpu_hal=warn,wgpu_core=warn,offset_allocator=off".to_string()
-        }
-        #[cfg(not(feature = "bench"))]
-        {
-            "debug,wgpu=error,bevy_render=error,bevy_ecs=warn,lightyear=debug,lightyear_udp=trace,lightyear_netcode=trace,naga=warn,wgpu_hal=warn,wgpu_core=warn,offset_allocator=off".to_string()
-        }
-    } else if !rust_log.contains("offset_allocator") {
-        format!("{rust_log},offset_allocator=off")
-    } else {
-        rust_log
-    };
-    unsafe {
-        std::env::set_var("VERTIGO_APP", "server");
-        std::env::set_var("RUST_LOG", new_rust_log);
-    }
+    let log_plugin = configure_logging("server", DEFAULT_LOG_FILTER, bevy::log::Level::DEBUG);
+    let args = CliArgs::from_env();
 
-    let mut port = 5000;
-    let mut map_path = RaveEngineLib::common::assets_path::resolve_vrtx_path("assets/maps/default.vrtx")
-        .to_string_lossy()
-        .into_owned();
-    let mut bind_addr = std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1));
-    let mut netcode_key_cli: Option<String> = None;
-    let mut protocol_id_cli: Option<u64> = None;
-    let mut allow_unauthenticated = false;
     #[cfg(feature = "bench")]
-    let mut bench_mode = false;
+    let bench_mode = args.has("--benchmark");
     #[cfg(feature = "bench")]
-    let mut bench_frames: u64 = 500;
+    let bench_scenario = args.value("--bench-scenario").unwrap_or("server").to_string();
     #[cfg(feature = "bench")]
-    let mut bench_warmup: u64 = 100;
-    #[cfg(feature = "bench")]
-    let mut bench_scenario = "server".to_string();
-
-    let args: Vec<String> = std::env::args().collect();
-    for i in 0..args.len() {
-        if args[i] == "--port" && i + 1 < args.len() {
-            if let Ok(p) = args[i + 1].parse::<u16>() {
-                port = p;
-            }
-        }
-        if args[i] == "--map" && i + 1 < args.len() {
-            map_path = args[i + 1].clone();
-        }
-        if args[i] == "--bind" && i + 1 < args.len() {
-            if let Ok(ip) = args[i + 1].parse::<std::net::IpAddr>() {
-                bind_addr = ip;
-            }
-        }
-        if args[i] == "--netcode-key" && i + 1 < args.len() {
-            netcode_key_cli = Some(args[i + 1].clone());
-        }
-        if args[i] == "--protocol-id" && i + 1 < args.len() {
-            if let Ok(id) = args[i + 1].parse::<u64>() {
-                protocol_id_cli = Some(id);
-            }
-        }
-        if args[i] == "--allow-unauthenticated" {
-            allow_unauthenticated = true;
-        }
-        #[cfg(feature = "bench")]
-        if args[i] == "--benchmark" {
-            bench_mode = true;
-        }
-        #[cfg(feature = "bench")]
-        if args[i] == "--bench-frames" && i + 1 < args.len() {
-            if let Ok(f) = args[i + 1].parse::<u64>() {
-                bench_frames = f;
-            }
-        }
-        #[cfg(feature = "bench")]
-        if args[i] == "--bench-warmup" && i + 1 < args.len() {
-            if let Ok(f) = args[i + 1].parse::<u64>() {
-                bench_warmup = f;
-            }
-        }
-        #[cfg(feature = "bench")]
-        if args[i] == "--bench-scenario" && i + 1 < args.len() {
-            bench_scenario = args[i + 1].clone();
-        }
+    if bench_mode && !BENCH_SCENARIOS.contains(&bench_scenario.as_str()) {
+        eprintln!("unsupported benchmark scenario: {bench_scenario}");
+        std::process::exit(2);
     }
+    #[cfg(feature = "bench")]
+    let run_server = !bench_mode || bench_scenario == "server";
+    #[cfg(not(feature = "bench"))]
+    let run_server = true;
+
+    let run_loop =
+        MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(std::time::Duration::from_millis(16)));
 
     let mut app = App::new();
-    app.add_plugins(LogPlugin {
-        level: bevy::log::Level::DEBUG,
-        filter: "wgpu=error,bevy_render=error,bevy_ecs=warn,lightyear=debug,lightyear_udp=trace,lightyear_netcode=trace,naga=warn,wgpu_hal=warn,wgpu_core=warn,offset_allocator=off".to_string(),
-        ..default()
-    });
+    app.add_plugins(log_plugin);
     #[cfg(feature = "bench")]
-    {
-        if bench_mode {
-            app.add_plugins(MinimalPlugins);
-        } else {
-            app.add_plugins(MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(
-                std::time::Duration::from_millis(16),
-            )));
-        }
+    if bench_mode {
+        app.add_plugins(MinimalPlugins);
+    } else {
+        app.add_plugins(run_loop);
     }
     #[cfg(not(feature = "bench"))]
-    app.add_plugins(MinimalPlugins.set(ScheduleRunnerPlugin::run_loop(
-        std::time::Duration::from_millis(16),
-    )));
+    app.add_plugins(run_loop);
     app.add_plugins(RaveEngineLib::common::assets_path::asset_plugin());
     app.init_asset::<Mesh>();
     app.add_plugins(StatesPlugin);
     app.add_plugins(TransformPlugin);
     app.add_plugins(CommonPlugin);
-    #[cfg(feature = "bench")]
-    if !bench_mode || bench_scenario == "server" {
-        app.add_plugins(ServerPlugin {
-            map_path: map_path.clone(),
-            port,
-            bind_addr,
-            netcode_key: RaveEngineLib::common::net::netcode::netcode_private_key(
-                netcode_key_cli.as_deref(),
-            ),
-            protocol_id: RaveEngineLib::common::net::netcode::netcode_protocol_id(protocol_id_cli),
-            allow_unauthenticated,
-        });
+    if run_server {
+        app.add_plugins(ServerAppConfig::from_args(&args).into_plugin());
     }
-    #[cfg(not(feature = "bench"))]
-    app.add_plugins(ServerPlugin {
-        map_path,
-        port,
-        bind_addr,
-        netcode_key: RaveEngineLib::common::net::netcode::netcode_private_key(
-            netcode_key_cli.as_deref(),
-        ),
-        protocol_id: RaveEngineLib::common::net::netcode::netcode_protocol_id(protocol_id_cli),
-        allow_unauthenticated,
-    });
 
     #[cfg(feature = "bench")]
     if bench_mode {
-        if bench_scenario != "server"
-            && bench_scenario != "client"
-            && bench_scenario != "studio"
-            && bench_scenario != "bricks"
-        {
-            panic!("unsupported benchmark scenario: {bench_scenario}");
-        }
+        let bench_frames: u64 = args.parsed("--bench-frames").unwrap_or(500);
+        let bench_warmup: u64 = args.parsed("--bench-warmup").unwrap_or(100);
         app.world_mut()
             .resource_mut::<RaveEngineLib::common::core::bench::BenchStats>()
             .configure(&bench_scenario, bench_warmup, bench_frames);
-        if bench_scenario == "server" {
-            app.add_systems(Startup, spawn_bench_players);
-            app.add_systems(Update, bench_move_players);
-        } else if bench_scenario == "client" {
-            RaveEngineLib::client::add_client_benchmark(&mut app);
-        } else if bench_scenario == "studio" {
-            RaveEngineLib::studio::add_studio_benchmark(&mut app);
-        } else {
-            RaveEngineLib::common::game::bricks::add_bricks_benchmark(&mut app);
+        match bench_scenario.as_str() {
+            "server" => {
+                app.add_systems(Startup, spawn_bench_players);
+                app.add_systems(Update, bench_move_players);
+            }
+            "client" => RaveEngineLib::client::add_client_benchmark(&mut app),
+            "studio" => RaveEngineLib::studio::add_studio_benchmark(&mut app),
+            _ => RaveEngineLib::common::game::bricks::add_bricks_benchmark(&mut app),
         }
         info!(
             "BENCH: Running {} with {} warmup and {} measured frames",

@@ -3,10 +3,66 @@ fn main() {}
 
 #[cfg(not(target_os = "android"))]
 mod desktop_studio {
+    use RaveEngineLib::app::common::log::{STUDIO_FILTER, configure_logging};
     use RaveEngineLib::common::CommonPlugin;
     use RaveEngineLib::studio::StudioPlugin;
-    use bevy::log::LogPlugin;
+    use RaveEngineLib::studio::auth::StoredCredentials;
     use bevy::prelude::*;
+
+    fn auth_code_from_uri(arg: &str) -> Option<String> {
+        let lower = arg.to_lowercase();
+        if !lower.starts_with("vertexia-studio://") && !lower.starts_with("vertexia://") {
+            return None;
+        }
+        let query = arg.split('?').nth(1)?;
+        query
+            .split('&')
+            .filter_map(|pair| pair.split_once('='))
+            .filter(|(key, _)| *key == "code")
+            .map(|(_, value)| value.to_string())
+            .last()
+    }
+
+    fn exchange_auth_code(code: &str) -> Option<StoredCredentials> {
+        let url = format!(
+            "{}/api/v1/studio/exchange",
+            RaveEngineLib::studio::auth::website_base()
+        );
+        let client =
+            RaveEngineLib::common::net::api::blocking_client(std::time::Duration::from_secs(10))
+                .ok()?;
+        let resp = client
+            .post(&url)
+            .json(&serde_json::json!({ "code": code }))
+            .send()
+            .ok()?;
+        if !resp.status().is_success() {
+            return None;
+        }
+        let body: serde_json::Value = serde_json::from_str(&resp.text().ok()?).ok()?;
+        Some(StoredCredentials {
+            username: body.get("username")?.as_str()?.to_string(),
+            uid: body.get("uid")?.as_i64()? as i32,
+            ukey: body.get("ukey")?.as_str()?.to_string(),
+        })
+    }
+
+    fn handle_auth_uri(code: &str) -> ! {
+        match exchange_auth_code(code) {
+            Some(creds) => {
+                let _ = RaveEngineLib::studio::auth::save_studio_credentials(&creds);
+                println!(
+                    "VERTEXIA Studio authenticated as {} (uid {}) via URI",
+                    creds.username, creds.uid
+                );
+                std::process::exit(0);
+            }
+            None => {
+                eprintln!("Failed to exchange studio auth code via URI");
+                std::process::exit(1);
+            }
+        }
+    }
 
     pub fn main() {
         for arg in std::env::args().skip(1) {
@@ -16,72 +72,23 @@ mod desktop_studio {
                     std::env::set_var("VERTIGO_NO_CLOUDS", "1");
                 }
             }
-            if lower.starts_with("vertexia-studio://") || lower.starts_with("vertexia://") {
-                if let Some(q) = arg.split('?').nth(1) {
-                    let mut code_opt: Option<String> = None;
-                    for pair in q.split('&') {
-                        let mut kv = pair.splitn(2, '=');
-                        if kv.next() == Some("code") {
-                            code_opt = kv.next().map(|v| v.to_string());
-                        }
-                    }
-                    if let Some(code) = code_opt {
-                        if !code.is_empty() {
-                            let base = RaveEngineLib::studio::auth::website_base();
-                            let url = format!("{base}/api/v1/studio/exchange");
-                            let client = std::time::Duration::from_secs(10);
-                            if let Ok(c) = RaveEngineLib::common::net::api::blocking_client(client) {
-                                if let Ok(resp) = c.post(&url).json(&serde_json::json!({"code": code})).send() {
-                                    if resp.status().is_success() {
-                                        if let Ok(body) = resp.text() {
-                                            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&body) {
-                                                if let (Some(username), Some(ukey), Some(uid)) = (v.get("username").and_then(|x| x.as_str()), v.get("ukey").and_then(|x| x.as_str()), v.get("uid").and_then(|x| x.as_i64())) {
-                                                    let creds = RaveEngineLib::studio::auth::StoredCredentials { username: username.to_string(), uid: uid as i32, ukey: ukey.to_string() };
-                                                    let _ = RaveEngineLib::studio::auth::save_studio_credentials(&creds);
-                                                    println!("VERTEXIA Studio authenticated as {username} (uid {uid}) via URI");
-                                                    std::process::exit(0);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            eprintln!("Failed to exchange studio auth code via URI");
-                            std::process::exit(1);
-                        }
-                    }
-                }
+            if let Some(code) = auth_code_from_uri(&arg).filter(|code| !code.is_empty()) {
+                handle_auth_uri(&code);
             }
         }
-        let rust_log = std::env::var("RUST_LOG").unwrap_or_default();
-        let new_rust_log = if rust_log.is_empty() {
-            "info,wgpu=warn,naga=warn,wgpu_hal=warn,wgpu_core=warn,offset_allocator=off".to_string()
-        } else if !rust_log.contains("offset_allocator") {
-            format!("{rust_log},offset_allocator=off")
-        } else {
-            rust_log
-        };
-        unsafe {
-            std::env::set_var("VERTIGO_APP", "studio");
-            std::env::set_var("RUST_LOG", new_rust_log);
-        }
+
+        let log_plugin = configure_logging("studio", STUDIO_FILTER, bevy::log::Level::INFO);
         App::new()
             .insert_resource(bevy_egui::EguiGlobalSettings {
                 auto_create_primary_context: false,
                 ..default()
             })
-            .add_plugins(DefaultPlugins.set(LogPlugin {
-                filter: "info,wgpu=warn,naga=warn,wgpu_hal=warn,wgpu_core=warn,offset_allocator=off".to_string(),
-                ..default()
-            }).set(RaveEngineLib::common::assets_path::asset_plugin()).set(bevy::render::RenderPlugin {
-                render_creation: bevy::render::settings::RenderCreation::Automatic(Box::new(
-                    bevy::render::settings::WgpuSettings {
-                        disabled_features: Some(bevy::render::settings::WgpuFeatures::TEXTURE_BINDING_ARRAY),
-                        ..default()
-                    }
-                )),
-                ..default()
-            }))
+            .add_plugins(
+                DefaultPlugins
+                    .set(log_plugin)
+                    .set(RaveEngineLib::common::assets_path::asset_plugin())
+                    .set(RaveEngineLib::app::common::render::render_plugin()),
+            )
             .add_plugins(lightyear::prelude::client::ClientPlugins {
                 tick_duration: core::time::Duration::from_secs_f64(1.0 / 60.0),
             })

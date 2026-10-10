@@ -1,3 +1,4 @@
+use crate::app::common::args::CliArgs;
 use std::net::{IpAddr, Ipv4Addr};
 
 pub struct ServerAppConfig {
@@ -11,52 +12,40 @@ pub struct ServerAppConfig {
 
 impl ServerAppConfig {
     pub fn from_env_and_args() -> Self {
-        let mut port = 5000; //default
-        let mut map_path = crate::common::assets_path::resolve_vrtx_path("assets/maps/default.vrtx")
-            .to_string_lossy()
-            .into_owned();
-        let mut bind_addr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
-        let mut netcode_key_cli: Option<String> = None;
-        let mut protocol_id_cli: Option<u64> = None;
-        let mut allow_unauthenticated = false;
+        Self::from_args(&CliArgs::from_env())
+    }
 
-        let args: Vec<String> = std::env::args().collect();
-        for i in 0..args.len() {
-            if args[i] == "--port" && i + 1 < args.len() {
-                if let Ok(p) = args[i + 1].parse::<u16>() {
-                    port = p;
-                }
-            }
-            if args[i] == "--map" && i + 1 < args.len() {
-                map_path = args[i + 1].clone();
-            }
-            if args[i] == "--bind" && i + 1 < args.len() {
-                if let Ok(ip) = args[i + 1].parse::<IpAddr>() {
-                    bind_addr = ip;
-                }
-            }
-            if args[i] == "--netcode-key" && i + 1 < args.len() {
-                netcode_key_cli = Some(args[i + 1].clone());
-            }
-            if args[i] == "--protocol-id" && i + 1 < args.len() {
-                if let Ok(id) = args[i + 1].parse::<u64>() {
-                    protocol_id_cli = Some(id);
-                }
-            }
-            if args[i] == "--allow-unauthenticated" {
-                allow_unauthenticated = true;
-            }
-        }
+    pub fn from_args(args: &CliArgs) -> Self {
+        let map_path = args.value("--map").map(str::to_string).unwrap_or_else(|| {
+            crate::common::assets_path::resolve_vrtx_path("assets/maps/default.vrtx")
+                .to_string_lossy()
+                .into_owned()
+        });
 
         Self {
-            port,
+            port: args.parsed("--port").unwrap_or(5000),
             map_path,
-            bind_addr,
+            bind_addr: args
+                .parsed("--bind")
+                .unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST)),
             netcode_key: crate::common::net::netcode::netcode_private_key(
-                netcode_key_cli.as_deref(),
+                args.value("--netcode-key"),
             ),
-            protocol_id: crate::common::net::netcode::netcode_protocol_id(protocol_id_cli),
-            allow_unauthenticated,
+            protocol_id: crate::common::net::netcode::netcode_protocol_id(
+                args.parsed("--protocol-id"),
+            ),
+            allow_unauthenticated: args.has("--allow-unauthenticated"),
+        }
+    }
+
+    pub fn into_plugin(self) -> crate::server::ServerPlugin {
+        crate::server::ServerPlugin {
+            map_path: self.map_path,
+            port: self.port,
+            bind_addr: self.bind_addr,
+            netcode_key: self.netcode_key,
+            protocol_id: self.protocol_id,
+            allow_unauthenticated: self.allow_unauthenticated,
         }
     }
 }

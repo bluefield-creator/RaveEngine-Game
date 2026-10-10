@@ -1,7 +1,6 @@
 use crate::app::common::log::setup_app_logging;
 use crate::app::server::config::ServerAppConfig;
 use crate::common::CommonPlugin;
-use crate::server::ServerPlugin;
 use bevy::app::ScheduleRunnerPlugin;
 use bevy::prelude::*;
 use bevy::state::app::StatesPlugin;
@@ -58,14 +57,7 @@ impl RaveServerApp {
         app.add_plugins(StatesPlugin);
         app.add_plugins(TransformPlugin);
         app.add_plugins(CommonPlugin);
-        app.add_plugins(ServerPlugin {
-            map_path: self.config.map_path,
-            port: self.config.port,
-            bind_addr: self.config.bind_addr,
-            netcode_key: self.config.netcode_key,
-            protocol_id: self.config.protocol_id,
-            allow_unauthenticated: self.config.allow_unauthenticated,
-        });
+        app.add_plugins(self.config.into_plugin());
         app.add_systems(Update, check_thread_shutdown);
         app.insert_resource(PlaytestServerEpoch(self.epoch));
         app.run();

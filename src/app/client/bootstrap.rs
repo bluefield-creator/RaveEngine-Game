@@ -1,7 +1,7 @@
 use crate::app::client::config::ClientAppConfig;
 use crate::app::client::network_boot::{
-    ClientConnectSettings, ClientSpawned, initialize_client, poll_launch_details,
-    trigger_delayed_connect,
+    ClientConnectSettings, ClientSpawned, connect_after_warmup, has_client_ukey,
+    initialize_client, poll_launch_details,
 };
 use crate::app::common::log::setup_app_logging;
 use crate::client::ClientPlugin;
@@ -27,17 +27,7 @@ impl RaveClientApp {
             DefaultPlugins
                 .set(log_plugin)
                 .set(crate::app::common::assets::asset_plugin())
-                .set(bevy::render::RenderPlugin {
-                    render_creation: bevy::render::settings::RenderCreation::Automatic(Box::new(
-                        bevy::render::settings::WgpuSettings {
-                            disabled_features: Some(
-                                bevy::render::settings::WgpuFeatures::TEXTURE_BINDING_ARRAY,
-                            ),
-                            ..default()
-                        },
-                    )),
-                    ..default()
-                }),
+                .set(crate::app::common::render::render_plugin()),
         );
         app.insert_resource(ClientConnectSettings {
             ip: self.config.ip,
@@ -55,8 +45,8 @@ impl RaveClientApp {
         app.add_systems(
             Update,
             (
-                initialize_client,
-                trigger_delayed_connect,
+                initialize_client.run_if(has_client_ukey),
+                connect_after_warmup.run_if(has_client_ukey),
                 poll_launch_details,
             ),
         );
