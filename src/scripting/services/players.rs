@@ -11,10 +11,7 @@ impl LuaUserData for PlayersService {
         });
 
         methods.add_meta_method(LuaMetaMethod::Index, |lua, _, key: mlua::LuaString| {
-            let world_ref = lua
-                .app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
-                .unwrap();
-            let world = unsafe { &*world_ref.0 };
+            let world = unsafe { &*crate::scripting::vm::world_ptr(lua)? };
 
             match key.to_str()?.as_ref() {
                 "ClassName" => Ok(LuaValue::String(lua.create_string("Players")?)),
@@ -31,10 +28,7 @@ impl LuaUserData for PlayersService {
                 }
                 "GetPlayers" => Ok(LuaValue::Function(lua.create_function(
                     move |lua, _: LuaMultiValue| {
-                        let world_ref = lua
-                            .app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
-                            .unwrap();
-                        let world = unsafe { &*world_ref.0 };
+                        let world = unsafe { &*crate::scripting::vm::world_ptr(lua)? };
                         let table = lua.create_table()?;
                         let mut i = 1;
                         for archetype in world.archetypes().iter() {

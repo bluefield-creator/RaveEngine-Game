@@ -51,6 +51,35 @@ impl Default for LocalScript {
     }
 }
 
+pub trait RunnableScript: Component<Mutability = bevy::ecs::component::Mutable> {
+    const KIND: &'static str;
+
+    fn needs_start(&self) -> bool;
+
+    fn start(&mut self) -> String;
+}
+
+macro_rules! impl_runnable_script {
+    ($ty:ty, $kind:literal) => {
+        impl RunnableScript for $ty {
+            const KIND: &'static str = $kind;
+
+            fn needs_start(&self) -> bool {
+                self.enabled && (!self.started || self.code != self.running_code)
+            }
+
+            fn start(&mut self) -> String {
+                self.running_code = self.code.clone();
+                self.started = true;
+                self.code.clone()
+            }
+        }
+    };
+}
+
+impl_runnable_script!(ServerScript, "ServerScript");
+impl_runnable_script!(LocalScript, "LocalScript");
+
 #[derive(Component, Reflect, Default, Clone, Serialize, Deserialize)]
 #[reflect(Component)]
 pub struct ModuleScript {

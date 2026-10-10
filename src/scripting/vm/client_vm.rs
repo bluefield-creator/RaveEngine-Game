@@ -1,22 +1,12 @@
-use super::scheduler::{LuaScheduler, ScriptRegistry};
+use super::ScriptVM;
 use bevy::prelude::*;
 use mlua::prelude::*;
-use std::sync::{Arc, Mutex};
 
-#[derive(Resource)]
-pub struct ClientScriptVM {
-    pub lua: Lua,
-    pub scheduler: Arc<Mutex<LuaScheduler>>,
-    pub registry: Arc<Mutex<ScriptRegistry>>,
-}
+#[derive(Resource, Deref, DerefMut)]
+pub struct ClientScriptVM(pub ScriptVM);
 
 impl ClientScriptVM {
-    pub fn new() -> Self {
-        let vm = crate::scripting::vm::create_vm();
-        Self {
-            lua: vm.lua,
-            scheduler: vm.scheduler,
-            registry: vm.registry,
-        }
+    pub fn new() -> LuaResult<Self> {
+        ScriptVM::new().map(Self)
     }
 }

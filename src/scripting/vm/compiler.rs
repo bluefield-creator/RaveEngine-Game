@@ -10,6 +10,25 @@ pub fn compile_code(lua: &Lua, code: &str, name: &str) -> Result<LuaFunction, ml
     lua.load(code).set_name(name).into_function()
 }
 
+pub fn compile_script(
+    lua: &Lua,
+    code: &str,
+    name: &str,
+    entity: bevy::prelude::Entity,
+) -> Result<LuaFunction, mlua::Error> {
+    let func = compile_code(lua, code, name)?;
+    let meta = lua.create_table()?;
+    meta.set("__index", lua.globals())?;
+    let script_env = lua.create_table()?;
+    script_env.set_metatable(Some(meta))?;
+    script_env.set(
+        "script",
+        crate::scripting::userdata::instance::Instance { entity },
+    )?;
+    func.set_environment(script_env)?;
+    Ok(func)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

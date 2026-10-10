@@ -206,7 +206,10 @@ fn setup_server(mut commands: Commands, settings: Res<ServerSettings>) {
     });
     info!("Server entity spawned and Start trigger dispatched");
 
-    commands.insert_resource(crate::scripting::vm::server_vm::ServerScriptVM::new());
+    match crate::scripting::vm::server_vm::ServerScriptVM::new() {
+        Ok(vm) => commands.insert_resource(vm),
+        Err(e) => error!("Failed to create server script VM: {e}"),
+    }
 
     //spawn the services to replicate to client
     commands.spawn((Name::new("Workspace"),));

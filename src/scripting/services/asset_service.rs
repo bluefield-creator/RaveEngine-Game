@@ -23,10 +23,7 @@ impl LuaUserData for AssetService {
 
         methods.add_method("GetAsset", |lua, _, asset_id: u32| {
             crate::scripting::vm::sandbox::try_spawn_entity(lua)?;
-            let world_ref = lua
-                .app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
-                .unwrap();
-            let world = unsafe { &mut *world_ref.0 };
+            let world = unsafe { &mut *crate::scripting::vm::world_ptr(lua)? };
             let entity = world
                 .spawn((
                     Name::new("Image"),
@@ -44,10 +41,7 @@ impl LuaUserData for AssetService {
 
         methods.add_method("GetMesh", |lua, _, asset_id: u32| {
             crate::scripting::vm::sandbox::try_spawn_entity(lua)?;
-            let world_ref = lua
-                .app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
-                .unwrap();
-            let world = unsafe { &mut *world_ref.0 };
+            let world = unsafe { &mut *crate::scripting::vm::world_ptr(lua)? };
             let entity = world
                 .spawn((
                     Name::new("Mesh"),
@@ -65,10 +59,7 @@ impl LuaUserData for AssetService {
 
         methods.add_method("GetSound", |lua, _, asset_id: u32| {
             crate::scripting::vm::sandbox::try_spawn_entity(lua)?;
-            let world_ref = lua
-                .app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
-                .unwrap();
-            let world = unsafe { &mut *world_ref.0 };
+            let world = unsafe { &mut *crate::scripting::vm::world_ptr(lua)? };
             let entity = world
                 .spawn((
                     Name::new("Sound"),

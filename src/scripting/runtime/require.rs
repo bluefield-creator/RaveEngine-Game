@@ -1,3 +1,4 @@
+use crate::common::core::sync::LockExt;
 use crate::scripting::userdata::instance::Instance;
 use bevy::prelude::*;
 use mlua::prelude::*;
@@ -13,110 +14,49 @@ pub struct ModuleCacheRef(pub Arc<Mutex<ModuleCache>>);
 
 pub fn register_require(lua: &Lua) -> Result<(), mlua::Error> {
     let require_fn = lua.create_function(|lua, value: LuaValue| {
-        let instance = match value {
-            LuaValue::UserData(ref ud) => ud.borrow::<Instance>().map_err(|_| {
-                mlua::Error::RuntimeError(
-                    "require expects an Instance representing a ModuleScript".to_string(),
-                )
-            })?,
-            _ => {
-                return Err(mlua::Error::RuntimeError(
-                    "require expects an Instance representing a ModuleScript".to_string(),
-                ));
-            }
+        let not_a_module = || {
+            mlua::Error::RuntimeError(
+                "require expects an Instance representing a ModuleScript".to_string(),
+            )
+        };
+        let entity = match value {
+            LuaValue::UserData(ref ud) => ud.borrow::<Instance>().map_err(|_| not_a_module())?.entity,
+            _ => return Err(not_a_module()),
         };
 
-        let world_ref = lua
-            .app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
-            .unwrap();
-        let world = unsafe { &*world_ref.0 };
-
-        let module_comp = world
-            .get::<crate::scripting::ecs::ModuleScript>(instance.entity)
+        let world = unsafe { &*crate::scripting::vm::world_ptr(lua)? };
+        let code = world
+            .get::<crate::scripting::ecs::ModuleScript>(entity)
+            .map(|module| module.code.clone())
             .ok_or_else(|| {
                 mlua::Error::RuntimeError("Provided Instance is not a ModuleScript".to_string())
             })?;
 
-        let cache_ref = lua
-            .app_data_ref::<crate::scripting::runtime::require::ModuleCacheRef>()
-            .unwrap();
+        let cache_ref = crate::scripting::vm::app_data::<ModuleCacheRef>(lua)?.0.clone();
         {
-            let mut cache = cache_ref.0.lock().unwrap();
-            if let Some(val) = cache.cached_results.get(&instance.entity) {
+            let mut cache = cache_ref.lock_or_recover();
+            if let Some(val) = cache.cached_results.get(&entity) {
                 return Ok(val.clone());
             }
-            if cache.loading_modules.contains(&instance.entity) {
+            if !cache.loading_modules.insert(entity) {
                 return Err(mlua::Error::RuntimeError(
                     "Cyclic require dependency detected for ModuleScript".to_string(),
                 ));
             }
-            cache.loading_modules.insert(instance.entity);
         }
 
-        let code = module_comp.code.clone();
-        let func = match crate::scripting::vm::compiler::compile_code(
-            lua,
-            &code,
-            &format!("ModuleScript[{}]", instance.entity),
-        ) {
-            Ok(f) => f,
-            Err(e) => {
-                let mut cache = cache_ref.0.lock().unwrap();
-                cache.loading_modules.remove(&instance.entity);
-                return Err(e);
-            }
-        };
+        let chunk_name = format!("ModuleScript[{entity}]");
+        let result =
+            crate::scripting::vm::compiler::compile_script(lua, &code, &chunk_name, entity)
+                .and_then(|func| {
+                    crate::scripting::vm::sandbox::set_caller_frame(lua, chunk_name, None);
+                    func.call::<LuaValue>(Instance { entity })
+                });
 
-        let (meta, script_env) = match (lua.create_table(), lua.create_table()) {
-            (Ok(m), Ok(t)) => (m, t),
-            (Err(e), _) | (_, Err(e)) => {
-                let mut cache = cache_ref.0.lock().unwrap();
-                cache.loading_modules.remove(&instance.entity);
-                return Err(e);
-            }
-        };
-        if let Err(e) = meta
-            .set("__index", lua.globals())
-            .and_then(|_| script_env.set_metatable(Some(meta)))
-            .and_then(|_| {
-                script_env.set(
-                    "script",
-                    Instance {
-                        entity: instance.entity,
-                    },
-                )
-            })
-            .and_then(|_| func.set_environment(script_env))
-        {
-            let mut cache = cache_ref.0.lock().unwrap();
-            cache.loading_modules.remove(&instance.entity);
-            return Err(e);
-        }
-
-        let res = {
-            crate::scripting::vm::sandbox::set_caller_frame(
-                lua,
-                format!("ModuleScript[{}]", instance.entity),
-                None,
-            );
-            match func.call::<LuaValue>(Instance {
-                entity: instance.entity,
-            }) {
-                Ok(v) => v,
-                Err(e) => {
-                    let mut cache = cache_ref.0.lock().unwrap();
-                    cache.loading_modules.remove(&instance.entity);
-                    return Err(e);
-                }
-            }
-        };
-
-        {
-            let mut cache = cache_ref.0.lock().unwrap();
-            cache.loading_modules.remove(&instance.entity);
-            cache.cached_results.insert(instance.entity, res.clone());
-        }
-
+        let mut cache = cache_ref.lock_or_recover();
+        cache.loading_modules.remove(&entity);
+        let res = result?;
+        cache.cached_results.insert(entity, res.clone());
         Ok(res)
     })?;
 

@@ -1,3 +1,4 @@
+use crate::common::core::sync::LockExt;
 use bevy::log::*;
 use bevy::prelude::{Entity, Resource, World};
 use mlua::prelude::*;
@@ -46,7 +47,42 @@ pub fn yielded_to_wake(yielded: LuaValue, now: Instant) -> Option<Instant> {
     }
 }
 
+pub fn resume_and_schedule(
+    lua: &Lua,
+    scheduler: &Mutex<LuaScheduler>,
+    thread: LuaThread,
+    arg: impl IntoLuaMulti,
+    source: String,
+    line: Option<u32>,
+    callback_key: Option<&Arc<mlua::RegistryKey>>,
+) -> LuaResult<()> {
+    crate::scripting::vm::sandbox::reset_tick_budgets(lua);
+    crate::scripting::vm::sandbox::set_caller_frame(lua, source.clone(), line);
+    let yielded = thread.resume::<LuaValue>(arg)?;
+    if thread.status() != LuaThreadStatus::Resumable {
+        return Ok(());
+    }
+    let wake_time = yielded_to_wake(yielded, Instant::now());
+    let mut sched = scheduler.lock_or_recover();
+    if let Ok(thread_key) = lua.create_registry_value(thread) {
+        if let Some(key) = callback_key {
+            sched.active_callbacks.insert(key.clone());
+        }
+        sched.tasks.push(LuaTask {
+            thread_key,
+            wake_time,
+            callback_key: callback_key.cloned(),
+            source,
+        });
+    }
+    Ok(())
+}
+
 impl LuaScheduler {
+    pub fn has_capacity(&self) -> bool {
+        self.tasks.len() < crate::scripting::vm::sandbox::MAX_PENDING_TASKS
+    }
+
     pub fn new() -> Self {
         Self {
             tasks: Vec::new(),
@@ -76,7 +112,7 @@ impl LuaScheduler {
 }
 
 pub fn scheduler_has_work(scheduler: &Arc<Mutex<LuaScheduler>>) -> bool {
-    let sched = scheduler.lock().unwrap();
+    let sched = scheduler.lock_or_recover();
     !sched.tasks.is_empty() || !sched.deferred.is_empty()
 }
 
@@ -84,7 +120,7 @@ pub fn run_scheduler_tick(scheduler: &Arc<Mutex<LuaScheduler>>, lua: &Lua) {
     let now = Instant::now();
     let mut ready = Vec::new();
     {
-        let mut sched = scheduler.lock().unwrap();
+        let mut sched = scheduler.lock_or_recover();
         if sched.tasks.is_empty() && sched.deferred.is_empty() {
             return;
         }
@@ -125,14 +161,14 @@ pub fn run_scheduler_tick(scheduler: &Arc<Mutex<LuaScheduler>>, lua: &Lua) {
     }
 
     if !requeue.is_empty() {
-        let mut sched = scheduler.lock().unwrap();
+        let mut sched = scheduler.lock_or_recover();
         sched.tasks.append(&mut requeue);
     }
 }
 
 fn finish_callback_task(scheduler: &Arc<Mutex<LuaScheduler>>, task: &LuaTask) {
     if let Some(callback_key) = &task.callback_key {
-        let mut sched = scheduler.lock().unwrap();
+        let mut sched = scheduler.lock_or_recover();
         sched.active_callbacks.remove(callback_key);
     }
 }
@@ -140,7 +176,7 @@ fn finish_callback_task(scheduler: &Arc<Mutex<LuaScheduler>>, task: &LuaTask) {
 pub fn sweep_stale_connections(lua: &Lua, registry: &Arc<Mutex<ScriptRegistry>>, world: &World) {
     let mut dead_keys = Vec::new();
     {
-        let mut registry = registry.lock().unwrap();
+        let mut registry = registry.lock_or_recover();
         let stale: Vec<(Entity, &'static str)> = registry
             .connections
             .keys()
@@ -246,7 +282,7 @@ mod tests {
         run_scheduler_tick(&scheduler, &lua);
 
         assert!(lua.globals().get::<bool>("completed").unwrap());
-        assert!(scheduler.lock().unwrap().tasks.is_empty());
+        assert!(scheduler.lock_or_recover().tasks.is_empty());
     }
 
     #[test]
@@ -268,7 +304,7 @@ mod tests {
         run_scheduler_tick(&scheduler, &lua);
 
         {
-            let sched = scheduler.lock().unwrap();
+            let sched = scheduler.lock_or_recover();
             assert_eq!(sched.tasks.len(), 1);
             let requeued = &sched.tasks[0];
             assert!(requeued.wake_time.is_some());
@@ -277,7 +313,7 @@ mod tests {
 
         std::thread::sleep(Duration::from_millis(20));
         run_scheduler_tick(&scheduler, &lua);
-        assert!(scheduler.lock().unwrap().tasks.is_empty());
+        assert!(scheduler.lock_or_recover().tasks.is_empty());
     }
 
     #[test]
@@ -300,7 +336,7 @@ mod tests {
         run_scheduler_tick(&scheduler, &lua);
 
         assert!(lua.globals().get::<bool>("ok_ran").unwrap());
-        assert!(scheduler.lock().unwrap().tasks.is_empty());
+        assert!(scheduler.lock_or_recover().tasks.is_empty());
     }
 
     #[test]
@@ -325,7 +361,7 @@ mod tests {
         run_scheduler_tick(&scheduler, &lua);
 
         assert!(lua.globals().get::<bool>("finished").unwrap());
-        assert!(scheduler.lock().unwrap().active_callbacks.is_empty());
+        assert!(scheduler.lock_or_recover().active_callbacks.is_empty());
     }
 
     #[test]
@@ -343,7 +379,7 @@ mod tests {
 
         run_scheduler_tick(&scheduler, &lua);
         assert!(lua.globals().get::<bool>("deferred_ran").unwrap());
-        assert!(scheduler.lock().unwrap().deferred.is_empty());
+        assert!(scheduler.lock_or_recover().deferred.is_empty());
     }
 
     #[test]
@@ -360,7 +396,7 @@ mod tests {
         let alive_key = Arc::new(lua.create_registry_value("alive-cb").unwrap());
         let dead_key = Arc::new(lua.create_registry_value("dead-cb").unwrap());
         {
-            let mut reg = registry.lock().unwrap();
+            let mut reg = registry.lock_or_recover();
             reg.connections
                 .insert((alive, "Touched"), vec![alive_key.clone()]);
             reg.connections.insert((dead, "Touched"), vec![dead_key]);
@@ -368,7 +404,7 @@ mod tests {
 
         sweep_stale_connections(&lua, &registry, &world);
 
-        let reg = registry.lock().unwrap();
+        let reg = registry.lock_or_recover();
         assert!(reg.connections.contains_key(&(alive, "Touched")));
         assert!(!reg.connections.contains_key(&(dead, "Touched")));
     }
@@ -385,14 +421,14 @@ mod tests {
         let key = Arc::new(lua.create_registry_value("cb").unwrap());
         let table_handle = key.clone();
         {
-            let mut reg = registry.lock().unwrap();
+            let mut reg = registry.lock_or_recover();
             reg.connections.insert((entity, "Touched"), vec![key]);
         }
 
         world.entity_mut(entity).despawn();
         sweep_stale_connections(&lua, &registry, &world);
 
-        assert!(registry.lock().unwrap().connections.is_empty());
+        assert!(registry.lock_or_recover().connections.is_empty());
         let _ = table_handle;
         assert!(lua.registry_value::<String>(&table_handle).is_ok());
     }

@@ -1,5 +1,5 @@
 use crate::scripting::vm::scheduler::{LuaTask, yielded_to_wake};
-use crate::scripting::vm::server_vm::{ServerScriptVM, WorldRef};
+use crate::scripting::vm::server_vm::ServerScriptVM;
 use bevy::prelude::*;
 use mlua::prelude::*;
 use std::time::{Duration, Instant};
@@ -11,8 +11,8 @@ pub fn test_world() -> World {
 }
 
 pub fn test_vm(world: &mut World) -> ServerScriptVM {
-    let vm = ServerScriptVM::new();
-    vm.lua.set_app_data(WorldRef(world as *mut World));
+    let vm = ServerScriptVM::new().unwrap();
+    vm.attach_world(world);
     vm
 }
 

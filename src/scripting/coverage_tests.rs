@@ -24,8 +24,8 @@ fn script_app() -> App {
     app.add_plugins(ScriptingPlugin);
     app.world_mut()
         .insert_resource(bevy::time::Time::<()>::default());
-    app.world_mut().insert_resource(ServerScriptVM::new());
-    app.world_mut().insert_resource(ClientScriptVM::new());
+    app.world_mut().insert_resource(ServerScriptVM::new().unwrap());
+    app.world_mut().insert_resource(ClientScriptVM::new().unwrap());
     app
 }
 

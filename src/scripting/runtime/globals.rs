@@ -1,10 +1,11 @@
+use crate::common::core::sync::LockExt;
 use crate::scripting::userdata::cframe::CFrame;
 use crate::scripting::userdata::color3::Color3;
 use crate::scripting::userdata::vector3::Vector3;
 use crate::scripting::vm::sandbox::{
-    MAX_PENDING_TASKS, current_caller_frame, set_caller_frame, try_print, try_spawn_entity,
+    MAX_PENDING_TASKS, current_caller_frame, try_print, try_spawn_entity,
 };
-use crate::scripting::vm::scheduler::{LuaTask, SchedulerRef, yielded_to_wake};
+use crate::scripting::vm::scheduler::{LuaTask, SchedulerRef, resume_and_schedule};
 use bevy::prelude::*;
 use mlua::prelude::*;
 
@@ -41,6 +42,12 @@ fn caller_source(lua: &Lua) -> (String, Option<u32>) {
     current_caller_frame(lua)
 }
 
+fn pending_limit_error() -> mlua::Error {
+    mlua::Error::RuntimeError(format!(
+        "too many pending tasks (limit {MAX_PENDING_TASKS})"
+    ))
+}
+
 pub fn setup_globals(lua: &Lua) -> Result<(), mlua::Error> {
     let task_table = lua.create_table()?;
 
@@ -60,36 +67,13 @@ pub fn setup_globals(lua: &Lua) -> Result<(), mlua::Error> {
             }
         };
         let (source, line) = current_caller_frame(lua);
-        {
-            let scheduler_ref = lua.app_data_ref::<SchedulerRef>().unwrap();
-            let scheduler = scheduler_ref.0.lock().unwrap();
-            if scheduler.tasks.len() >= MAX_PENDING_TASKS {
-                return Err(mlua::Error::RuntimeError(format!(
-                    "too many pending tasks (limit {MAX_PENDING_TASKS})"
-                )));
-            }
+        let scheduler = crate::scripting::vm::app_data::<SchedulerRef>(lua)?.0.clone();
+        if !scheduler.lock_or_recover().has_capacity() {
+            return Err(pending_limit_error());
         }
-        crate::scripting::vm::sandbox::reset_tick_budgets(lua);
-        set_caller_frame(lua, source.clone(), line);
-        match thread.resume::<LuaValue>(()) {
-            Ok(yielded) => {
-                if thread.status() == LuaThreadStatus::Resumable {
-                    let scheduler_ref = lua.app_data_ref::<SchedulerRef>().unwrap();
-                    let mut scheduler = scheduler_ref.0.lock().unwrap();
-                    if let Ok(key) = lua.create_registry_value(thread) {
-                        scheduler.tasks.push(LuaTask {
-                            thread_key: key,
-                            wake_time: yielded_to_wake(yielded, std::time::Instant::now()),
-                            callback_key: None,
-                            source,
-                        });
-                    }
-                }
-            }
-            Err(e) => {
-                error!("Luau task.spawn error: {}", e);
-                crate::scripting::output::push_error("task.spawn", e.to_string());
-            }
+        if let Err(e) = resume_and_schedule(lua, &scheduler, thread, (), source, line, None) {
+            error!("Luau task.spawn error: {}", e);
+            crate::scripting::output::push_error("task.spawn", e.to_string());
         }
         Ok(())
     })?;
@@ -97,12 +81,10 @@ pub fn setup_globals(lua: &Lua) -> Result<(), mlua::Error> {
 
     let defer_fn = lua.create_function(|lua, f: LuaFunction| {
         let (source, _) = current_caller_frame(lua);
-        let scheduler_ref = lua.app_data_ref::<SchedulerRef>().unwrap();
-        let mut scheduler = scheduler_ref.0.lock().unwrap();
+        let scheduler_ref = crate::scripting::vm::app_data::<SchedulerRef>(lua)?;
+        let mut scheduler = scheduler_ref.0.lock_or_recover();
         if scheduler.tasks.len() + scheduler.deferred.len() >= MAX_PENDING_TASKS {
-            return Err(mlua::Error::RuntimeError(format!(
-                "too many pending tasks (limit {MAX_PENDING_TASKS})"
-            )));
+            return Err(pending_limit_error());
         }
         let thread = lua.create_thread(f)?;
         let key = lua.create_registry_value(thread)?;
@@ -113,12 +95,10 @@ pub fn setup_globals(lua: &Lua) -> Result<(), mlua::Error> {
 
     let delay_fn = lua.create_function(|lua, (seconds, f): (f32, LuaFunction)| {
         let (source, _) = current_caller_frame(lua);
-        let scheduler_ref = lua.app_data_ref::<SchedulerRef>().unwrap();
-        let mut scheduler = scheduler_ref.0.lock().unwrap();
-        if scheduler.tasks.len() >= MAX_PENDING_TASKS {
-            return Err(mlua::Error::RuntimeError(format!(
-                "too many pending tasks (limit {MAX_PENDING_TASKS})"
-            )));
+        let scheduler_ref = crate::scripting::vm::app_data::<SchedulerRef>(lua)?;
+        let mut scheduler = scheduler_ref.0.lock_or_recover();
+        if !scheduler.has_capacity() {
+            return Err(pending_limit_error());
         }
         let thread = lua.create_thread(f)?;
         let key = lua.create_registry_value(thread)?;
@@ -310,8 +290,7 @@ pub fn setup_globals(lua: &Lua) -> Result<(), mlua::Error> {
 
         try_spawn_entity(lua)?;
 
-        let world_ref = lua.app_data_ref::<crate::scripting::vm::server_vm::WorldRef>().unwrap();
-        let world = unsafe { &mut *world_ref.0 };
+        let world = unsafe { &mut *crate::scripting::vm::world_ptr(lua)? };
         let id = match class_name.as_str() {
             "Part" => {
                 let cmd = world.spawn((
@@ -543,8 +522,7 @@ mod tests {
         let mut world = test_world();
         let vm = test_vm(&mut world);
         let before = crate::scripting::output::buffer()
-            .lock()
-            .unwrap()
+            .lock_or_recover()
             .entries
             .len();
 
@@ -559,7 +537,7 @@ mod tests {
         "#,
         );
 
-        let buf = crate::scripting::output::buffer().lock().unwrap();
+        let buf = crate::scripting::output::buffer().lock_or_recover();
         let new: Vec<_> = buf.entries.iter().skip(before).collect();
         let describe = || {
             new.iter()

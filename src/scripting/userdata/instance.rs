@@ -1,3 +1,4 @@
+use crate::common::core::sync::LockExt;
 use super::cframe::CFrame;
 use super::color3::Color3;
 use super::vector3::Vector3;
@@ -177,10 +178,7 @@ impl LuaUserData for Instance {
         });
 
         methods.add_meta_method(LuaMetaMethod::ToString, |lua, this, _: ()| {
-            let world_ref = lua
-                .app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
-                .unwrap();
-            let world = unsafe { &*world_ref.0 };
+            let world = unsafe { &*crate::scripting::vm::world_ptr(lua)? };
             let name = world
                 .get::<Name>(this.entity)
                 .map(|n| n.as_str().to_string())
@@ -189,10 +187,7 @@ impl LuaUserData for Instance {
         });
 
         methods.add_meta_method(LuaMetaMethod::Index, |lua, this, key: mlua::LuaString| {
-            let world_ref = lua
-                .app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
-                .unwrap();
-            let world = unsafe { &mut *world_ref.0 };
+            let world = unsafe { &mut *crate::scripting::vm::world_ptr(lua)? };
 
             if world.get_entity(this.entity).is_err() && key.to_str()?.as_ref() != "Destroy" {
                 return Err(mlua::Error::RuntimeError(
@@ -473,10 +468,7 @@ impl LuaUserData for Instance {
                     let entity = this.entity;
                     Ok(LuaValue::Function(lua.create_function(
                         move |lua, _: LuaMultiValue| {
-                            let world_ref = lua
-                                .app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
-                                .unwrap();
-                            let world = unsafe { &*world_ref.0 };
+                            let world = unsafe { &*crate::scripting::vm::world_ptr(lua)? };
                             let children = direct_children(world, entity);
                             let table = lua.create_table()?;
                             for (i, child) in children.into_iter().enumerate() {
@@ -490,10 +482,7 @@ impl LuaUserData for Instance {
                     let entity = this.entity;
                     Ok(LuaValue::Function(lua.create_function(
                         move |lua, _: LuaMultiValue| {
-                            let world_ref = lua
-                                .app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
-                                .unwrap();
-                            let world = unsafe { &*world_ref.0 };
+                            let world = unsafe { &*crate::scripting::vm::world_ptr(lua)? };
                             let all = descendants(world, entity);
                             let table = lua.create_table()?;
                             for (i, child) in all.into_iter().enumerate() {
@@ -523,10 +512,7 @@ impl LuaUserData for Instance {
                             let want = last_string_arg(&args).ok_or_else(|| {
                                 mlua::Error::RuntimeError("IsA expects a class name".to_string())
                             })?;
-                            let world_ref = lua
-                                .app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
-                                .unwrap();
-                            let world = unsafe { &*world_ref.0 };
+                            let world = unsafe { &*crate::scripting::vm::world_ptr(lua)? };
                             let class = class_name_of(world, entity);
                             let is = want == "Instance"
                                 || class == want
@@ -545,10 +531,7 @@ impl LuaUserData for Instance {
                                 )
                             })?;
                             let recursive = last_boolean_arg(&args).unwrap_or(false);
-                            let world_ref = lua
-                                .app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
-                                .unwrap();
-                            let world = unsafe { &*world_ref.0 };
+                            let world = unsafe { &*crate::scripting::vm::world_ptr(lua)? };
                             let search: Vec<Entity> = if recursive {
                                 descendants(world, entity)
                             } else {
@@ -578,10 +561,7 @@ impl LuaUserData for Instance {
                                 )
                             })?;
                             let recursive = last_boolean_arg(&args).unwrap_or(false);
-                            let world_ref = lua
-                                .app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
-                                .unwrap();
-                            let world = unsafe { &*world_ref.0 };
+                            let world = unsafe { &*crate::scripting::vm::world_ptr(lua)? };
                             let search: Vec<Entity> = if recursive {
                                 descendants(world, entity)
                             } else {
@@ -606,10 +586,7 @@ impl LuaUserData for Instance {
                     Ok(LuaValue::Function(lua.create_function(
                         move |lua, _: LuaMultiValue| {
                             crate::scripting::vm::sandbox::try_spawn_entity(lua)?;
-                            let world_ref = lua
-                                .app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
-                                .unwrap();
-                            let world = unsafe { &mut *world_ref.0 };
+                            let world = unsafe { &mut *crate::scripting::vm::world_ptr(lua)? };
                             if world.get_entity(entity).is_err() {
                                 return Err(mlua::Error::RuntimeError(
                                     "Instance to clone has been destroyed".to_string(),
@@ -733,10 +710,7 @@ impl LuaUserData for Instance {
                     let entity = this.entity;
                     Ok(LuaValue::Function(lua.create_function(
                         move |lua, _: LuaMultiValue| {
-                            let world_ref = lua
-                                .app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
-                                .unwrap();
-                            let world = unsafe { &mut *world_ref.0 };
+                            let world = unsafe { &mut *crate::scripting::vm::world_ptr(lua)? };
                             if world.get_entity(entity).is_ok() {
                                 world.entity_mut(entity).despawn();
                             }
@@ -748,10 +722,7 @@ impl LuaUserData for Instance {
                     let entity = this.entity;
                     Ok(LuaValue::Function(lua.create_function(
                         move |lua, _: LuaMultiValue| {
-                            let world_ref = lua
-                                .app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
-                                .unwrap();
-                            let world = unsafe { &mut *world_ref.0 };
+                            let world = unsafe { &mut *crate::scripting::vm::world_ptr(lua)? };
                             if let Some(mut sound) = world
                                 .get_mut::<crate::common::game::assets::components::Sound>(entity)
                             {
@@ -765,10 +736,7 @@ impl LuaUserData for Instance {
                     let entity = this.entity;
                     Ok(LuaValue::Function(lua.create_function(
                         move |lua, _: LuaMultiValue| {
-                            let world_ref = lua
-                                .app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
-                                .unwrap();
-                            let world = unsafe { &mut *world_ref.0 };
+                            let world = unsafe { &mut *crate::scripting::vm::world_ptr(lua)? };
                             if let Some(mut sound) = world
                                 .get_mut::<crate::common::game::assets::components::Sound>(entity)
                             {
@@ -783,8 +751,7 @@ impl LuaUserData for Instance {
         });
 
         methods.add_meta_method(LuaMetaMethod::NewIndex, |lua, this, (key, value): (mlua::LuaString, LuaValue)| {
-            let world_ref = lua.app_data_ref::<crate::scripting::vm::server_vm::WorldRef>().unwrap();
-            let world = unsafe { &mut *world_ref.0 };
+            let world = unsafe { &mut *crate::scripting::vm::world_ptr(lua)? };
 
             if world.get_entity(this.entity).is_err() {
                 return Err(mlua::Error::RuntimeError("Instance has been destroyed".to_string()));
@@ -1211,8 +1178,8 @@ pub struct RBXScriptSignal {
 impl LuaUserData for RBXScriptSignal {
     fn add_methods<M: LuaUserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("Connect", |lua, this, callback: LuaFunction| {
-            let registry_ref = lua.app_data_ref::<ScriptRegistryRef>().unwrap();
-            let mut registry = registry_ref.0.lock().unwrap();
+            let registry_ref = crate::scripting::vm::app_data::<ScriptRegistryRef>(lua)?.clone();
+            let mut registry = registry_ref.0.lock_or_recover();
             let connections = registry
                 .connections
                 .entry((this.entity, this.name))
@@ -1230,28 +1197,28 @@ impl LuaUserData for RBXScriptSignal {
             let conn_table = lua.create_table()?;
             let entity = this.entity;
             let name = this.name;
-            let registry_ref_clone = (*registry_ref).clone();
+            let registry_ref_clone = registry_ref.clone();
             let mut owned_key = Some(key);
             conn_table.set(
                 "Disconnect",
                 lua.create_function_mut(move |lua, _: ()| {
-                    let mut registry = registry_ref_clone.0.lock().unwrap();
-                    let mut to_remove = None;
-                    if let Some(conns) = registry.connections.get_mut(&(entity, name)) {
-                        conns.retain(|k| !Arc::ptr_eq(k, owned_key.as_ref().unwrap()));
-                        if conns.is_empty() {
-                            registry.connections.remove(&(entity, name));
+                    let Some(key) = owned_key.take() else {
+                        return Ok(());
+                    };
+                    {
+                        let mut registry = registry_ref_clone.0.lock_or_recover();
+                        if let Some(conns) = registry.connections.get_mut(&(entity, name)) {
+                            conns.retain(|k| !Arc::ptr_eq(k, &key));
+                            if conns.is_empty() {
+                                registry.connections.remove(&(entity, name));
+                            }
                         }
                     }
-                    if let Some(k) = owned_key.take() {
-                        match Arc::try_unwrap(k) {
-                            Ok(orphaned) => to_remove = Some(orphaned),
-                            Err(arc) => owned_key = Some(arc),
+                    match Arc::try_unwrap(key) {
+                        Ok(orphaned) => {
+                            let _ = lua.remove_registry_value(orphaned);
                         }
-                    }
-                    drop(registry);
-                    if let Some(orphaned) = to_remove {
-                        let _ = lua.remove_registry_value(orphaned);
+                        Err(arc) => owned_key = Some(arc),
                     }
                     Ok(())
                 })?,
@@ -1284,8 +1251,7 @@ mod tests {
         name: &'static str,
     ) -> usize {
         vm.registry
-            .lock()
-            .unwrap()
+            .lock_or_recover()
             .connections
             .get(&(entity, name))
             .map_or(0, |conns| conns.len())
@@ -1913,8 +1879,7 @@ mod tests {
         assert_eq!(count_connections(&vm, part, "Touched"), 0);
         assert!(
             !vm.registry
-                .lock()
-                .unwrap()
+                .lock_or_recover()
                 .connections
                 .contains_key(&(part, "Touched")),
             "empty connection lists must be removed"

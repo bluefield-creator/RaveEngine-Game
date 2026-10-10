@@ -171,7 +171,10 @@ fn setup_physics_initializer(
     egui_global_settings.auto_create_primary_context = false;
 
     commands.spawn(ClientPhysicsInitializer);
-    commands.insert_resource(crate::scripting::vm::client_vm::ClientScriptVM::new());
+    match crate::scripting::vm::client_vm::ClientScriptVM::new() {
+        Ok(vm) => commands.insert_resource(vm),
+        Err(e) => error!("Failed to create client script VM: {e}"),
+    }
 
     let startup_msaa = graphics_settings
         .as_ref()

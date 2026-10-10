@@ -47,10 +47,7 @@ impl LuaUserData for LightingService {
         });
 
         methods.add_meta_method(LuaMetaMethod::Index, |lua, _, key: mlua::LuaString| {
-            let world_ref = lua
-                .app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
-                .unwrap();
-            let world = unsafe { &*world_ref.0 };
+            let world = unsafe { &*crate::scripting::vm::world_ptr(lua)? };
             let config = config_ref(world);
 
             match key.to_str()?.as_ref() {
@@ -128,10 +125,7 @@ impl LuaUserData for LightingService {
         methods.add_meta_method(
             LuaMetaMethod::NewIndex,
             |lua, _, (key, value): (mlua::LuaString, LuaValue)| {
-                let world_ref = lua
-                    .app_data_ref::<crate::scripting::vm::server_vm::WorldRef>()
-                    .unwrap();
-                let world = unsafe { &mut *world_ref.0 };
+                let world = unsafe { &mut *crate::scripting::vm::world_ptr(lua)? };
 
                 match key.to_str()?.as_ref() {
                     "ClockTime" => {
