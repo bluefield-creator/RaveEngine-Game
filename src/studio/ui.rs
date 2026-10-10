@@ -24,18 +24,18 @@ pub use resources::{
 pub use visuals::configure_visuals;
 
 pub(crate) fn line_numbers(cache: &mut Option<(usize, String)>, total_lines: usize) -> &str {
-    if cache
-        .as_ref()
-        .map_or(true, |cached| cached.0 != total_lines)
-    {
+    if cache.as_ref().is_some_and(|cached| cached.0 != total_lines) {
+        *cache = None;
+    }
+    let (_, text) = cache.get_or_insert_with(|| {
         let max_digit_width = total_lines.to_string().len();
         let mut text = String::with_capacity(total_lines * (max_digit_width + 1));
         for line in 1..=total_lines {
             text.push_str(&format!("{:>width$}\n", line, width = max_digit_width));
         }
-        *cache = Some((total_lines, text));
-    }
-    cache.as_ref().unwrap().1.as_str()
+        (total_lines, text)
+    });
+    text.as_str()
 }
 
 #[derive(SystemParam)]

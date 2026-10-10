@@ -62,10 +62,11 @@ fn ensure_cache(
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
     ui_assets: Option<&crate::studio::ui::assets::StudioUiAssets>,
-) -> bool {
-    if cache.mesh.is_none() {
-        cache.mesh = Some(meshes.add(make_quad()));
-    }
+) -> Option<(Handle<Mesh>, Handle<StandardMaterial>)> {
+    let mesh = cache
+        .mesh
+        .get_or_insert_with(|| meshes.add(make_quad()))
+        .clone();
     if let Some(ui) = ui_assets {
         let changed = cache.icon.as_ref() != Some(&ui.sound_icon);
         if changed || cache.material.is_none() {
@@ -82,7 +83,7 @@ fn ensure_cache(
             cache.icon = Some(ui.sound_icon.clone());
         }
     }
-    cache.mesh.is_some() && cache.material.is_some()
+    Some((mesh, cache.material.clone()?))
 }
 
 pub fn ensure_spatial_sound_icons(
@@ -96,11 +97,11 @@ pub fn ensure_spatial_sound_icons(
     orphan_query: Query<(Entity, &ChildOf), With<SpatialSoundBillboard>>,
     sound_lookup: Query<(), With<crate::common::game::assets::components::Sound>>,
 ) {
-    if !ensure_cache(&mut cache, &mut meshes, &mut materials, ui_assets.as_deref()) {
+    let Some((mesh_handle, material_handle)) =
+        ensure_cache(&mut cache, &mut meshes, &mut materials, ui_assets.as_deref())
+    else {
         return;
-    }
-    let mesh_handle = cache.mesh.clone().unwrap();
-    let material_handle = cache.material.clone().unwrap();
+    };
     for (entity, sound, children_opt) in &sounds {
         if sound.spatial {
             let mut has_icon = false;

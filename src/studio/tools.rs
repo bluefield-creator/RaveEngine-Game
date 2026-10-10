@@ -1193,17 +1193,20 @@ pub fn handle_drag(
     let axis_tip_screen = camera
         .world_to_viewport(camera_transform, center_world + axis_world)
         .ok();
-    let axis_screen = match (center_screen, axis_tip_screen) {
-        (Some(center_screen), Some(axis_tip_screen)) => Some(axis_tip_screen - center_screen),
+    let screen_axis = match (center_screen, axis_tip_screen) {
+        (Some(center_screen), Some(axis_tip_screen)) => {
+            Some((center_screen, axis_tip_screen - center_screen))
+        }
         _ => None,
     };
+    let axis_screen = screen_axis.map(|(_, axis)| axis);
 
     if gizmo.tool == ToolState::Rotate {
-        if let Some(axis_screen) = axis_screen {
+        if let Some((center_screen, axis_screen)) = screen_axis {
             let axis_len = axis_screen.length();
             if axis_len > 2.0 {
                 let axis_dir = axis_screen / axis_len;
-                let to_cursor = cursor_pos - center_screen.unwrap();
+                let to_cursor = cursor_pos - center_screen;
                 let angle = (axis_dir.x * to_cursor.y - axis_dir.y * to_cursor.x)
                     .atan2(axis_dir.dot(to_cursor));
                 let last_angle = *drag_state.start_rotation_angle.get_or_insert(angle);

@@ -200,6 +200,20 @@ fn accessor_byte_stride(acc: &GltfAccessor, bv: &GltfBufferView) -> usize {
     }
 }
 
+fn accessor_view(doc: &GltfJson, index: usize) -> Option<(&GltfAccessor, &GltfBufferView)> {
+    let acc = doc.accessors.get(index)?;
+    let bv = doc.buffer_views.get(acc.buffer_view?)?;
+    Some((acc, bv))
+}
+
+fn attribute_view<'a>(
+    doc: &'a GltfJson,
+    prim: &GltfPrimitive,
+    name: &str,
+) -> Option<(&'a GltfAccessor, &'a GltfBufferView)> {
+    accessor_view(doc, *prim.attributes.get(name)?)
+}
+
 fn read_vec3(bin: &[u8], acc: &GltfAccessor, bv: &GltfBufferView) -> Vec<[f32; 3]> {
     if bv.buffer != 0 {
         return Vec::new();
@@ -347,16 +361,7 @@ pub fn load_glb(bytes: &[u8]) -> Result<LoadedMeshAsset, String> {
                     continue;
                 }
             }
-            let Some(&pos_idx) = prim.attributes.get("POSITION") else {
-                continue;
-            };
-            let Some(pos_acc) = doc.accessors.get(pos_idx) else {
-                continue;
-            };
-            let Some(pos_bv_idx) = pos_acc.buffer_view else {
-                continue;
-            };
-            let Some(pos_bv) = doc.buffer_views.get(pos_bv_idx) else {
+            let Some((pos_acc, pos_bv)) = attribute_view(&doc, prim, "POSITION") else {
                 continue;
             };
             let positions = read_vec3(&bin, pos_acc, pos_bv);
@@ -364,43 +369,16 @@ pub fn load_glb(bytes: &[u8]) -> Result<LoadedMeshAsset, String> {
                 continue;
             }
 
-            let normals = prim
-                .attributes
-                .get("NORMAL")
-                .and_then(|&n_idx| doc.accessors.get(n_idx))
-                .and_then(|acc| {
-                    acc.buffer_view
-                        .and_then(|bv_idx| doc.buffer_views.get(bv_idx))
-                })
-                .map(|bv| {
-                    let acc = &doc.accessors[*prim.attributes.get("NORMAL").unwrap()];
-                    read_vec3(&bin, acc, bv)
-                })
+            let normals = attribute_view(&doc, prim, "NORMAL")
+                .map(|(acc, bv)| read_vec3(&bin, acc, bv))
                 .unwrap_or_default();
-
-            let uvs = prim
-                .attributes
-                .get("TEXCOORD_0")
-                .and_then(|&t_idx| doc.accessors.get(t_idx))
-                .and_then(|acc| {
-                    acc.buffer_view
-                        .and_then(|bv_idx| doc.buffer_views.get(bv_idx))
-                })
-                .map(|bv| {
-                    let acc = &doc.accessors[*prim.attributes.get("TEXCOORD_0").unwrap()];
-                    read_vec2(&bin, acc, bv)
-                })
+            let uvs = attribute_view(&doc, prim, "TEXCOORD_0")
+                .map(|(acc, bv)| read_vec2(&bin, acc, bv))
                 .unwrap_or_default();
 
             let indices: Vec<u32> = match prim.indices {
                 Some(idx) => {
-                    let Some(acc) = doc.accessors.get(idx) else {
-                        continue;
-                    };
-                    let Some(bv) = acc
-                        .buffer_view
-                        .and_then(|bv_idx| doc.buffer_views.get(bv_idx))
-                    else {
+                    let Some((acc, bv)) = accessor_view(&doc, idx) else {
                         continue;
                     };
                     read_indices(&bin, acc, bv)

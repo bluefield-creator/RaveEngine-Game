@@ -108,10 +108,13 @@ fn prepare_uniforms_bind_group(
     let bind_group_uniforms = match cached_bind_group.as_ref() {
         Some(bind_group) => bind_group.clone(),
         None => {
+            let Some(binding) = clouds_uniform_buffer.buffer.binding() else {
+                return;
+            };
             let bind_group = render_device.create_bind_group(
                 None,
                 &pipeline_cache.get_bind_group_layout(&pipeline.uniform_bind_group_layout),
-                &BindGroupEntries::single(clouds_uniform_buffer.buffer.binding().unwrap().clone()),
+                &BindGroupEntries::single(binding.clone()),
             );
             *cached_bind_group = Some(bind_group.clone());
             bind_group

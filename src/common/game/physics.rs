@@ -199,41 +199,29 @@ fn attach_brick_physics(
             (true, 0.0, true, 0.3, 1.0, 1.0)
         };
 
-    let mut collider = if is_brick {
+    let brick_collider = || {
         let shape = shape_opt
             .map(|s| s.shape)
             .unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
-        Some(
-            crate::common::game::bricks::brick_collider_for_shape(shape),
-        )
-    } else if let Some(mesh_comp) = mesh_comp_opt {
-        let Some(cache) = collider_cache else {
-            return false;
-        };
-        match cache
-            .colliders
-            .get(&(mesh_comp.asset_id, mesh_comp.normalize))
-        {
-            Some(collider) => Some(collider.clone()),
-            None => return false,
-        }
-    } else if let Some(mesh3d) = mesh3d_opt {
-        match mesh_assets.and_then(|assets| assets.get(mesh3d)) {
-            Some(mesh) => match Collider::trimesh_from_mesh(mesh) {
-                Some(collider) => Some(collider),
-                None => return false,
-            },
-            None => return false,
-        }
-    } else {
-        let shape = shape_opt
-            .map(|s| s.shape)
-            .unwrap_or(crate::common::game::bricks::components::BrickShape::Block);
-        Some(
-            crate::common::game::bricks::brick_collider_for_shape(shape),
-        )
+        crate::common::game::bricks::brick_collider_for_shape(shape)
     };
-    collider.as_mut().unwrap().set_scale(scale, 32);
+    let collider = if is_brick {
+        Some(brick_collider())
+    } else if let Some(mesh_comp) = mesh_comp_opt {
+        collider_cache
+            .and_then(|cache| cache.colliders.get(&(mesh_comp.asset_id, mesh_comp.normalize)))
+            .cloned()
+    } else if let Some(mesh3d) = mesh3d_opt {
+        mesh_assets
+            .and_then(|assets| assets.get(mesh3d))
+            .and_then(Collider::trimesh_from_mesh)
+    } else {
+        Some(brick_collider())
+    };
+    let Some(mut collider) = collider else {
+        return false;
+    };
+    collider.set_scale(scale, 32);
 
     let layers = if player_can_collide {
         CollisionLayers::from_bits(0b0001, 0xFFFF_FFFF)
@@ -251,7 +239,7 @@ fn attach_brick_physics(
         commands.entity(entity).insert((
             transform,
             client_body_type,
-            collider.unwrap(),
+            collider,
             Friction::new(friction),
             Restitution::new(bounciness),
             GravityScale(gravity_scale),
@@ -269,7 +257,7 @@ fn attach_brick_physics(
         commands.entity(entity).insert((
             transform,
             RigidBody::Static,
-            collider.unwrap(),
+            collider,
             Friction::new(friction),
             Restitution::new(0.0),
             layers,

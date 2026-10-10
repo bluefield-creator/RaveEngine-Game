@@ -86,10 +86,9 @@ pub fn draw_entity_context_menu(
         ui.close();
         closed = true;
     }
-    if copiedbuffer.transform.is_some() {
+    if let Some(transform) = copiedbuffer.transform {
         if ui.button("Paste").clicked() {
-            let transform = copiedbuffer.transform.unwrap();
-            let name = copiedbuffer.name.clone().unwrap();
+            let name = copiedbuffer.name.clone().unwrap_or_default();
             let mut newtransform = transform;
             newtransform.translation += Vec3::new(2.0, 0.0, 2.0);
 

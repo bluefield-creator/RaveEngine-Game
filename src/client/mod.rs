@@ -513,19 +513,18 @@ fn predict_local_player_transform(
         final_pos.z = xz.y;
     }
 
-    if should_snap_to_server(
-        prediction.server_sample.as_ref(),
-        final_pos,
-        *sim_clock,
-        LOCAL_SNAP_THRESHOLD,
-        LOCAL_SERVER_SAMPLE_MAX_AGE,
-        stats.rtt,
-        output.velocity.length(),
-    ) {
-        snap_to_server(
-            prediction.server_sample.as_ref().unwrap().translation,
-            &mut output,
-        );
+    if let Some(sample) = prediction.server_sample.as_ref().filter(|sample| {
+        should_snap_to_server(
+            Some(sample),
+            final_pos,
+            *sim_clock,
+            LOCAL_SNAP_THRESHOLD,
+            LOCAL_SERVER_SAMPLE_MAX_AGE,
+            stats.rtt,
+            output.velocity.length(),
+        )
+    }) {
+        snap_to_server(sample.translation, &mut output);
     }
 
     let in_first_person = camera_settings.current_distance <= 0.6;
@@ -1126,40 +1125,8 @@ fn on_brick_added(
         .map(|t| t.scale)
         .unwrap_or(Vec3::ONE);
 
-    let mesh_handle = match shape {
-        crate::common::game::bricks::components::BrickShape::Block => {
-            crate::common::game::bricks::block_mesh_for_scale(&mut cache, &mut meshes, scale)
-        }
-        crate::common::game::bricks::components::BrickShape::Sphere => {
-            if cache.sphere_mesh.is_none() {
-                cache.sphere_mesh = Some(meshes.add(Sphere::new(1.0 * 0.28)));
-            }
-            cache.sphere_mesh.clone().unwrap()
-        }
-        crate::common::game::bricks::components::BrickShape::Cylinder => {
-            if cache.cylinder_mesh.is_none() {
-                cache.cylinder_mesh = Some(
-                    meshes.add(crate::common::game::bricks::cylinder_brick_mesh()),
-                );
-            }
-            cache.cylinder_mesh.clone().unwrap()
-        }
-        crate::common::game::bricks::components::BrickShape::Wedge => {
-            if cache.wedge_mesh.is_none() {
-                cache.wedge_mesh =
-                    Some(meshes.add(crate::common::game::bricks::wedge_brick_mesh()));
-            }
-            cache.wedge_mesh.clone().unwrap()
-        }
-        crate::common::game::bricks::components::BrickShape::CornerWedge => {
-            if cache.corner_wedge_mesh.is_none() {
-                cache.corner_wedge_mesh = Some(
-                    meshes.add(crate::common::game::bricks::corner_wedge_brick_mesh()),
-                );
-            }
-            cache.corner_wedge_mesh.clone().unwrap()
-        }
-    };
+    let mesh_handle =
+        crate::common::game::bricks::brick_mesh_for_shape(&mut cache, &mut meshes, shape, scale);
 
     let base_color = if let Ok(brick_color) = color_query.get(entity) {
         brick_color.color

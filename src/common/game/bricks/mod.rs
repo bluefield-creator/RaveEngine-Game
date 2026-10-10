@@ -584,14 +584,28 @@ pub fn block_mesh_for_scale(
     meshes: &mut Assets<Mesh>,
     scale: Vec3,
 ) -> Handle<Mesh> {
-    let key = brick_scale_key(scale);
-    if let Some(existing) = cache.block_meshes.get(&key) {
-        existing.clone()
-    } else {
-        let mesh = meshes.add(block_brick_mesh(scale));
-        cache.block_meshes.insert(key, mesh.clone());
-        mesh
-    }
+    cache
+        .block_meshes
+        .entry(brick_scale_key(scale))
+        .or_insert_with(|| meshes.add(block_brick_mesh(scale)))
+        .clone()
+}
+
+pub fn brick_mesh_for_shape(
+    cache: &mut BrickMaterialCache,
+    meshes: &mut Assets<Mesh>,
+    shape: components::BrickShape,
+    scale: Vec3,
+) -> Handle<Mesh> {
+    use components::BrickShape;
+    let (slot, build): (&mut Option<Handle<Mesh>>, fn() -> Mesh) = match shape {
+        BrickShape::Block => return block_mesh_for_scale(cache, meshes, scale),
+        BrickShape::Sphere => (&mut cache.sphere_mesh, || Sphere::new(1.0 * 0.28).into()),
+        BrickShape::Cylinder => (&mut cache.cylinder_mesh, cylinder_brick_mesh),
+        BrickShape::Wedge => (&mut cache.wedge_mesh, wedge_brick_mesh),
+        BrickShape::CornerWedge => (&mut cache.corner_wedge_mesh, corner_wedge_brick_mesh),
+    };
+    slot.get_or_insert_with(|| meshes.add(build())).clone()
 }
 
 pub fn update_brick_meshes_on_shape_change(
@@ -619,40 +633,19 @@ pub fn update_brick_meshes_on_shape_change(
         {
             continue;
         }
-        let mesh_handle = match brick_shape_comp.shape {
-            components::BrickShape::Block => {
-                block_mesh_for_scale(&mut cache, &mut meshes, transform.scale)
-            }
-            components::BrickShape::Sphere => {
-                if cache.sphere_mesh.is_none() {
-                    cache.sphere_mesh = Some(meshes.add(Sphere::new(1.0 * 0.28)));
-                }
-                cache.sphere_mesh.clone().unwrap()
-            }
-            components::BrickShape::Cylinder => {
-                if cache.cylinder_mesh.is_none() {
-                    cache.cylinder_mesh = Some(meshes.add(cylinder_brick_mesh()));
-                }
-                cache.cylinder_mesh.clone().unwrap()
-            }
-            components::BrickShape::Wedge => {
-                if cache.wedge_mesh.is_none() {
-                    cache.wedge_mesh = Some(meshes.add(wedge_brick_mesh()));
-                }
-                cache.wedge_mesh.clone().unwrap()
-            }
-            components::BrickShape::CornerWedge => {
-                if cache.corner_wedge_mesh.is_none() {
-                    cache.corner_wedge_mesh = Some(meshes.add(corner_wedge_brick_mesh()));
-                }
-                cache.corner_wedge_mesh.clone().unwrap()
-            }
-        };
-        commands.entity(entity).insert(Mesh3d(mesh_handle));
-        commands.entity(entity).insert(components::BrickMeshKey {
-            shape: brick_shape_comp.shape,
-            scale_key,
-        });
+        let mesh_handle = brick_mesh_for_shape(
+            &mut cache,
+            &mut meshes,
+            brick_shape_comp.shape,
+            transform.scale,
+        );
+        commands.entity(entity).insert((
+            Mesh3d(mesh_handle),
+            components::BrickMeshKey {
+                shape: brick_shape_comp.shape,
+                scale_key,
+            },
+        ));
     }
 }
 
