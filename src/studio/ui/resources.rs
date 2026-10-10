@@ -323,7 +323,7 @@ pub fn handle_file_dialog_results(
                     if let Some(ref mut g) = service_resources.gravity {
                         g.0 = state.gravity;
                     }
-                    if let Some(mut ps) = service_resources.players_service.as_mut() {
+                    if let Some(ps) = service_resources.players_service.as_mut() {
                         **ps = crate::studio::tools::PlayersService {
                             speed: state.players.speed,
                             jump_power: state.players.jump_power,

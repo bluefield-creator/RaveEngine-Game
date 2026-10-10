@@ -179,7 +179,7 @@ pub fn apply_graphics_settings(
     mut directional_light_shadow_map: ResMut<bevy::light::DirectionalLightShadowMap>,
     mut directional_lights: Query<&mut bevy::light::DirectionalLight>,
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
-    mut lighting_config: Option<ResMut<crate::client::sky::LightingConfig>>,
+    lighting_config: Option<ResMut<crate::client::sky::LightingConfig>>,
 ) {
     let target_msaa = settings.msaa.to_msaa();
     for mut camera_msaa in &mut cameras {

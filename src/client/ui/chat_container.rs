@@ -298,7 +298,7 @@ pub fn draw_chat_container(
                                     visuals.widgets.noninteractive.bg_stroke =
                                         egui::Stroke::NONE;
                                     visuals.selection.stroke =
-                                        egui::Stroke::new(1.0, egui::Color32::BLACK);
+                                        egui::Stroke::new(1.0_f32, egui::Color32::BLACK);
                                     visuals.selection.bg_fill =
                                         egui::Color32::from_rgb(116, 35, 203);
                                     visuals.override_text_color =

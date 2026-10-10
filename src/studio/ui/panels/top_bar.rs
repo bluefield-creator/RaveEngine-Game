@@ -1089,7 +1089,7 @@ pub fn draw_top_bar(
                     let original_window_stroke = ui.visuals().window_stroke;
 
                     ui.visuals_mut().window_fill = egui::Color32::from_rgb(255, 255, 255);
-                    ui.visuals_mut().window_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(212, 212, 212));
+                    ui.visuals_mut().window_stroke = egui::Stroke::new(1.0_f32,egui::Color32::from_rgb(212, 212, 212));
 
                     let _: Option<()> = egui::popup_below_widget(
                         ui,
@@ -1521,7 +1521,7 @@ fn ribbonbutton(
         ui.painter().rect_stroke(
             rect,
             4.0,
-            egui::Stroke::new(1.0, egui::Color32::from_rgb(153, 209, 255)),
+            egui::Stroke::new(1.0_f32,egui::Color32::from_rgb(153, 209, 255)),
             egui::StrokeKind::Inside,
         );
     } else if response.hovered() {
@@ -1530,7 +1530,7 @@ fn ribbonbutton(
         ui.painter().rect_stroke(
             rect,
             4.0,
-            egui::Stroke::new(1.0, egui::Color32::from_rgb(190, 220, 240)),
+            egui::Stroke::new(1.0_f32,egui::Color32::from_rgb(190, 220, 240)),
             egui::StrokeKind::Inside,
         );
     }

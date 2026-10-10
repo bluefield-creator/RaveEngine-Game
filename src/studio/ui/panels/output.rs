@@ -169,7 +169,7 @@ fn draw_entry_row(
             ui.painter().rect_stroke(
                 row_rect,
                 4.0,
-                egui::Stroke::new(1.0, egui::Color32::from_rgb(180, 200, 230)),
+                egui::Stroke::new(1.0_f32,egui::Color32::from_rgb(180, 200, 230)),
                 egui::StrokeKind::Inside,
             );
         }

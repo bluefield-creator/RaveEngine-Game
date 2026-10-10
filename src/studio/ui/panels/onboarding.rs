@@ -67,7 +67,7 @@ pub fn draw_onboarding(
             .fill(egui::Color32::from_rgb(255, 255, 255))
             .corner_radius(8.0)
             .inner_margin(egui::Margin::same(24))
-            .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(212, 212, 212)))
+            .stroke(egui::Stroke::new(1.0_f32,egui::Color32::from_rgb(212, 212, 212)))
         )
         .show(ctx, |ui| {
             ui.set_max_width(550.0);
@@ -91,7 +91,7 @@ pub fn draw_onboarding(
                             let frame = egui::Frame::NONE
                                 .fill(if is_hovered { egui::Color32::from_rgb(235, 242, 252) } else { egui::Color32::from_rgb(245, 246, 247) })
                                 .corner_radius(12.0)
-                                .stroke(egui::Stroke::new(1.0, if is_hovered { egui::Color32::from_rgb(80, 160, 240) } else { egui::Color32::from_rgb(220, 220, 220) }))
+                                .stroke(egui::Stroke::new(1.0_f32,if is_hovered { egui::Color32::from_rgb(80, 160, 240) } else { egui::Color32::from_rgb(220, 220, 220) }))
                                 .inner_margin(egui::Margin::same(16));
 
                             ui.scope_builder(egui::UiBuilder::new().max_rect(card_rect), |ui| {
@@ -127,7 +127,7 @@ pub fn draw_onboarding(
                             let frame = egui::Frame::NONE
                                 .fill(if is_hovered { egui::Color32::from_rgb(235, 242, 252) } else { egui::Color32::from_rgb(245, 246, 247) })
                                 .corner_radius(12.0)
-                                .stroke(egui::Stroke::new(1.0, if is_hovered { egui::Color32::from_rgb(80, 160, 240) } else { egui::Color32::from_rgb(220, 220, 220) }))
+                                .stroke(egui::Stroke::new(1.0_f32,if is_hovered { egui::Color32::from_rgb(80, 160, 240) } else { egui::Color32::from_rgb(220, 220, 220) }))
                                 .inner_margin(egui::Margin::same(16));
 
                             ui.scope_builder(egui::UiBuilder::new().max_rect(card_rect), |ui| {
@@ -243,8 +243,8 @@ pub fn draw_onboarding(
                     ui.vertical_centered(|ui| {
                         ui.visuals_mut().widgets.hovered.bg_fill = egui::Color32::from_rgb(224, 238, 249);
                         ui.visuals_mut().widgets.hovered.weak_bg_fill = egui::Color32::from_rgb(224, 238, 249);
-                        ui.visuals_mut().widgets.hovered.bg_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(190, 220, 240));
-                        ui.visuals_mut().widgets.hovered.fg_stroke = egui::Stroke::new(1.0, egui::Color32::from_rgb(20, 20, 20));
+                        ui.visuals_mut().widgets.hovered.bg_stroke = egui::Stroke::new(1.0_f32,egui::Color32::from_rgb(190, 220, 240));
+                        ui.visuals_mut().widgets.hovered.fg_stroke = egui::Stroke::new(1.0_f32,egui::Color32::from_rgb(20, 20, 20));
 
                         let create_btn = ui.add(
                             egui::Button::new(
@@ -352,15 +352,15 @@ pub fn draw_onboarding(
                             let cont_btn = ui.scope(|ui| {
                                 ui.visuals_mut().widgets.inactive.bg_fill = egui::Color32::from_rgb(116, 35, 203);
                                 ui.visuals_mut().widgets.inactive.weak_bg_fill = egui::Color32::from_rgb(116, 35, 203);
-                                ui.visuals_mut().widgets.inactive.fg_stroke = egui::Stroke::new(1.5, egui::Color32::WHITE);
+                                ui.visuals_mut().widgets.inactive.fg_stroke = egui::Stroke::new(1.5_f32,egui::Color32::WHITE);
                                 ui.visuals_mut().widgets.inactive.bg_stroke = egui::Stroke::NONE;
                                 ui.visuals_mut().widgets.hovered.bg_fill = egui::Color32::from_rgb(138, 55, 225);
                                 ui.visuals_mut().widgets.hovered.weak_bg_fill = egui::Color32::from_rgb(138, 55, 225);
-                                ui.visuals_mut().widgets.hovered.fg_stroke = egui::Stroke::new(1.5, egui::Color32::WHITE);
+                                ui.visuals_mut().widgets.hovered.fg_stroke = egui::Stroke::new(1.5_f32,egui::Color32::WHITE);
                                 ui.visuals_mut().widgets.hovered.bg_stroke = egui::Stroke::NONE;
                                 ui.visuals_mut().widgets.active.bg_fill = egui::Color32::from_rgb(96, 25, 183);
                                 ui.visuals_mut().widgets.active.weak_bg_fill = egui::Color32::from_rgb(96, 25, 183);
-                                ui.visuals_mut().widgets.active.fg_stroke = egui::Stroke::new(1.5, egui::Color32::WHITE);
+                                ui.visuals_mut().widgets.active.fg_stroke = egui::Stroke::new(1.5_f32,egui::Color32::WHITE);
                                 ui.visuals_mut().widgets.active.bg_stroke = egui::Stroke::NONE;
                                 ui.add(egui::Button::new(egui::RichText::new("Continue to Studio").size(15.0).strong().color(egui::Color32::WHITE)).min_size(egui::vec2(220.0, 42.0)))
                             }).inner;
@@ -427,17 +427,17 @@ pub fn draw_onboarding(
 
                                 ui.visuals_mut().widgets.inactive.bg_fill = purple_normal;
                                 ui.visuals_mut().widgets.inactive.weak_bg_fill = purple_normal;
-                                ui.visuals_mut().widgets.inactive.fg_stroke = egui::Stroke::new(1.5, white_text);
+                                ui.visuals_mut().widgets.inactive.fg_stroke = egui::Stroke::new(1.5_f32,white_text);
                                 ui.visuals_mut().widgets.inactive.bg_stroke = egui::Stroke::NONE;
 
                                 ui.visuals_mut().widgets.hovered.bg_fill = purple_hover;
                                 ui.visuals_mut().widgets.hovered.weak_bg_fill = purple_hover;
-                                ui.visuals_mut().widgets.hovered.fg_stroke = egui::Stroke::new(1.5, white_text);
+                                ui.visuals_mut().widgets.hovered.fg_stroke = egui::Stroke::new(1.5_f32,white_text);
                                 ui.visuals_mut().widgets.hovered.bg_stroke = egui::Stroke::NONE;
 
                                 ui.visuals_mut().widgets.active.bg_fill = purple_active;
                                 ui.visuals_mut().widgets.active.weak_bg_fill = purple_active;
-                                ui.visuals_mut().widgets.active.fg_stroke = egui::Stroke::new(1.5, white_text);
+                                ui.visuals_mut().widgets.active.fg_stroke = egui::Stroke::new(1.5_f32,white_text);
                                 ui.visuals_mut().widgets.active.bg_stroke = egui::Stroke::NONE;
 
                                 ui.add(

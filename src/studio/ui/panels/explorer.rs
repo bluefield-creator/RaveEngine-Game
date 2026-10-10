@@ -660,7 +660,7 @@ fn render_flat_row(
                 ui.painter().rect_stroke(
                     rect,
                     2.0,
-                    egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(153, 209, 255, bg_alpha)),
+                    egui::Stroke::new(1.0_f32,egui::Color32::from_rgba_unmultiplied(153, 209, 255, bg_alpha)),
                     egui::StrokeKind::Inside,
                 );
             } else if hovered {
@@ -672,7 +672,7 @@ fn render_flat_row(
                 ui.painter().rect_stroke(
                     rect,
                     2.0,
-                    egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(190, 220, 240, bg_alpha)),
+                    egui::Stroke::new(1.0_f32,egui::Color32::from_rgba_unmultiplied(190, 220, 240, bg_alpha)),
                     egui::StrokeKind::Inside,
                 );
             }
@@ -1449,7 +1449,7 @@ pub fn draw_explorer(
     let bottom_y = ui.max_rect().bottom() + 12.0;
     ui.painter().line_segment(
         [egui::pos2(right_x, top_y), egui::pos2(right_x, bottom_y)],
-        egui::Stroke::new(1.0, egui::Color32::from_rgb(180, 180, 180)),
+        egui::Stroke::new(1.0_f32,egui::Color32::from_rgb(180, 180, 180)),
     );
 }
 
@@ -1473,7 +1473,7 @@ fn explorerlabel(
         ui.painter().rect_stroke(
             rect,
             2.0,
-            egui::Stroke::new(1.0, egui::Color32::from_rgb(153, 209, 255)),
+            egui::Stroke::new(1.0_f32,egui::Color32::from_rgb(153, 209, 255)),
             egui::StrokeKind::Inside,
         );
     } else if response.hovered() {
@@ -1482,7 +1482,7 @@ fn explorerlabel(
         ui.painter().rect_stroke(
             rect,
             2.0,
-            egui::Stroke::new(1.0, egui::Color32::from_rgb(190, 220, 240)),
+            egui::Stroke::new(1.0_f32,egui::Color32::from_rgb(190, 220, 240)),
             egui::StrokeKind::Inside,
         );
     }

@@ -14,7 +14,7 @@ use self::{
     compute::{CameraMatrices, CloudsComputePlugin},
     images::{RENDER_HEIGHT, RENDER_WIDTH, build_images, build_render_images_with_size},
     render::{CloudsMaterial, CloudsShaderPlugin},
-    skybox::{SkyboxMaterials, init_skybox_mesh, update_skybox_transform},
+    skybox::{init_skybox_mesh, update_skybox_transform},
     ui::ui_system,
     uniforms::CloudsImage,
 };
@@ -60,11 +60,7 @@ fn clouds_setup(
         sky_image: sky_image.clone(),
     });
     commands.insert_resource(CloudsMaterialHandle(material.clone()));
-    init_skybox_mesh(
-        &mut commands,
-        meshes,
-        SkyboxMaterials::from_one_material(MeshMaterial3d(material)),
-    );
+    init_skybox_mesh(&mut commands, meshes, MeshMaterial3d(material));
     commands.insert_resource(CloudsImage {
         cloud_render_image,
         cloud_render_previous_image,

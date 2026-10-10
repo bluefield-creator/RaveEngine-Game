@@ -955,7 +955,8 @@ mod tests {
         ] {
             app.update();
             let target_y = probe_y;
-            app.world_mut()
+            let _ = app
+                .world_mut()
                 .run_system_once(move |spatial: avian3d::prelude::SpatialQuery| {
                     let center = Vec3::new(0.0, target_y, -4.0);
                     let feet = center.y - crate::common::game::movement::PLAYER_HALF_HEIGHT;
@@ -1048,8 +1049,7 @@ mod tests {
                 .world_mut()
                 .query::<(&Transform, &LinearVelocity, &Name)>()
                 .iter(&app.world())
-                .filter(|(t, _, n)| n.as_str() == "TestPlayer")
-                .next()
+                .find(|(_, _, n)| n.as_str() == "TestPlayer")
                 .map(|(t, v, _)| (t.translation, v.0))
                 .unwrap();
             let plan = app
